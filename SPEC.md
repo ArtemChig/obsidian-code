@@ -254,43 +254,73 @@ See §5. Layout like the Claude Code desktop app:
 * Global: command palette (Ctrl+K) for navigation/actions, toasts for `notification` events, reconnecting banner when
   the WebSocket drops (auto-reconnect with backoff, refetch state), keyboard focus rings, no emoji icons (lucide only).
 
-## 5. Design system — "Obsidian"
+## 5. Design system — "Obsidian" (M13)
 
-Source: ui-ux-pro-max plugin → design skill palette **"Obsidian Dark"** (Premium; "mysterious, elegant, powerful,
-sophisticated"): Primary `#0B1215`, Secondary `#1C2833`, Accent `#566573`, Background `#212F3D`, Text `#ECF0F1`.
-Style from ui-ux-pro-max `--design-system` for "AI coding agent developer tool dark desktop" (density 8, motion 3,
-variance 3): **Minimalism & Swiss Style**, dense dashboard spacing, subtle motion, typography **IBM Plex Sans** (UI/body)
-+ **JetBrains Mono** (code, metrics, labels). Dark-only (light mode is an anti-pattern for this product).
+**Source of truth: the user's own design, `docs/design/m-13-obsidian/`** — `screens.html` (six full application
+screens), `obsidian.css` (its complete stylesheet: tokens + every component recipe) and `shots/*.png` (rendered
+1440-px captures). Copy recipes from `obsidian.css` faithfully; when this section and the reference disagree, the
+reference wins. (The earlier "Obsidian Dark" ui-ux-pro-max palette is retired.)
 
-Tokens (CSS variables in `src/renderer/src/design/tokens.css`, mapped into Tailwind v4 `@theme`):
+**Thesis (verbatim from the reference):** *remove every surface.* Pure `#000` OLED black with the chrome removed.
+No cards, no panel fills, no frames — content floats, held in place by space and a single hairline rule. Borders exist
+ONLY on things you can act on, held at ≥ 3:1. One cold-white accent marks the live edge; colour appears only for
+status (something running, waiting, failing, succeeding). Flat fills and discrete tonal steps only — no gradients,
+no colour ramps, no shadows (except a menu/dialog separation shadow), no blur, no glow.
+
+Tokens (CSS variables in `src/renderer/src/design/tokens.css`, mapped into Tailwind v4 `@theme`; names below are the
+reference's, the app may alias them as `--ob-*`):
 
 | Token | Value | Use |
 |---|---|---|
-| `--ob-bg` | `#0B1215` | app canvas (obsidian black) |
-| `--ob-surface-1` | `#101A1F` | sidebar, right panel |
-| `--ob-surface-2` | `#1C2833` | cards, inputs, user bubbles |
-| `--ob-surface-3` | `#212F3D` | popovers, menus, hover |
-| `--ob-border` | `#24323E` | hairlines |
-| `--ob-border-strong` | `#566573` | focus-adjacent, emphasized dividers |
-| `--ob-text` | `#ECF0F1` | primary text |
-| `--ob-text-2` | `#A9B6BF` | secondary text |
-| `--ob-text-3` | `#7C8B96` | muted/meta (≥4.5:1 on bg) |
-| `--ob-accent` | `#8FB8DE` | primary actions, links, focus ring ("obsidian glint" ice-blue) |
-| `--ob-accent-ink` | `#0B1215` | text on accent |
-| `--ob-accent-soft` | `rgba(143,184,222,0.12)` | selected rows, accent washes |
-| `--ob-violet` | `#B3A6E8` | thinking blocks, subagents (iridescent sheen) |
-| `--ob-success` | `#5FD39A` | done, additions, GPU ready |
-| `--ob-warning` | `#E8B85C` | waiting/permission, cost warnings |
-| `--ob-danger` | `#F07178` | errors, deletions, Clock out |
-| `--ob-code-bg` | `#0E171C` | code blocks / terminal |
-| `--ob-diff-add` | `rgba(95,211,154,0.13)` / `--ob-diff-del` `rgba(240,113,120,0.13)` | diff rows |
+| `--s0` | `#000000` | ground — the only surface (app, sidebar, panels, transcript, dialogs) |
+| `--s1` | `#07070A` | well: search fields, inputs, code/terminal wells, gutters |
+| `--s2` | `#0E0E12` | raised sliver: thumbnails, user-message sliver, selected row base |
+| `--s3` | `#17171C` | control fill (buttons, segmented, switch track) |
+| `--s4` | `#23232A` | track / hover step |
+| `--s5` | `#2E2E36` | highest tonal step |
+| `--t1` | `#FFFFFF` | ink 21:1 |
+| `--t2` | `#ADADB6` | secondary 9.4:1 |
+| `--t3` | `#7A7A85` | tertiary 4.95:1 (labels, meta) |
+| `--acc` | `#E6EEFF` | the single accent, cold white 18:1 — primary button fill, active tab underline, selection edge, focus |
+| `--acc-ink` | `#000000` | text on accent |
+| `--acc-wash` / `--acc-wash2` | `rgba(230,238,255,.07)` / `.13` | selected / pressed washes |
+| `--line` | `#63636E` | functional outline 3.5:1 — ONLY on actionable things (buttons, inputs, selects, kbd, tags) |
+| `--rule` / `--rule2` | `rgba(255,255,255,.10)` / `.055` | the hairline separators (structure) |
+| `--hov` | `rgba(255,255,255,.035)` | row hover |
+| status | `--rec #FF453A` · `--live #BF6BFF` · `--err #FF6F62` · `--warn #FFD426` · `--ok #3BE07A` | status only |
 
-Radius: 6 px controls, 10 px cards, 999 px pills. Shadows: none (popovers: `0 8px 24px rgba(0,0,0,.45)` + 1px border).
-Type scale: 11 (meta, mono uppercase tracking .06em for section labels), 12, 13 (UI default), 14.5 (chat prose,
-line-height 1.65), 16, 20 (view titles). Spacing: 4-pt grid, dense (8/12/16/24). Motion: 120–200 ms ease-out on
-hover/press/expand; respect `prefers-reduced-motion`. Focus: 2 px `--ob-accent` ring offset 1 px. Icons: lucide-react,
-16 px default, 1.75 stroke. Hit targets ≥ 28 px in dense desktop UI (≥ 44 px not required on desktop, but keep buttons
-≥ 32 px high for primary actions). Contrast ≥ 4.5:1 for text. Scrollbars thin and dark. Selection colour accent-soft.
+Mapping to app semantics: running/streaming/live → `--live` (violet) dot; waiting for the user (permission,
+question, plan) → `--warn`; error/failed/denied → `--err`; done/ready/additions → `--ok`; GPU billing/recording-like
+"money is being spent" indicator → `--rec` dot; diff additions `--ok`, deletions `--err` (thin text colour + very
+faint wash, no heavy fills). Thinking blocks and subagents are NOT coloured — they use `--t3`/`--t2` text with a
+hairline left rule; a live (streaming) thinking block gets the `--live` dot.
+
+Typography: **Chivo** (UI, 400/500/600/700) + **Chivo Mono** (numbers, ids, paths, code, labels, status bar, kbd,
+tags) — bundled locally via `@fontsource/chivo` + `@fontsource/chivo-mono` (the app must work offline). Base UI
+12.5 px / 1.5, letter-spacing −.004em, `font-variant-numeric: tabular-nums`. Section/meta labels: Chivo Mono 9 px,
+weight 500, `letter-spacing .22em`, UPPERCASE, `--t3` (key word in `--acc`). Titles: Chivo 600 with tight negative
+tracking (e.g. 22 px / −.035em for a view title; session title ~17 px / −.03em). Chat prose: Chivo 13.5 px / 1.62,
+`--t1`; secondary prose `--t2`.
+
+Geometry: radius **2 px** everywhere (3 px for the outer window only). Row height **28 px** (dense lists, table
+rows, menu items); controls 26–30 px. Hairline = 1 px `--rule`; sub-hairline `--rule2`. Spacing on a 4-pt grid with
+generous outer gutters (24–32 px) so content floats.
+
+Component recipes (from `obsidian.css`): title bar 34 px with the brand = 9 px rotated-square diamond in `--acc` +
+"OBSIDIAN CODE" in Chivo Mono 9.5 px weight 600 tracking .24em, centred document title in `--t2` with `--t3`
+separators; slim menu strip (27 px) with text items `--t2`, active item `--t1` on `--s3`; status bar at the bottom
+(mono 9 px uppercase tracking, `--t3`, values `--t1`, status dots); **primary button** = solid `--acc` fill, black
+text, 2 px radius; **secondary** = transparent with 1 px `--line` border, `--t1` text; **ghost** = text only `--t2`;
+**danger** = 1 px `--err` border + `--err` text; tabs = text `--t2`, active `--t1` with a 2 px `--t1` underline,
+counts in mono `--t3`; segmented control = 1 px `--line` frame, active segment `--t1` fill with black text; switch =
+white pill when on; inputs = `--s1` well with 1 px `--line` border, mono where values are technical; tags/chips =
+1 px `--line` (or status colour) border, mono 8.5 px uppercase tracking; kbd = 1 px `--line` box, mono 9.5 px;
+lists/tables = no fills, 28 px rows separated by `--rule2`, column headers as mono labels, hover `--hov`, selected row
+= `--acc-wash` + 2 px `--acc` left edge; sidebar = same black ground separated by a `--rule` hairline (no fill),
+group headings as mono labels, counts mono `--t3`; dialogs/menus/popovers = `--s0` (or `--s1`) with 1 px `--line`
+border and `0 16px 48px rgba(0,0,0,.7)`; focus = 1 px `--acc` outline offset 1 px. Icons: lucide-react 14–16 px,
+stroke 1.5, `--t2`. Motion: 120–160 ms, opacity/transform only, respect `prefers-reduced-motion`. Contrast ≥ 4.5:1
+for all text (t3 is the floor). Scrollbars: 6 px, `--s4` thumb, no track.
 
 ## 5b. Decisions from Phase 1 research (binding — read docs/research/*.md for details)
 
