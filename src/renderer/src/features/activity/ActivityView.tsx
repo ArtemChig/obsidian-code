@@ -28,7 +28,7 @@ import { navigate, openSession, stopActivity } from '@renderer/state/actions';
 import { useActivity } from '@renderer/state/activity';
 import { usePending } from '@renderer/state/pending';
 import { useSessions } from '@renderer/state/sessions';
-import { CoreMissing, useCoreMissing } from '../settings/core-missing';
+import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from '../settings/core-missing';
 import {
   KIND_LABEL,
   KIND_ORDER,
@@ -68,6 +68,7 @@ export function ActivityView() {
   const [showAll, setShowAll] = useState(false);
   const [confirmGpu, setConfirmGpu] = useState<ActivityItem | null>(null);
   const coreMissing = useCoreMissing();
+  const syncError = useSyncError('activity');
 
   const pending = useMemo(() => pendingRows(permissions, questions, plans), [permissions, questions, plans]);
   const counts = useMemo(() => activityCounts(items, pending.length), [items, pending.length]);
@@ -131,6 +132,10 @@ export function ActivityView() {
         {!loaded && coreMissing ? (
           <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
             <CoreMissing what="Activity" />
+          </div>
+        ) : !loaded && syncError ? (
+          <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
+            <SyncFailed what="activity" error={syncError} />
           </div>
         ) : !loaded ? (
           <div className="flex flex-col gap-3 rounded-card border border-ob-border bg-ob-surface-1 p-4" aria-hidden>

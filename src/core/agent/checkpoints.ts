@@ -18,6 +18,32 @@ function safeName(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** Write via a temp file + rename so a crash never leaves a truncated index/blob behind. */
+async function writeAtomic(file: string, data: string | Buffer): Promise<void> {
+  const tmp = `${file}.${process.pid}.${Date.now().toString(36)}.tmp`;
+  try {
+    await fs.writeFile(tmp, data);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await fs.rename(tmp, file);
+        break;
+      } catch (e) {
+        // Windows: a virus scanner or indexer briefly holding the target makes rename fail with EPERM/EBUSY/EACCES
+        const code = (e as NodeJS.ErrnoException).code;
+        if (attempt >= 4 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) throw e;
+        await new Promise((r) => setTimeout(r, 40 * (attempt + 1)));
+      }
+    }
+  } catch (e) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
+}
+
 export class CheckpointStore {
   private readonly cache = new Map<string, TurnIndex>();
   private readonly locks = new Map<string, Promise<unknown>>();
@@ -65,17 +91,31 @@ export class CheckpointStore {
       const dir = this.turnDir(sessionId, turnId);
       await fs.mkdir(dir, { recursive: true });
       let entry: CheckpointEntry;
+      let data: Buffer | null;
       try {
-        const data = await fs.readFile(absPath);
-        const blob = `${idx.files.length}.bin`;
-        await fs.writeFile(join(dir, blob), data);
-        entry = { path: resolve(absPath), existed: true, blob };
+        data = await fs.readFile(absPath);
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'EISDIR') return;
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code === 'EISDIR') return;
+        // Only a missing file may be recorded as "did not exist" (rewind deletes such files). Any other failure
+        // (locked/busy file, EPERM, EMFILE, too large…) must stop the edit: there would be no backup to restore.
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') throw new Error(`Could not save a rewind checkpoint of ${absPath} (${code ?? errText(e)}); the file was not changed.`);
+        data = null;
+      }
+      if (data) {
+        const blob = `${idx.files.length}.bin`;
+        try {
+          await writeAtomic(join(dir, blob), data);
+        } catch (e) {
+          throw new Error(`Could not save a rewind checkpoint of ${absPath} (${(e as NodeJS.ErrnoException).code ?? errText(e)}); the file was not changed.`);
+        }
+        entry = { path: resolve(absPath), existed: true, blob };
+      } else {
         entry = { path: resolve(absPath), existed: false };
       }
-      idx.files.push(entry);
-      await fs.writeFile(join(dir, 'index.json'), JSON.stringify(idx));
+      const next: TurnIndex = { files: [...idx.files, entry] };
+      await writeAtomic(join(dir, 'index.json'), JSON.stringify(next));
+      idx.files = next.files; // the cached index only changes once the new one is on disk
       await this.addToOrder(sessionId, turnId);
     });
   }

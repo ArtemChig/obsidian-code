@@ -375,6 +375,13 @@ export interface Settings {
   };
   search: { provider: 'duckduckgo' | 'brave' | 'tavily' | 'searxng'; searxngUrl?: string };
   permissions: { allow: string[]; deny: string[] };
+  /**
+   * Folders whose project settings (.obsidian-code/settings.json, .claude/settings*.json) may add hooks (shell commands)
+   * and allow rules. Subfolders inherit trust. Deny rules from project files always apply. Never read from a project file.
+   */
+  trustedFolders: string[];
+  /** "Always allow" rules granted from permission prompts, per project folder (kept here, not inside the repo). */
+  projectAllow: Record<string, string[]>;
   hooks: { PreToolUse?: HookConfig[]; PostToolUse?: HookConfig[]; UserPromptSubmit?: HookConfig[]; Stop?: HookConfig[]; SessionStart?: HookConfig[] };
   mcpServers: Record<string, McpServerConfig>;
   /** Read skills/agents/commands/CLAUDE.md from ~/.claude and <project>/.claude too. */

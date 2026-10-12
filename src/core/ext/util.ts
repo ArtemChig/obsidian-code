@@ -16,6 +16,10 @@ export interface ExtensionsOptions {
   mcpToolTimeoutMs?: number;
   /** Debounce for settings-change driven MCP reconciliation (default 300 ms). */
   mcpReconcileDebounceMs?: number;
+  /** First auto-reconnect delay after an MCP server drops (default 2 s, doubles per attempt, max 30 s). */
+  mcpReconnectBaseMs?: number;
+  /** An MCP connection must stay up this long before its retry budget is restored (default 60 s). */
+  mcpStableMs?: number;
 }
 
 export function resolveHome(opts?: ExtensionsOptions): string {

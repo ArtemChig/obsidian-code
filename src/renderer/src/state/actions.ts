@@ -3,6 +3,7 @@
 // so components can call them from event handlers without try/catch.
 import type { RpcResult } from '@shared/protocol';
 import type {
+  Block,
   ImageBlock,
   ModelRef,
   PermissionDecision,
@@ -12,10 +13,10 @@ import type {
 } from '@shared/types';
 import { errorMessage, rpc } from '../lib/rpc';
 import { useActivity } from './activity';
-import { useGpu } from './gpu';
+import { clockOutPrompt, useGpu } from './gpu';
 import { useModels } from './models';
 import { removeRecord, usePending } from './pending';
-import { useSessions } from './sessions';
+import { setQueued, useSessions, type QueuedMessage } from './sessions';
 import { useSettings } from './settings';
 import { toast } from './toasts';
 import { loadTranscript } from './sync';
@@ -195,6 +196,27 @@ export async function sendMessage(sessionId: string, text: string, images?: Imag
   }
 }
 
+/**
+ * Withdraw queued messages that have not started (one chip, or all of the session's). Resolves to the withdrawn
+ * messages (oldest first) so the caller can put their text back into the composer.
+ */
+export async function withdrawQueued(sessionId: string, messageId?: string): Promise<QueuedMessage[]> {
+  const chips = useSessions.getState().queued[sessionId] ?? [];
+  const targets = messageId ? chips.filter((q) => q.messageId === messageId) : chips;
+  if (!targets.length) return [];
+  try {
+    const r = await rpc.request('chat.dequeue', { sessionId, messageId });
+    const removed = new Set(r.removed.map((x) => x.messageId));
+    // A chip the core no longer has either started (its message.added follows) or was lost: drop it either way.
+    const ids = new Set(targets.map((q) => q.messageId));
+    setQueued(sessionId, (useSessions.getState().queued[sessionId] ?? []).filter((q) => !ids.has(q.messageId)));
+    return targets.filter((q) => removed.has(q.messageId));
+  } catch (err) {
+    fail('Could not withdraw the queued message', err);
+    return [];
+  }
+}
+
 export async function interrupt(sessionId: string): Promise<boolean> {
   try {
     await rpc.request('chat.interrupt', { sessionId });
@@ -296,6 +318,25 @@ export async function rewind(sessionId: string, atMessageId: string, restoreFile
   }
 }
 
+/**
+ * Retry a failed turn / regenerate a reply: rewind to the user message (files untouched) and send it again, so the
+ * transcript holds the prompt once instead of one copy per click. If the resend fails, the text is returned so the
+ * caller can put it back into the composer.
+ */
+export async function resendFrom(sessionId: string, messageId: string): Promise<{ ok: boolean; text: string }> {
+  const m = useSessions.getState().transcripts[sessionId]?.session.messages.find((x) => x.id === messageId);
+  if (!m || m.role !== 'user') return { ok: false, text: '' };
+  const text = m.blocks
+    .filter((b): b is Extract<Block, { type: 'text' }> => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n\n')
+    .trim();
+  const images = m.blocks.filter((b): b is ImageBlock => b.type === 'image');
+  if (!(await rewind(sessionId, messageId, false))) return { ok: false, text: '' };
+  const sent = await sendMessage(sessionId, text, images.length ? images : undefined);
+  return { ok: !!sent, text };
+}
+
 /** Switch the model for the active session, or the default model when no session is open. */
 export async function switchModel(model: ModelRef): Promise<boolean> {
   const active = useSessions.getState().activeSessionId;
@@ -356,6 +397,23 @@ export async function clockOut(): Promise<boolean> {
   } finally {
     useGpu.setState({ busy: false });
   }
+}
+
+/**
+ * Clock out, asking first when that would fail running turns or cancel a clock-in that already rented an instance.
+ * Resolves to true when the clock-out ran, false when it failed or waits for the confirmation dialog.
+ */
+export async function requestClockOut(): Promise<boolean> {
+  const prompt = clockOutPrompt(
+    useGpu.getState().status,
+    Object.values(useSessions.getState().sessions),
+    useSettings.getState().settings?.defaultModel?.provider,
+  );
+  if (prompt) {
+    useGpu.setState({ confirm: prompt });
+    return false;
+  }
+  return clockOut();
 }
 
 export async function switchGpuModel(modelId: string): Promise<boolean> {

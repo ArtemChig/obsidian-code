@@ -7,6 +7,7 @@ import { htmlToMarkdown } from './lib/html';
 import { extractPdfText } from './lib/pdf';
 import { truncateEnd } from './lib/text';
 import { looksBinary } from './lib/textfile';
+import { canonicalHost, normalizeUrl, privateResolutionError } from './lib/url';
 
 type WebFetchInput = { url: string; prompt?: string };
 
@@ -26,28 +27,7 @@ interface CacheEntry {
   truncated: boolean;
 }
 
-function isLocalHost(host: string): boolean {
-  const h = host.toLowerCase();
-  return (
-    h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.test') || h === '[::1]' || h === '::1' ||
-    /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^169\.254\./.test(h) || !h.includes('.')
-  );
-}
-
-export function normalizeUrl(raw: string): { url: URL; original: URL } | { error: string } {
-  let s = raw.trim();
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = `https://${s}`;
-  let original: URL;
-  try {
-    original = new URL(s);
-  } catch {
-    return { error: `Invalid URL: ${raw}` };
-  }
-  if (original.protocol !== 'http:' && original.protocol !== 'https:') return { error: `Unsupported URL scheme "${original.protocol}" (only http/https).` };
-  const url = new URL(original.href);
-  if (url.protocol === 'http:' && !isLocalHost(url.hostname)) url.protocol = 'https:';
-  return { url, original };
-}
+export { normalizeUrl };
 
 function cacheFile(ctx: ToolContext, url: string): string {
   return path.join(ctx.dataDir, 'webcache', `${createHash('sha256').update(url).digest('hex').slice(0, 40)}.json`);
@@ -121,7 +101,7 @@ export const webFetchTool = defineTool<WebFetchInput>(
     title: (i) => `Fetch ${i.url ?? ''}`.trim(),
     ruleFor: (i) => {
       const n = normalizeUrl(String(i.url ?? ''));
-      return 'error' in n ? 'WebFetch' : `WebFetch(domain:${n.original.hostname})`;
+      return 'error' in n ? '' : `WebFetch(domain:${canonicalHost(n.original.hostname)})`;
     },
 
     async run(input, ctx) {
@@ -131,6 +111,9 @@ export const webFetchTool = defineTool<WebFetchInput>(
 
       const cached = await readCache(ctx, key);
       if (cached) return answer(ctx, cached, input.prompt);
+
+      const rebind = await privateResolutionError(norm.url.hostname);
+      if (rebind) return fail(rebind);
 
       let res;
       try {

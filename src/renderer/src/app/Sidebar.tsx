@@ -62,6 +62,7 @@ import {
   toggleSidebar,
 } from '@renderer/state/actions';
 import { useRunningActivityCount, useSidebarModel, useWaitingSessionIds, type SessionGroup } from '@renderer/state/selectors';
+import { SyncFailed, useSyncError } from '@renderer/features/settings/core-missing';
 import { useSchedules } from '@renderer/state/activity';
 import { useSessions } from '@renderer/state/sessions';
 import { useUi, type Route } from '@renderer/state/ui';
@@ -322,6 +323,7 @@ function SidebarFull() {
   const route = useUi((s) => s.route);
   const unread = useSessions((s) => s.unread);
   const loaded = useSessions((s) => s.loaded);
+  const sessionsError = useSyncError('sessions');
   const waiting = useWaitingSessionIds();
   const runningActivity = useRunningActivityCount();
   const enabledSchedules = useSchedules((s) => s.tasks.filter((t) => t.enabled).length);
@@ -440,7 +442,8 @@ function SidebarFull() {
           {loaded && model.total === 0 ? (
             <div className="px-2 py-6 text-center text-small text-ob-text-3">{query ? 'No sessions match.' : 'No sessions yet.'}</div>
           ) : null}
-          {!loaded ? (
+          {!loaded && sessionsError ? <SyncFailed what="sessions" error={sessionsError} compact /> : null}
+          {!loaded && !sessionsError ? (
             <div className="flex flex-col gap-2 px-2 pt-4" aria-hidden>
               {[70, 52, 84, 60].map((w, i) => (
                 <div key={i} className="ob-skeleton h-3" style={{ width: `${w}%` }} />

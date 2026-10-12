@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { Toaster } from '@renderer/components/ui/toast';
 import { TooltipProvider } from '@renderer/components/ui/tooltip';
+import { GpuClockOutConfirm } from '@renderer/features/gpu/ClockOutConfirm';
 import { markRead } from '@renderer/state/actions';
 import { useSessions } from '@renderer/state/sessions';
 import { useUi } from '@renderer/state/ui';
@@ -10,6 +11,7 @@ import { boot } from './boot';
 import { CommandPalette } from './CommandPalette';
 import { Gallery } from './Gallery';
 import { useGlobalShortcuts } from './shortcuts';
+import { ShortcutsDialog } from './ShortcutsDialog';
 
 const SHOW_GALLERY = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('gallery');
 
@@ -29,6 +31,8 @@ export function App() {
     <TooltipProvider>
       {SHOW_GALLERY ? <Gallery /> : <AppShell />}
       <CommandPalette />
+      <GpuClockOutConfirm />
+      <ShortcutsDialog />
       <Toaster />
     </TooltipProvider>
   );

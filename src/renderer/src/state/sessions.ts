@@ -38,3 +38,25 @@ export const useSessions = create<SessionsStore>(() => ({
   unread: {},
   queued: {},
 }));
+
+/**
+ * Pure: which queued chips are still real. A chip disappears once its message is in the transcript, and all of a
+ * session's chips go once the session is idle (the core drains its queue before going idle; builtins such as /clear
+ * never add their message, and a restarted core has no queue at all).
+ */
+export function reconcileQueued(queue: QueuedMessage[] | undefined, messageIds: ReadonlySet<string>, busy: boolean): QueuedMessage[] {
+  if (!queue?.length || !busy) return [];
+  return queue.filter((q) => !messageIds.has(q.messageId));
+}
+
+/** Replace a session's queued chips (no-op when unchanged). */
+export function setQueued(sessionId: string, next: QueuedMessage[]): void {
+  useSessions.setState((st) => {
+    const prev = st.queued[sessionId] ?? [];
+    if (prev.length === next.length && prev.every((q, i) => q === next[i])) return st;
+    const queued = { ...st.queued };
+    if (next.length) queued[sessionId] = next;
+    else delete queued[sessionId];
+    return { queued };
+  });
+}

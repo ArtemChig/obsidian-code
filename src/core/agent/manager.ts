@@ -20,7 +20,8 @@ import { CheckpointStore, pathKey } from './checkpoints';
 import { BUILTIN_COMMANDS, INIT_PROMPT, isBuiltinCommand, parseSlashCommand } from './commands';
 import { isRealUserMessage, planCompaction, renderTranscript, SUMMARY_SYSTEM, summaryMessageText, summaryPrompt } from './compaction';
 import { buildHistory, estimateTokens } from './history';
-import { decidePermission } from './permissions';
+import { decidePermission, isInside } from './permissions';
+import { resolveShellKind } from '../tools/lib/shell';
 import { buildSystemPrompt, gitSummary, localDate, osName, planModeReminder, shellName, wrapReminder } from './prompt';
 import { BUILTIN_AGENTS, builtinDefinition, MAX_CONCURRENT_SUBAGENTS, MAX_SUBAGENT_DEPTH, subagentToolNames, type AgentDefinition } from './subagents';
 import {
@@ -41,6 +42,8 @@ interface QueueItem {
   images?: ImageBlock[];
   tag?: Message['tag'];
   headless?: boolean;
+  /** Typed by the user in the chat UI (send()). Only these may use the '# note' memory shortcut. */
+  interactive?: boolean;
   onDone?: (r: TurnResult) => void;
 }
 
@@ -200,15 +203,33 @@ export class AgentManagerImpl implements AgentManager {
     } catch { /* activity registry optional */ }
   }
 
+  /** Project hooks/allow rules of an untrusted folder are ignored (settings store); tell the user once per session. */
+  private noticeUntrustedProject(sessionId: string, cwd: string): void {
+    let u: { hooks: number; allow: string[]; files: string[] } | undefined;
+    try { u = this.ctx.settings.forProject(cwd)?.untrusted; } catch { return; }
+    if (!u) return;
+    const what = [u.hooks ? `${u.hooks} hook${u.hooks === 1 ? '' : 's'}` : '', u.allow.length ? `${u.allow.length} allow rule${u.allow.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+    this.emit('notification', {
+      title: 'Project settings ignored',
+      body: `This folder's project settings define ${what}. They are ignored until you add the folder under Settings → Permissions → Trusted folders.`,
+      level: 'warning',
+      sessionId,
+    });
+  }
+
   private async hook(
     event: 'PreToolUse' | 'PostToolUse' | 'UserPromptSubmit' | 'Stop' | 'SessionStart',
     payload: Record<string, unknown>,
     cwd: string,
+    signal?: AbortSignal,
   ): Promise<{ block: boolean; message?: string; additionalContext?: string }> {
     const ext = this.ctx.ext;
     if (!ext || typeof ext.runHooks !== 'function') return { block: false };
+    if (signal?.aborted) return { block: false };
     try {
-      return (await ext.runHooks(event, { hook_event_name: event, cwd, ...payload }, cwd)) ?? { block: false };
+      const run = Promise.resolve(ext.runHooks(event, { hook_event_name: event, cwd, ...payload }, cwd, signal));
+      // the runner kills its processes on abort; don't wait for it either way
+      return (signal ? await raceAbort(run, signal) : await run) ?? { block: false };
     } catch {
       return { block: false };
     }
@@ -238,8 +259,21 @@ export class AgentManagerImpl implements AgentManager {
     if (!text.trim() && !images?.length) throw new Error('Empty message');
     const rt = this.runtime(sessionId);
     const messageId = newId();
-    const queued = this.enqueue(rt, { messageId, text, images });
+    const queued = this.enqueue(rt, { messageId, text, images, interactive: true });
     return { messageId, queued };
+  }
+
+  dequeue(sessionId: string, messageId?: string): { messageId: string; text: string }[] {
+    const rt = this.runtimes.get(sessionId);
+    if (!rt) return [];
+    const removed: { messageId: string; text: string }[] = [];
+    rt.queue = rt.queue.filter((item) => {
+      // Only user-sent items (no onDone waiter: headless/subagent runs are not withdrawable).
+      if (item.onDone || (messageId && item.messageId !== messageId)) return true;
+      removed.push({ messageId: item.messageId, text: item.text ?? '' });
+      return false;
+    });
+    return removed;
   }
 
   private enqueue(rt: Runtime, item: QueueItem): boolean {
@@ -421,7 +455,8 @@ export class AgentManagerImpl implements AgentManager {
   private async handleItem(rt: Runtime, item: QueueItem): Promise<TurnResult> {
     rt.headless = !!item.headless || rt.inheritedHeadless;
     const text = item.text ?? '';
-    const cmd = item.images?.length ? null : parseSlashCommand(text);
+    // subagent prompts are model-written task descriptions, never slash commands
+    const cmd = item.images?.length || rt.depth > 0 ? null : parseSlashCommand(text);
     if (cmd) {
       if (isBuiltinCommand(cmd.name)) return this.runBuiltin(rt, item, cmd.name, cmd.args);
       const s = this.session(rt.id);
@@ -431,7 +466,9 @@ export class AgentManagerImpl implements AgentManager {
       this.commandEcho(rt, item, text.trim(), `Unknown command \`/${cmd.name}\`. Type \`/help\` to see the available commands.`);
       return { ok: false, finalText: '', error: `Unknown command /${cmd.name}` };
     }
-    const mem = /^#(?!#)\s*([^\n]+)$/.exec(text.trim()); // single-line "# note" → project memory
+    // single-line "# note" → project memory, only for messages the user typed: subagent, scheduled and headless prompts
+    // are model/task-written and must not silently persist instructions into every future system prompt
+    const mem = item.interactive && rt.depth === 0 && !item.headless ? /^#(?!#)\s*([^\n]+)$/.exec(text.trim()) : null;
     if (mem && !item.images?.length) return this.memoryNote(rt, item, mem[1]!.trim());
     return this.runPrompt(rt, item, text);
   }
@@ -452,19 +489,33 @@ export class AgentManagerImpl implements AgentManager {
     const s0 = this.session(rt.id);
     const cwd = s0.cwd;
     const reminders: string[] = [];
+    // Stoppable from here on: Stop pressed during a slow SessionStart/UserPromptSubmit hook kills the hook and skips
+    // the model call (before, interrupt() found no controller and the whole turn ran anyway).
+    const abort = new AbortController();
+    rt.abort = abort;
+    rt.activityStartedAt = Date.now();
+    this.setStatus(rt, 'running');
+    this.activity(rt, 'running');
     if (!rt.sessionStarted) {
       rt.sessionStarted = true;
       if (rt.depth === 0) {
-        const h = await this.hook('SessionStart', { session_id: rt.id, source: s0.messages.length ? 'resume' : 'startup' }, cwd);
-        if (h.additionalContext) reminders.push(h.additionalContext);
+        this.noticeUntrustedProject(rt.id, cwd);
+        const h = await this.hook('SessionStart', { session_id: rt.id, source: s0.messages.length ? 'resume' : 'startup' }, cwd, abort.signal);
+        if (h.additionalContext && !abort.signal.aborted) reminders.push(h.additionalContext);
       }
     }
-    const submit = rt.depth === 0 ? await this.hook('UserPromptSubmit', { session_id: rt.id, prompt: text }, cwd) : { block: false as const };
-    if (submit.block) {
+    const submit = rt.depth === 0 && !abort.signal.aborted
+      ? await this.hook('UserPromptSubmit', { session_id: rt.id, prompt: text }, cwd, abort.signal)
+      : { block: false as const, additionalContext: undefined };
+    const stoppedEarly = abort.signal.aborted;
+    if (submit.block && !stoppedEarly) {
+      rt.abort = null;
       this.commandEcho(rt, item, text, `Prompt blocked by a UserPromptSubmit hook${submit.message ? `: ${submit.message}` : '.'}`);
+      this.setStatus(rt, 'idle');
+      this.activity(rt, 'done');
       return { ok: false, finalText: '', error: submit.message ?? 'Blocked by hook' };
     }
-    if (submit.additionalContext) reminders.push(submit.additionalContext);
+    if (submit.additionalContext && !stoppedEarly) reminders.push(submit.additionalContext);
 
     const blocks: Block[] = [];
     if (text) blocks.push({ type: 'text', text });
@@ -486,10 +537,13 @@ export class AgentManagerImpl implements AgentManager {
 
     rt.currentTurnId = userMsg.id;
     rt.stopAfterTools = false;
-    rt.abort = new AbortController();
-    rt.activityStartedAt = Date.now();
-    this.setStatus(rt, 'running');
-    this.activity(rt, 'running');
+    if (abort.signal.aborted) {
+      // stopped while a hook was running: keep the message (like an interrupt right after sending), skip the model
+      rt.abort = null;
+      this.setStatus(rt, 'idle');
+      this.activity(rt, 'stopped');
+      return { ok: false, finalText: '', interrupted: true };
+    }
     let result: TurnResult;
     try {
       result = await this.runTurn(rt);
@@ -616,7 +670,7 @@ export class AgentManagerImpl implements AgentManager {
       if (signal.aborted) return { ok: false, finalText, interrupted: true };
       if (!res.toolCalls.length) {
         if (rt.depth === 0) {
-          const h = await this.hook('Stop', { session_id: rt.id, stop_hook_active: stopHookRuns > 0, last_message: res.text }, s.cwd);
+          const h = await this.hook('Stop', { session_id: rt.id, stop_hook_active: stopHookRuns > 0, last_message: res.text }, s.cwd, signal);
           if (h.block && h.message && stopHookRuns < MAX_STOP_HOOK_CONTINUES) {
             stopHookRuns++;
             this.addReminder(rt.id, `A Stop hook asked you to continue: ${h.message}`);
@@ -793,6 +847,13 @@ export class AgentManagerImpl implements AgentManager {
     let stop = false;
     for (const batch of batches) {
       if (signal.aborted) break;
+      if (stop) {
+        // the user denied an earlier call of this message: don't evaluate (or auto-run) the rest
+        for (const c of batch) {
+          this.finishTool(rt.id, messageId, c.id, 'denied', { content: 'Skipped: the user denied a previous tool call in this message.', isError: true });
+        }
+        continue;
+      }
       const results = await Promise.all(batch.map((c) => this.runToolCall(rt, messageId, c, byName.get(c.name), signal)));
       if (results.some((r) => r.stop)) stop = true;
     }
@@ -832,13 +893,28 @@ export class AgentManagerImpl implements AgentManager {
     }
     const s = this.session(rt.id);
     const block = this.findMessage(s, messageId)?.blocks.find((x) => x.type === 'tool_use' && x.id === call.id) as ToolUseBlock | undefined;
-    // (argument validation/aliases are the tool's job — tools normalise e.g. "plan_text" → "plan")
-    const input = block?.input ?? {};
+    // Normalise once (aliases such as "cmd"/"filePath" → canonical keys) so the permission engine, the approval dialog,
+    // hooks and run() all see exactly the input that will be executed.
+    let input: Record<string, unknown> = block?.input ?? {};
+    if (tool.normalize) {
+      try {
+        const n = tool.normalize(input);
+        if (n && typeof n === 'object' && !Array.isArray(n)) {
+          if (JSON.stringify(n) !== JSON.stringify(input)) this.updateTool(rt.id, messageId, call.id, { input: clone(n) });
+          input = n;
+        }
+      } catch { /* keep the raw input; run() reports the problem */ }
+    }
     const settings = this.settings();
     let kind: PermissionKind;
     try { kind = tool.permission(input, { cwd: s.cwd, settings }); } catch { kind = 'exec'; }
     const rules = this.settingsRules(s.cwd);
-    const decision = decidePermission({ tool, input, cwd: s.cwd, mode: s.permissionMode, kind, allow: rules.allow, deny: rules.deny });
+    const decision = decidePermission({
+      tool, input, cwd: s.cwd, mode: s.permissionMode, kind, allow: rules.allow, deny: rules.deny,
+      shellKind: resolveShellKind(settings.shell),
+      // the app's data dir (settings, secrets, sessions) is protected unless the session itself works inside it
+      protectedDirs: this.ctx.dataDir && !isInside(this.ctx.dataDir, s.cwd) ? [this.ctx.dataDir] : [],
+    });
     if (decision.action === 'deny') return fail(decision.message, decision.reason === 'plan mode' ? 'error' : 'denied');
     if (decision.action === 'ask') {
       let title = tool.name;
@@ -869,7 +945,7 @@ export class AgentManagerImpl implements AgentManager {
         try { this.ctx.settings.addProjectAllowRule(s.cwd, decision.suggestedRule); } catch { /* best effort */ }
       }
     }
-    const pre = await this.hook('PreToolUse', { session_id: rt.id, tool_name: tool.name, tool_input: input, tool_use_id: call.id }, s.cwd);
+    const pre = await this.hook('PreToolUse', { session_id: rt.id, tool_name: tool.name, tool_input: input, tool_use_id: call.id }, s.cwd, signal);
     if (pre.block) return fail(`Blocked by a PreToolUse hook${pre.message ? `: ${pre.message}` : '.'}`, 'denied');
     if (signal.aborted) {
       this.finishTool(rt.id, messageId, call.id, 'interrupted', { content: 'Interrupted by the user before the tool ran.', isError: true });
@@ -893,7 +969,7 @@ export class AgentManagerImpl implements AgentManager {
     result = { ...result, content: truncateOutput(result.content, max) };
     const post = await this.hook('PostToolUse', {
       session_id: rt.id, tool_name: tool.name, tool_input: input, tool_use_id: call.id, tool_response: result.content, is_error: !!result.isError,
-    }, s.cwd);
+    }, s.cwd, signal);
     if (post.additionalContext) result.content += `\n\n${wrapReminder(post.additionalContext)}`;
     if (post.block && post.message) result.content += `\n\n${wrapReminder(`PostToolUse hook: ${post.message}`)}`;
     rt.tokensSinceUsage += Math.ceil(result.content.length / 3.6) + (result.images?.length ?? 0) * 768;

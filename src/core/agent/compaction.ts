@@ -43,10 +43,30 @@ export function planCompaction(messages: Message[]): CompactionPlan | null {
   for (let i = (lastUser ?? base); i < messages.length; i++) if (messages[i]!.role === 'assistant' && messages[i]!.tag !== 'command') assistantIdx.push(i);
   if (assistantIdx.length > 2) {
     const insertAt = assistantIdx[assistantIdx.length - 2]!;
-    const req = lastUser !== undefined ? textOf(messages[lastUser]!) : '';
-    return { from: base, to: insertAt, insertAt, currentRequest: req };
+    return { from: base, to: insertAt, insertAt, currentRequest: currentRequestText(messages, base, lastUser) };
   }
   return null;
+}
+
+const REQUEST_RE = /\nThe user's current request \(verbatim\):\n([\s\S]*?)\n\nContinue the task from where it left off\.\s*$/;
+
+/**
+ * The request a single long turn is working on. After a first single-turn compaction the summary sits *after* that
+ * request, so it is no longer inside the history window: look further back in the transcript (old messages stay there),
+ * and fall back to the request restated by the previous summary.
+ */
+function currentRequestText(messages: Message[], base: number, lastUser: number | undefined): string {
+  if (lastUser !== undefined) return textOf(messages[lastUser]!);
+  for (let i = base - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (isRealUserMessage(m) && m.tag !== 'compact_summary') return textOf(m);
+  }
+  const prev = messages[base];
+  if (prev?.tag === 'compact_summary') {
+    const m = REQUEST_RE.exec(textOf(prev));
+    if (m) return m[1]!;
+  }
+  return '';
 }
 
 function clip(s: string, n: number): string {

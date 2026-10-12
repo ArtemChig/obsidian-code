@@ -9,7 +9,7 @@ import { openExternal } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { formatMoney } from '@renderer/lib/format';
 import { errorMessage, rpc } from '@renderer/lib/rpc';
-import { useGpu } from '@renderer/state/gpu';
+import { gpuHoldsInstance, useGpu } from '@renderer/state/gpu';
 import { useSettings } from '@renderer/state/settings';
 import { Group, NumberField, Row, SecretField, Section, TextField, patchVast } from '../components';
 import { joinArgs, splitArgs } from '../validate';
@@ -39,6 +39,8 @@ function ApiKey() {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<KeyTest | null>(null);
   const hasKey = useGpu((s) => s.hasApiKey);
+  // While an instance exists only this key can destroy it: no removal, and a replacement must be the same account.
+  const holding = useGpu((s) => gpuHoldsInstance(s.status));
 
   const test = async () => {
     setTesting(true);
@@ -72,6 +74,12 @@ function ApiKey() {
           name="vast.apiKey"
           testId="secret-vast"
           placeholder="Paste your Vast.ai API key…"
+          removeBlocked={holding ? 'A GPU instance is rented or parked. Clock out (and destroy the parked instance) first; without the key the app cannot stop the billing.' : undefined}
+          replaceWarning={
+            holding
+              ? 'A GPU instance is rented or parked. The new key must belong to the same Vast.ai account, otherwise the app can no longer clock out and the instance keeps billing until its server-side watchdog stops it.'
+              : undefined
+          }
           onChanged={(present) => {
             setResult(null);
             if (present) void test();

@@ -21,6 +21,8 @@ export function defaultSettings(patch: Partial<Settings> = {}): Settings {
     },
     search: { provider: 'duckduckgo' },
     permissions: { allow: [], deny: [] },
+    trustedFolders: [],
+    projectAllow: {},
     hooks: {},
     mcpServers: {},
     importClaudeConfig: false,

@@ -33,7 +33,15 @@ export interface SettingsStore {
   get(): Settings;
   update(patch: Partial<Settings>): Settings;
   /** Project-level overrides (.obsidian-code/settings.json, and .claude/settings.json permissions when importClaudeConfig). */
-  forProject(cwd: string): { permissions: { allow: string[]; deny: string[] }; hooks: Settings['hooks'] };
+  /**
+   * Effective project-level rules/hooks for cwd. Hooks and allow rules from project files only count when the folder is
+   * in settings.trustedFolders; otherwise they are reported in `untrusted` and ignored (deny rules always apply).
+   */
+  forProject(cwd: string): {
+    permissions: { allow: string[]; deny: string[] };
+    hooks: Settings['hooks'];
+    untrusted?: { hooks: number; allow: string[]; files: string[] };
+  };
   addProjectAllowRule(cwd: string, rule: string): void;
   onChange(fn: (s: Settings) => void): () => void;
 }
@@ -157,6 +165,11 @@ export interface ToolDef<I = Record<string, unknown>> {
   title(input: I): string;
   /** Suggested "always allow" rule, e.g. "Bash(npm test:*)" or "Edit". */
   ruleFor?(input: I): string;
+  /**
+   * Repair raw model input (parameter aliases → canonical names, type coercion). The agent calls this once per call and
+   * uses the result for the permission check, the approval dialog, hooks and run(), so they all see the same input.
+   */
+  normalize?(input: Record<string, unknown>): Record<string, unknown>;
   /** Read-only tools may run concurrently. */
   concurrencySafe: boolean;
   run(input: I, ctx: ToolContext): Promise<ToolResultPayload>;
@@ -186,7 +199,8 @@ export interface ExtensionsApi {
   /** Tools exposed by connected MCP servers (names: mcp__<server>__<tool>). */
   mcpTools(): ToolDef[];
   /** Run hooks; returns { block: true, message } if a hook blocked (exit code 2). */
-  runHooks(event: 'PreToolUse' | 'PostToolUse' | 'UserPromptSubmit' | 'Stop' | 'SessionStart', payload: Record<string, unknown>, cwd: string): Promise<{ block: boolean; message?: string; additionalContext?: string }>;
+  /** `signal` aborts the run: running hook processes are tree-killed and the call resolves `{ block: false }` promptly. */
+  runHooks(event: 'PreToolUse' | 'PostToolUse' | 'UserPromptSubmit' | 'Stop' | 'SessionStart', payload: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<{ block: boolean; message?: string; additionalContext?: string }>;
 }
 
 // ───────────────────────────── Agent (src/core/agent) ─────────────────────────────
@@ -194,6 +208,8 @@ export interface ExtensionsApi {
 export interface AgentManager {
   send(sessionId: string, text: string, images?: ImageBlock[]): Promise<{ messageId: string; queued: boolean }>;
   interrupt(sessionId: string): void;
+  /** Withdraw queued messages that have not started yet (all of the session's when messageId is omitted). */
+  dequeue(sessionId: string, messageId?: string): { messageId: string; text: string }[];
   respondPermission(requestId: string, decision: PermissionDecision, message?: string): void;
   answerQuestion(requestId: string, answers: Record<string, string>): void;
   respondPlan(requestId: string, approve: boolean, mode?: PermissionMode, feedback?: string): void;
@@ -221,6 +237,8 @@ export interface GpuManager {
   testKey(): Promise<{ ok: boolean; message: string; creditBalance?: number }>;
   /** Wait until ready (used by scheduler auto clock-in). */
   waitUntilReady(timeoutMs: number): Promise<boolean>;
+  /** Resolves once the startup check of an instance tracked from the last run has finished (never rejects). */
+  whenStarted?(): Promise<void>;
   dispose(): Promise<void>;
 }
 

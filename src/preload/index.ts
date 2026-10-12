@@ -3,12 +3,14 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-const CORE_URL_ARG = '--obsidian-core-url=';
-
+/** The core URL (with its auth token) comes over IPC, not the process command line where other processes can read it. */
 function readCoreUrl(): string | null {
-  const arg = process.argv.find((a) => a.startsWith(CORE_URL_ARG));
-  const value = arg ? arg.slice(CORE_URL_ARG.length) : '';
-  return value.length > 0 ? value : null;
+  try {
+    const value: unknown = ipcRenderer.sendSync('obsidian:coreUrl');
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 type PickFolderOptions = { defaultPath?: string; title?: string };
@@ -38,6 +40,16 @@ const api = {
   /** Open an http(s) URL in the default browser. Resolves false for other schemes. */
   openExternal(url: string): Promise<boolean> {
     return ipcRenderer.invoke('obsidian:openExternal', String(url)) as Promise<boolean>;
+  },
+  /** Subscribe to "open this session" requests (a desktop notification was clicked). Returns an unsubscribe function. */
+  onOpenSession(cb: (sessionId: string) => void): () => void {
+    const listener = (_e: unknown, id: unknown): void => {
+      if (typeof id === 'string' && id) cb(id);
+    };
+    ipcRenderer.on('obsidian:openSession', listener);
+    return () => {
+      ipcRenderer.removeListener('obsidian:openSession', listener);
+    };
   },
   /** Window controls (the title bar uses the native Windows controls overlay; these are for custom UI). */
   window: {

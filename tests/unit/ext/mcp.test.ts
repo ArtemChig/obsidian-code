@@ -353,3 +353,20 @@ describe('stdio command forms', () => {
     await waitFor(() => !alive(pid), 8000);
   });
 });
+
+describe('reconnect budget', () => {
+  it('a server that dies right after connecting is not respawned forever (retries survive successful connects)', async () => {
+    const root = tmpDir();
+    const countFile = path.join(root, 'starts.txt');
+    const { ext } = setup({ flaky: stdioServer({ FIXTURE_EXIT_AFTER_LIST: '1', FIXTURE_COUNTFILE: countFile }) }, { mcpReconnectBaseMs: 30 });
+    await ext.start();
+    await waitFor(() => /gave up/.test(ext.mcpStatus()[0]?.error ?? ''), 25_000);
+    const starts = () => (existsSync(countFile) ? readFileSync(countFile, 'utf8').trim().split('\n').length : 0);
+    const n = starts();
+    expect(n).toBeGreaterThanOrEqual(2);
+    expect(n).toBeLessThanOrEqual(6); // first connect + at most 5 reconnects
+    await new Promise((r) => setTimeout(r, 800));
+    expect(starts()).toBe(n);
+    expect(ext.mcpStatus()[0]!.status).toBe('error');
+  }, 40_000);
+});

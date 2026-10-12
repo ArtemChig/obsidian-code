@@ -361,7 +361,12 @@ export function runCommand(opts: RunOptions): Promise<RunResult> {
 export function splitSegments(command: string, kind: ShellKind): string[] | null {
   let cmd = command.trim();
   // harmless stderr/devnull redirections
-  cmd = cmd.replace(/\s+2>&1/g, '').replace(/\s+[12]?>\s*\/dev\/null/g, '').replace(/\s+[12]?>\s*\$null/gi, '').replace(/\s+[12]?>\s*nul\b/gi, '');
+  // (the target must be the whole token: "> nul-x.bat" or "> /dev/null.sh" are real file writes)
+  cmd = cmd
+    .replace(/\s+2>&1(?=$|\s|[;&|])/g, '')
+    .replace(/\s+[12]?>\s*\/dev\/null(?=$|\s|[;&|])/g, '')
+    .replace(/\s+[12]?>\s*\$null(?=$|\s|[;&|])/gi, '')
+    .replace(/\s+[12]?>\s*nul(?=$|\s|[;&|])/gi, '');
   const segs: string[] = [];
   let cur = '';
   let inS = false;
@@ -418,7 +423,7 @@ function tokenize(segment: string): string[] {
 
 const RO_COMMON = new Set([
   'ls', 'dir', 'pwd', 'whoami', 'date', 'hostname', 'uname', 'which', 'where', 'echo', 'cat', 'head', 'tail', 'wc', 'grep', 'egrep',
-  'fgrep', 'rg', 'tree', 'stat', 'du', 'df', 'cut', 'tr', 'basename', 'dirname', 'realpath', 'readlink', 'printenv',
+  'fgrep', 'rg', 'tree', 'stat', 'du', 'df', 'cut', 'tr', 'basename', 'dirname', 'realpath', 'readlink',
   'id', 'nl', 'cd', 'true', 'false', 'diff', 'cmp', 'md5sum', 'sha1sum', 'sha256sum', 'type',
 ]);
 const RO_PS = new Set([
@@ -428,7 +433,7 @@ const RO_PS = new Set([
   'gcm', 'sls', 'select', 'sort', 'measure', 'ft', 'fl', 'cd', 'set-location', 'sl',
 ]);
 const RO_GIT = new Set([
-  'status', 'diff', 'log', 'show', 'rev-parse', 'describe', 'ls-files', 'ls-tree', 'blame', 'shortlog', 'cat-file', 'reflog', 'grep',
+  'status', 'diff', 'log', 'show', 'rev-parse', 'describe', 'ls-files', 'ls-tree', 'blame', 'shortlog', 'cat-file', 'grep',
   'rev-list', 'name-rev', 'merge-base', 'show-ref', 'count-objects', 'whatchanged',
 ]);
 const VERSION_ONLY = new Set(['node', 'npm', 'npx', 'pnpm', 'yarn', 'python', 'python3', 'py', 'pip', 'pip3', 'git', 'cargo', 'rustc', 'go', 'java', 'dotnet', 'tsc', 'deno', 'bun', 'docker']);
@@ -441,6 +446,11 @@ function gitReadOnly(all: string[]): boolean {
   if (tokens.some((t) => t.startsWith('--output') || t.startsWith('--ext-diff') || t === '-c' || t.startsWith('--exec-path') || t.startsWith('--open-files-in-pager') || /^-O./.test(t))) return false;
   if (RO_GIT.has(sub)) return true;
   const rest = tokens.slice(2);
+  // reflog: listing only ("git reflog", "git reflog show <ref> -n 5"); never expire/delete/other subcommands
+  if (sub === 'reflog') {
+    const args = rest[0] === 'show' ? rest.slice(1) : rest;
+    return args.every((t) => /^-(n\d*|\d+)$/.test(t) || /^--(oneline|date=\S+|max-count=\d+|all|format=.*|pretty=.*)$/.test(t) || /^\d+$/.test(t) || (/^[\w./@{}~^-]+$/.test(t) && !t.startsWith('-') && !['expire', 'delete', 'exists'].includes(t)));
+  }
   if (sub === 'branch') return rest.every((t) => ['-a', '-r', '-v', '-vv', '--list', '--show-current', '--all', '--remotes', '-l', '--verbose'].includes(t));
   if (sub === 'remote') return rest.length === 0 || (rest.length === 1 && (rest[0] === '-v' || rest[0] === 'show'));
   if (sub === 'tag') return rest.length === 0 || rest.every((t) => ['-l', '--list', '-n'].includes(t));
@@ -450,9 +460,28 @@ function gitReadOnly(all: string[]): boolean {
   return false;
 }
 
+/** UNC / device / WebDAV paths (\\host\share, //host/share, \\?\UNC\…, --opt=//host/x): touching them leaks NTLM credentials. */
+export function isRemotePathLike(token: string): boolean {
+  const t = token.replace(/^["']|["']$/g, '');
+  return /(^|[=,]|^-\w+:)[\\/][\\/]/.test(t);
+}
+
+const SENSITIVE_DIRS = new Set(['.ssh', '.aws', '.gnupg', '.azure', '.kube', '.docker']);
+const SENSITIVE_FILES = new Set(['.netrc', '_netrc', '.git-credentials', '.npmrc', '.pypirc', 'secret.key', 'secrets.json']);
+
+/** Paths whose contents are credentials (keys, tokens, .env files, the app's secret store): reading them always asks. */
+export function isSensitivePathLike(p: string): boolean {
+  const t = p.replace(/^["']|["']$/g, '').replace(/\\/g, '/').toLowerCase();
+  const segs = t.split('/').filter(Boolean);
+  const base = segs[segs.length - 1] ?? '';
+  if (segs.some((x) => SENSITIVE_DIRS.has(x))) return true;
+  return SENSITIVE_FILES.has(base) || /^\.env(\..+)?$/.test(base) || /^id_(rsa|dsa|ecdsa|ed25519)(_sk)?$/.test(base);
+}
+
 function segmentReadOnly(segment: string, kind: ShellKind): boolean {
   const tokens = tokenize(segment);
   if (tokens.length === 0) return true;
+  if (tokens.some((t) => isRemotePathLike(t) || isSensitivePathLike(t))) return false;
   let first = tokens[0];
   if (/^[A-Za-z_]\w*=/.test(first)) return false; // env prefix: be conservative
   first = path.basename(first.replace(/\\/g, '/')).toLowerCase().replace(/\.exe$/, '');
@@ -475,18 +504,56 @@ export function isReadOnlyCommand(command: string, kind: ShellKind): boolean {
   return segs.every((s) => segmentReadOnly(s, kind));
 }
 
-/** Suggested "always allow" rule: `Bash(npm test:*)` for simple commands, the exact command otherwise. */
+/** Programs for which a prefix rule would grant arbitrary code execution, deletion, file overwrite or network access. */
+const EXACT_ONLY = new Set([
+  'python', 'python3', 'py', 'pythonw', 'node', 'deno', 'bun', 'bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'powershell', 'pwsh', 'cmd', 'wsl',
+  'perl', 'ruby', 'php', 'lua', 'java', 'javaw', 'npx', 'pnpx', 'bunx', 'uvx', 'pipx', 'rm', 'del', 'erase', 'rmdir', 'rd', 'curl', 'wget',
+  'scp', 'ssh', 'sftp', 'ftp', 'nc', 'ncat', 'iwr', 'irm', 'iex', 'invoke-webrequest', 'invoke-restmethod', 'invoke-expression',
+  'invoke-command', 'invoke-item', 'ii', 'start-process', 'start', 'saps', 'remove-item', 'ri', 'eval', 'exec', 'sudo', 'runas', 'env', 'xargs',
+  'nohup', 'time', 'timeout', 'watch', 'command', 'builtin', 'source', '.', 'call', 'cscript', 'wscript', 'mshta', 'rundll32', 'regsvr32',
+  'reg', 'schtasks', 'sc', 'msiexec', 'certutil', 'bitsadmin', 'set-content', 'add-content', 'out-file', 'new-item', 'copy-item',
+  'move-item', 'cp', 'mv', 'dd', 'chmod', 'chown', 'tee', 'find', 'git', 'docker', 'kubectl', 'make', 'cargo', 'go', 'dotnet', 'uv', 'poetry',
+]);
+/** For exact-only programs: subcommands that are safe to allow by prefix. */
+const SAFE_SUBCOMMANDS: Record<string, Set<string>> = {
+  git: new Set(['status', 'diff', 'log', 'show', 'add', 'commit', 'fetch', 'pull', 'stash', 'switch', 'blame', 'branch', 'tag', 'ls-files']),
+  cargo: new Set(['build', 'check', 'test', 'fmt', 'clippy', 'doc', 'tree']),
+  go: new Set(['build', 'test', 'vet', 'fmt', 'list', 'version']),
+  dotnet: new Set(['build', 'test', 'restore', 'format']),
+  docker: new Set(['ps', 'images', 'logs', 'inspect', 'version', 'info']),
+  kubectl: new Set(['get', 'describe', 'logs', 'version']),
+  uv: new Set(['sync', 'lock', 'tree']),
+};
+/** "<runner> <sub> <script>" runs an arbitrary script: the script name stays in the prefix. */
+const RUNNERS: Record<string, Set<string>> = {
+  npm: new Set(['run', 'run-script', 'exec', 'x']),
+  pnpm: new Set(['run', 'exec', 'dlx']),
+  yarn: new Set(['run', 'exec', 'dlx']),
+};
+
+/**
+ * Suggested "always allow" rule. Ordinary programs get a prefix rule (`Bash(npm test:*)`, `Bash(ls:*)`); script runners
+ * keep the script name (`Bash(npm run build:*)`); interpreters, shells, deletion, download and other code-execution
+ * programs get the exact command only, as do compound or unparseable commands (an exact rule matches only that literal
+ * string, so it cannot be widened by a later call).
+ */
 export function commandRule(toolName: 'Bash' | 'PowerShell', command: string, kind: ShellKind): string {
   const cmd = command.trim();
+  const exact = `${toolName}(${cmd})`;
   const segs = splitSegments(cmd, kind);
-  if (segs && segs.length === 1) {
-    const tokens = tokenize(segs[0]);
-    if (tokens.length > 0 && !/^[A-Za-z_]\w*=/.test(tokens[0])) {
-      const second = tokens[1];
-      const subcommandLike = second !== undefined && /^[A-Za-z][\w-]*$/.test(second) && !second.includes('.');
-      const prefix = subcommandLike ? `${tokens[0]} ${second}` : tokens[0];
-      return `${toolName}(${prefix}:*)`;
-    }
+  if (!segs || segs.length !== 1) return exact;
+  const tokens = tokenize(segs[0]!);
+  const first = tokens[0];
+  if (!first || /^[A-Za-z_]\w*=/.test(first)) return exact;
+  if (/[\\/$%&@]/.test(first) || /\.(exe|bat|cmd|com|ps1|psm1|sh|py|js|mjs|cjs|vbs|lnk)$/i.test(first)) return exact; // path to a program/script
+  const prog = first.toLowerCase();
+  const second = tokens[1];
+  const isWord = (t: string | undefined): t is string => t !== undefined && /^[A-Za-z][\w-]*$/.test(t);
+  const runner = RUNNERS[prog];
+  if (runner && isWord(second) && runner.has(second.toLowerCase())) {
+    const sub = second.toLowerCase();
+    return (sub === 'run' || sub === 'run-script') && /^[A-Za-z][\w:.-]*$/.test(tokens[2] ?? '') ? `${toolName}(${first} ${second} ${tokens[2]}:*)` : exact;
   }
-  return `${toolName}(${cmd})`;
+  if (EXACT_ONLY.has(prog)) return isWord(second) && SAFE_SUBCOMMANDS[prog]?.has(second.toLowerCase()) ? `${toolName}(${first} ${second}:*)` : exact;
+  return `${toolName}(${isWord(second) ? `${first} ${second}` : first}:*)`;
 }

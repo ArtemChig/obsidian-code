@@ -53,14 +53,20 @@ describe('mentions, modes, images', () => {
     expect(mentionFor('./docs/My Notes.md')).toBe('@"docs/My Notes.md"');
   });
 
-  it('Shift+Tab cycles default → acceptEdits → plan → bypass → default', () => {
-    const seen: PermissionMode[] = [];
-    let m: PermissionMode = 'default';
-    for (let i = 0; i < 4; i++) {
-      m = nextPermissionMode(m);
-      seen.push(m);
-    }
-    expect(seen).toEqual(['acceptEdits', 'plan', 'bypassPermissions', 'default']);
+  it('Shift+Tab cycles default → acceptEdits → plan → default (bypass only when opted in)', () => {
+    const cycle = (allowBypass: boolean, n: number) => {
+      const seen: PermissionMode[] = [];
+      let m: PermissionMode = 'default';
+      for (let i = 0; i < n; i++) {
+        m = nextPermissionMode(m, allowBypass);
+        seen.push(m);
+      }
+      return seen;
+    };
+    // Leaving plan mode with Shift+Tab must not land on "never ask".
+    expect(cycle(false, 3)).toEqual(['acceptEdits', 'plan', 'default']);
+    expect(cycle(true, 4)).toEqual(['acceptEdits', 'plan', 'bypassPermissions', 'default']);
+    expect(nextPermissionMode('bypassPermissions')).toBe('default');
   });
 
   it('parses data URLs and estimates sizes', () => {

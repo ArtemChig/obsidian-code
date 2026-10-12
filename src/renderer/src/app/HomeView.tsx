@@ -21,6 +21,8 @@ import { Tooltip } from '@renderer/components/ui/tooltip';
 import { pickFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { basename, formatMoney, formatPerHour, pluralize, shortModelName, shortenPath, sameModel } from '@renderer/lib/format';
+import { ModelNotice } from '@renderer/features/chat/composer/ModelNotice';
+import { SyncFailed, useSyncError } from '@renderer/features/settings/core-missing';
 import { createSession, navigate, openSession, refreshModels, sendMessage } from '@renderer/state/actions';
 import { useGpu } from '@renderer/state/gpu';
 import { useModels } from '@renderer/state/models';
@@ -115,6 +117,7 @@ function QuickStart() {
   };
 
   return (
+    <div className="flex flex-col gap-2">
     <div
       data-testid="quick-start"
       className="@container ob-transition rounded-[12px] border border-ob-border bg-ob-surface-1 focus-within:border-[rgba(143,184,222,0.42)] focus-within:shadow-[0_0_0_4px_rgba(143,184,222,0.07)]"
@@ -159,6 +162,8 @@ function QuickStart() {
           {text.trim() ? 'Start' : 'New session'}
         </Button>
       </div>
+    </div>
+    <ModelNotice model={chosenModel} />
     </div>
   );
 }
@@ -224,13 +229,16 @@ function SessionLine({ s, waiting }: { s: SessionSummary; waiting: boolean }) {
 function RecentSessions() {
   const recent = useRecentSessions(7);
   const loaded = useSessions((s) => s.loaded);
+  const sessionsError = useSyncError('sessions');
   const total = useSessions((s) => Object.values(s.sessions).filter((x) => x.kind !== 'subagent').length);
   const waiting = useWaitingSessionIds();
   return (
     <section aria-label="Recent sessions" className="min-w-0">
       <SectionLabel action={total ? <span className="font-mono text-[11px] text-ob-text-3">{total}</span> : undefined}>Recent sessions</SectionLabel>
       <div className="mt-2 overflow-hidden rounded-card border border-ob-border bg-ob-surface-1">
-        {!loaded ? (
+        {!loaded && sessionsError ? (
+          <SyncFailed what="sessions" error={sessionsError} compact />
+        ) : !loaded ? (
           <div className="flex flex-col gap-3 p-4" aria-hidden>
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center gap-3">

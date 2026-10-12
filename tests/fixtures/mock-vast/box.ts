@@ -28,6 +28,8 @@ export interface BoxScenario {
   noBootstrap?: boolean;
   /** Never write status.json at all (onstart did not run). */
   noStatusFile?: boolean;
+  /** CONTAINER_API_KEY is not in the container env (the watchdog cannot arm until the app supplies the key). */
+  noContainerKey?: boolean;
 }
 
 type ParsedPub = Exclude<ReturnType<typeof ssh2.utils.parseKey>, Error | unknown[]>;
@@ -38,6 +40,11 @@ export class FakeBox {
   modelId = '';
   env: Record<string, string> = {};
   heartbeats = 0;
+  /** Emulated self-destroy watchdog (onstart.sh): alive state and how often it was (re)started. */
+  watchdogAlive = false;
+  watchdogStarts = 0;
+  /** (Re)starts of the watchdog do nothing (it cannot be repaired). */
+  watchdogBroken = false;
   readonly execLog: string[] = [];
   readonly switches: string[] = [];
   readonly uploads: string[] = [];
@@ -160,7 +167,13 @@ export class FakeBox {
           let stdin = '';
           stream.on('data', (d: Buffer) => (stdin += d.toString('utf8')));
           stream.on('end', () => {
-            const r = this.exec(info.command, stdin);
+            let r: { code: number; stdout: string; stderr: string };
+            try {
+              r = this.exec(info.command, stdin);
+            } catch (err) {
+              // e.g. an in-flight heartbeat that lands after the box (and its temp dir) was destroyed
+              r = { code: 1, stdout: '', stderr: `mock box: ${err instanceof Error ? err.message : String(err)}\n` };
+            }
             if (r.stdout) stream.write(r.stdout);
             if (r.stderr) stream.stderr.write(r.stderr);
             stream.exit(r.code);
@@ -195,6 +208,11 @@ export class FakeBox {
 
   private exec(command: string, stdin: string): { code: number; stdout: string; stderr: string } {
     this.execLog.push(command);
+    // watchdog restart (kills a running one first)
+    if (/setsid nohup bash \/root\/oc\/watchdog\.sh/.test(command)) {
+      this.startWatchdog();
+      return { code: 0, stdout: '', stderr: '' };
+    }
     // background start of the uploaded onstart stub
     if (/setsid nohup bash \/root\/oc\/onstart\.sh/.test(command)) {
       this.uploads.push('start');
@@ -251,6 +269,22 @@ export class FakeBox {
         continue;
       }
       if (/^mv -f \/root\/oc\/\S+ \/root\/oc\/\S+$/.test(p)) continue;
+      // watchdog check: p=$(cat watchdog.pid) && grep -q watchdog.sh /proc/$p/cmdline && grep -a "armed id=" watchdog.log | tail -n 1
+      if (p === 'p=$(cat /root/oc/watchdog.pid 2>/dev/null)') {
+        if (!existsSync(this.file('watchdog.pid'))) return { code: 1, stdout: out, stderr: '' };
+        continue;
+      }
+      if (p === 'grep -q watchdog.sh /proc/$p/cmdline 2>/dev/null') {
+        if (!this.watchdogAlive) return { code: 1, stdout: out, stderr: '' };
+        continue;
+      }
+      if (p === 'grep -a "armed id=" /root/oc/watchdog.log | tail -n 1') {
+        const log = existsSync(this.file('watchdog.log')) ? readFileSync(this.file('watchdog.log'), 'utf8') : '';
+        const lines = log.split('\n').filter((l) => l.includes('armed id='));
+        if (!lines.length) return { code: 1, stdout: out, stderr: '' };
+        out += `${lines[lines.length - 1]}\n`;
+        continue;
+      }
       if ((m = /^bash \/root\/oc\/switch\.sh '([^']+)'$/.exec(p))) {
         this.switches.push(m[1]);
         this.run(m[1], true);
@@ -261,15 +295,50 @@ export class FakeBox {
     return { code: 0, stdout: out, stderr: '' };
   }
 
+  /** Emulates watchdog.sh startup: sources env + wd.env; arms only with an id and a key (else logs NOT armed, exits). */
+  startWatchdog(): void {
+    this.watchdogStarts++;
+    if (this.watchdogBroken) return;
+    const vars: Record<string, string> = {};
+    for (const f of ['env', 'wd.env']) {
+      if (!existsSync(this.file(f))) continue;
+      for (const m of readFileSync(this.file(f), 'utf8').matchAll(/^export (\w+)='([^']*)'$/gm)) vars[m[1]] = m[2];
+    }
+    const id = vars.CONTAINER_ID ?? '';
+    const key = vars.CONTAINER_API_KEY ?? '';
+    const ts = new Date().toISOString();
+    if (!id || !key) {
+      appendFileSync(this.file('watchdog.log'), `${ts} NOT armed: id=${id} key=${key ? 'set' : ''}\n`);
+      rmSync(this.file('watchdog.pid'), { force: true });
+      this.watchdogAlive = false;
+      return;
+    }
+    writeFileSync(this.file('watchdog.pid'), `${1000 + this.watchdogStarts}\n`);
+    appendFileSync(this.file('watchdog.log'), `${ts} armed id=${id} key=set hb=10\n`);
+    this.watchdogAlive = true;
+  }
+
+  /** Simulate the watchdog process dying (OOM etc.). */
+  killWatchdog(): void {
+    this.watchdogAlive = false;
+  }
+
   /** Instance became running: emulate the onstart stub (env file, status starting, then bootstrap). */
   boot(env: Record<string, string>, fromUpload = false): void {
+    // Vast injects CONTAINER_ID / CONTAINER_API_KEY into the container env (onstart reads them from /proc/1/environ).
+    const container: Record<string, string> = { CONTAINER_ID: String(this.instanceId) };
+    if (!this.scenario.noContainerKey) container.CONTAINER_API_KEY = `ckey-${this.instanceId}`;
+    env = { ...container, ...env };
     this.env = env;
     this.apiKey = env.OC_API_KEY ?? '';
     const lines = Object.entries(env)
       .filter(([k]) => !k.endsWith('_GZB64'))
       .map(([k, v]) => `export ${k}='${v}'`);
     writeFileSync(this.file('env'), lines.join('\n') + '\n');
+    rmSync(this.file('watchdog.pid'), { force: true });
+    this.watchdogAlive = false;
     if (this.scenario.noStatusFile && !fromUpload) return;
+    this.startWatchdog();
     this.modelId = existsSync(this.file('current_model')) ? readFileSync(this.file('current_model'), 'utf8').trim() : env.OC_MODEL_ID ?? '';
     this.writeStatus('starting', 0, 'Instance booted');
     if (this.scenario.noBootstrap && !fromUpload) return;
@@ -325,6 +394,7 @@ export class FakeBox {
     this.runToken++;
     this.clearTimers();
     this.serving = false;
+    this.watchdogAlive = false;
     this.dropConnections();
   }
 

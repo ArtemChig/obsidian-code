@@ -75,6 +75,15 @@ export function isImageFile(f: File): boolean {
 /** Read image files and append them to a session's attachments. Returns how many were added. */
 export async function addImageFiles(sessionId: string, files: File[]): Promise<number> {
   const images = files.filter(isImageFile);
+  const ignored = files.length - images.length;
+  if (ignored > 0) {
+    // A dropped PDF / source file would otherwise vanish silently under a "Drop to attach" overlay.
+    toast({
+      title: ignored === 1 ? `${files.find((f) => !isImageFile(f))?.name || 'That file'} was not attached` : `${ignored} files were not attached`,
+      body: 'Only images can be attached. Mention files in the project with @ instead.',
+      level: 'warning',
+    });
+  }
   if (!images.length) return 0;
   const current = useChatLocal.getState().attachments[sessionId] ?? [];
   const room = MAX_IMAGES - current.length;

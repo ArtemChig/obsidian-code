@@ -5,6 +5,16 @@ import { inflateSync, inflateRawSync } from 'node:zlib';
 
 export interface PdfText { pages: string[]; text: string; pageCount: number; usable: boolean }
 
+// Hostile PDFs (a few MB of FlateDecode zeros inflate to GBs) must not exhaust memory in the main process.
+/** Max inflated size of one stream. */
+const MAX_STREAM_BYTES = 8 * 1024 * 1024;
+/** Max inflated bytes across all streams of one document. */
+const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
+/** Max content streams examined per document. */
+const MAX_STREAMS = 5000;
+/** Max extracted text (characters) per document. */
+const MAX_TEXT_CHARS = 4 * 1024 * 1024;
+
 function unescapePdfString(s: string): string {
   let out = '';
   for (let i = 0; i < s.length; i++) {
@@ -75,9 +85,11 @@ function extractFromContent(content: string): string {
   return out.join('\n');
 }
 
-function inflateStream(data: Buffer): Buffer | null {
-  try { return inflateSync(data); } catch { /* try raw */ }
-  try { return inflateRawSync(data); } catch { return null; }
+function inflateStream(data: Buffer, maxOutputLength: number): Buffer | null {
+  if (maxOutputLength <= 0) return null;
+  // over the limit → RangeError → stream skipped
+  try { return inflateSync(data, { maxOutputLength }); } catch { /* try raw */ }
+  try { return inflateRawSync(data, { maxOutputLength }); } catch { return null; }
 }
 
 export function extractPdfText(buf: Buffer): PdfText {
@@ -86,7 +98,11 @@ export function extractPdfText(buf: Buffer): PdfText {
   const pages: string[] = [];
   const streamRe = /stream\r?\n/g;
   let m: RegExpExecArray | null;
+  let streams = 0;
+  let inflatedTotal = 0;
+  let textChars = 0;
   while ((m = streamRe.exec(src))) {
+    if (++streams > MAX_STREAMS || inflatedTotal >= MAX_TOTAL_BYTES || textChars >= MAX_TEXT_CHARS) break;
     const start = m.index + m[0].length;
     const end = src.indexOf('endstream', start);
     if (end === -1) break;
@@ -96,14 +112,18 @@ export function extractPdfText(buf: Buffer): PdfText {
     if (/\/Subtype\s*\/(Image|Form|Type1C|CIDFontType0C|OpenType)/.test(dict) || /\/Type\s*\/(XRef|ObjStm|Metadata|EmbeddedFile)/.test(dict)) continue;
     let data = buf.subarray(start, end);
     if (/\/FlateDecode/.test(dict)) {
-      const inflated = inflateStream(data);
+      const inflated = inflateStream(data, Math.min(MAX_STREAM_BYTES, MAX_TOTAL_BYTES - inflatedTotal));
       if (!inflated) continue;
+      inflatedTotal += inflated.length;
       data = inflated;
     } else if (/\/Filter/.test(dict)) continue;
     const content = data.toString('latin1');
     if (!content.includes('BT')) continue;
     const text = extractFromContent(content);
-    if (text.trim()) pages.push(text);
+    if (text.trim()) {
+      pages.push(text);
+      textChars += text.length;
+    }
   }
   const text = pages.join('\n\n');
   const printable = text.replace(/[^\x20-\x7e -￿\n]/g, '').length;

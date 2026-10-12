@@ -1,5 +1,5 @@
 // Inline permission prompt: what the tool wants to do + Allow once / Always allow <rule> / Deny (+ feedback).
-// Keys: 1 / 2 / 3, Esc = deny. Owner: ui-chat.
+// Keys (when focus is on the card, not in a text field): 1 / 2 / 3, Esc = deny. Owner: ui-chat.
 import { Globe, ShieldAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PermissionDecision, PermissionRequest } from '@shared/types';
@@ -133,8 +133,9 @@ export function PermissionPrompt({ request, cwd, active }: PermissionPromptProps
       data-request-id={request.requestId}
       role="group"
       aria-label={`Permission request: ${request.title}`}
+      tabIndex={-1}
       className={cn(
-        'overflow-hidden rounded-[12px] border bg-ob-surface-1 animate-ob-slide-up',
+        'overflow-hidden rounded-[12px] border bg-ob-surface-1 outline-none animate-ob-slide-up focus:shadow-[0_0_0_4px_rgba(232,184,92,0.16)]',
         active ? 'border-[rgba(232,184,92,0.45)] shadow-[0_0_0_4px_rgba(232,184,92,0.06)]' : 'border-ob-border',
       )}
     >
@@ -144,9 +145,15 @@ export function PermissionPrompt({ request, cwd, active }: PermissionPromptProps
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="text-[13.5px] font-medium text-ob-text">{headline(request)}</div>
+          {/* the real call is always shown; the model's own description is only a labelled note (it can be misleading) */}
           <div className="truncate text-small text-ob-text-3" title={request.title}>
-            {description ?? request.title}
+            {request.title}
           </div>
+          {description ? (
+            <div className="truncate text-small italic text-ob-text-3" title={description} data-testid="perm-agent-note">
+              Agent says: {description}
+            </div>
+          ) : null}
         </div>
         <Badge mono className="mt-1 shrink-0">
           {request.toolName.startsWith('mcp__') ? 'MCP' : request.toolName}

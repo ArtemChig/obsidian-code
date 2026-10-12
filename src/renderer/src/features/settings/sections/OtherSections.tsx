@@ -270,7 +270,7 @@ export function GeneralSection() {
             }
           />
         </Row>
-        <Row label="Notifications" description="Desktop notifications when a long task finishes, when the agent needs you, and when the GPU clocks out.">
+        <Row label="Notifications" description="Desktop notifications while the app is in the background: the agent needs you, a long task finished or failed, a scheduled run ended, and GPU events (ready, clocked out, budget reached).">
           <Switch aria-label="Notifications" checked={s.notifications} onCheckedChange={(v) => void saveSettings({ notifications: v })} />
         </Row>
         <Row label="Launch at login" description={system && !system.electron ? 'Only available in the desktop app.' : 'Start Obsidian Code in the tray when you sign in, so scheduled tasks keep running.'}>

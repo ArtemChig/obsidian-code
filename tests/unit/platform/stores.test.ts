@@ -152,7 +152,7 @@ describe('SettingsStore', () => {
     expect(createSettingsStore(tmp.dir).get().vast.monthlyBudget).toBe(150);
   });
 
-  it('forProject() merges .obsidian-code and .claude settings (permissions + hooks)', () => {
+  it('forProject() merges .obsidian-code and .claude settings (permissions + hooks) of a trusted folder', () => {
     const proj = join(tmp.dir, 'proj');
     mkdirSync(join(proj, '.obsidian-code'), { recursive: true });
     mkdirSync(join(proj, '.claude'), { recursive: true });
@@ -169,6 +169,12 @@ describe('SettingsStore', () => {
     );
     writeFileSync(join(proj, '.claude', 'settings.local.json'), JSON.stringify({ permissions: { allow: ['Read', 'WebFetch(domain:x.com)'] } }));
     const store = createSettingsStore(tmp.dir);
+    // untrusted: only deny rules apply; hooks and allow rules are reported, not used
+    const u = store.forProject(proj);
+    expect(u.permissions).toEqual({ allow: [], deny: ['Bash(rm:*)'] });
+    expect(u.hooks).toEqual({});
+    expect(u.untrusted).toMatchObject({ hooks: 2, allow: ['Read', 'Bash(npm test:*)', 'WebFetch(domain:x.com)'] });
+    store.update({ trustedFolders: [proj] });
     const p = store.forProject(proj);
     expect(p.permissions.allow).toEqual(['Read', 'Bash(npm test:*)', 'WebFetch(domain:x.com)']);
     expect(p.permissions.deny).toEqual(['Bash(rm:*)']);
@@ -181,15 +187,16 @@ describe('SettingsStore', () => {
     expect(q.hooks.PreToolUse).toBeUndefined();
   });
 
-  it('addProjectAllowRule() writes .obsidian-code/settings.json and dedupes', () => {
+  it('addProjectAllowRule() stores the rule in the app settings (keyed by folder, not in the repo) and dedupes', () => {
     const proj = join(tmp.dir, 'p2');
     mkdirSync(proj);
     const store = createSettingsStore(tmp.dir);
     store.addProjectAllowRule(proj, 'Bash(git status:*)');
     store.addProjectAllowRule(proj, 'Bash(git status:*)');
     store.addProjectAllowRule(proj, 'Edit');
-    const raw = JSON.parse(readFileSync(join(proj, '.obsidian-code', 'settings.json'), 'utf8'));
-    expect(raw.permissions.allow).toEqual(['Bash(git status:*)', 'Edit']);
+    expect(existsSync(join(proj, '.obsidian-code', 'settings.json'))).toBe(false);
+    const raw = JSON.parse(readFileSync(join(tmp.dir, 'settings.json'), 'utf8'));
+    expect(raw.projectAllow[proj]).toEqual(['Bash(git status:*)', 'Edit']);
     expect(store.forProject(proj).permissions.allow).toEqual(['Bash(git status:*)', 'Edit']);
   });
 });

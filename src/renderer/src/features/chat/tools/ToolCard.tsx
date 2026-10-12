@@ -45,6 +45,7 @@ import {
 } from './bodies';
 import { DiffView } from './DiffView';
 import { SubagentCard } from './SubagentCard';
+import { FileActions } from './FileActions';
 
 export function toolIcon(name: string): LucideIcon {
   if (name === 'Grep') return TextSearch;
@@ -177,6 +178,9 @@ export interface ToolCardProps {
   className?: string;
 }
 
+/** Tools whose target is one file (Open / Reveal on the card). */
+const FILE_TOOLS = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+
 export const ToolCard = memo(function ToolCard({ tool, cwd, className }: ToolCardProps) {
   if (tool.name === 'Task') return <SubagentCard tool={tool} className={className} />;
   return <GenericToolCard tool={tool} cwd={cwd} className={className} />;
@@ -195,6 +199,7 @@ function GenericToolCard({ tool, cwd, className }: ToolCardProps) {
   const live = tool.status === 'running' && !awaiting;
   const flagged = (tool.status !== 'done' && tool.status !== 'running') || awaiting;
   const d = tool.result?.display;
+  const filePath = FILE_TOOLS.has(tool.name) ? String(tool.input.file_path ?? tool.input.notebook_path ?? '') : '';
   // A command that ran but exited non-zero is shown as failed (the tool itself "succeeded").
   const iconStatus =
     awaiting && tool.status === 'running'
@@ -214,12 +219,13 @@ function GenericToolCard({ tool, cwd, className }: ToolCardProps) {
         className,
       )}
     >
+      <div className="group/header flex items-center">
       <button
         type="button"
         onClick={() => setUserOpen(!open)}
         aria-expanded={open}
         disabled={!expandable}
-        className="ob-transition group flex h-9 w-full items-center gap-2.5 pl-3 pr-2.5 text-left hover:bg-ob-hover disabled:hover:bg-transparent"
+        className="ob-transition group flex h-9 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-2.5 text-left hover:bg-ob-hover disabled:hover:bg-transparent"
       >
         <Icon size={15} aria-hidden className={cn('shrink-0', live ? 'text-ob-accent' : 'text-ob-text-3')} />
         <span className="shrink-0 text-ui font-medium text-ob-text">{s.verb}</span>
@@ -277,6 +283,10 @@ function GenericToolCard({ tool, cwd, className }: ToolCardProps) {
           className={cn('-mr-0.5 shrink-0 text-ob-text-3 transition-transform duration-150', open && 'rotate-90', !expandable && 'opacity-0')}
         />
       </button>
+      {filePath && tool.status === 'done' ? (
+        <FileActions path={filePath} cwd={cwd} className="pr-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/header:opacity-100" />
+      ) : null}
+      </div>
       {open && body ? <div className="border-t border-ob-border animate-ob-fade-in">{body}</div> : null}
     </div>
   );

@@ -41,7 +41,9 @@ describe('permission engine', () => {
     expect(decide(edit, { file_path: 'src/a.ts' }, 'acceptEdits').action).toBe('allow');
     expect(decide(edit, { file_path: join(CWD, '..', 'other', 'a.ts') }, 'acceptEdits').action).toBe('ask');
     expect(decide(bash, { command: 'ls' }, 'acceptEdits').action).toBe('ask');
-    expect(decide(edit, { file_path: 'a' }, 'default')).toMatchObject({ action: 'ask', suggestedRule: 'Edit' });
+    // "always allow" for an edit is scoped to that file/directory inside the project, never the bare tool
+    expect(decide(edit, { file_path: 'a' }, 'default')).toMatchObject({ action: 'ask', suggestedRule: 'Edit(a)' });
+    expect(decide(edit, { file_path: 'src/a.ts' }, 'default')).toMatchObject({ action: 'ask', suggestedRule: 'Edit(src/**)' });
   });
 
   it('plan mode rejects non-read tools with a clear message; read and ExitPlanMode pass', () => {

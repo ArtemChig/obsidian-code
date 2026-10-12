@@ -3,6 +3,7 @@
 // derive with useMemo (as below), or use useShallow from 'zustand/react/shallow'.
 import { useEffect, useMemo } from 'react';
 import type {
+  GpuPhase,
   ModelInfo,
   ModelRef,
   PermissionRequest,
@@ -11,7 +12,7 @@ import type {
   QuestionRequest,
   SessionSummary,
 } from '@shared/types';
-import { basename, sameModel } from '../lib/format';
+import { basename, providerLabel, sameModel } from '../lib/format';
 import { useActivity } from './activity';
 import { useGpu } from './gpu';
 import { useModels } from './models';
@@ -213,4 +214,47 @@ export function useGpuStatus() {
 export function useRunningActivityCount(): number {
   const items = useActivity((s) => s.items);
   return useMemo(() => items.filter((i) => i.status === 'running' || i.status === 'waiting').length, [items]);
+}
+
+// ───────────────────────────── Model readiness (before Send) ─────────────────────────────
+
+export interface ModelReadiness {
+  /** One line for the composer, e.g. "The local model server isn't reachable." */
+  message: string;
+  /** The fix to offer: open the GPU view / clock in, open Settings → Models, or switch to another model. */
+  action: 'clock-in' | 'gpu' | 'settings' | 'switch';
+}
+
+const GPU_STARTING: ReadonlySet<GpuPhase> = new Set(['searching', 'renting', 'connecting', 'downloading', 'loading', 'switching']);
+
+/**
+ * Pure: will a message to this model fail right away? Null when it looks fine (or when nothing is known yet).
+ * `ref` null = the session uses the default model; with no default either, the core picks any online model.
+ */
+export function modelReadiness(
+  ref: ModelRef | null | undefined,
+  defaultModel: ModelRef | null | undefined,
+  models: ModelInfo[],
+  providers: ProviderInfo[],
+  gpuPhase: GpuPhase | undefined,
+): ModelReadiness | null {
+  if (!providers.length && !models.length) return null; // not loaded yet
+  const eff = ref ?? defaultModel ?? null;
+  if (!eff) return models.some((m) => m.status === 'online') ? null : { message: 'No model is online.', action: 'settings' };
+  const m = findModel(models, eff);
+  if (m?.status === 'online') return null;
+  if (eff.provider === 'vast') {
+    if (gpuPhase && GPU_STARTING.has(gpuPhase)) return { message: 'The GPU is still starting. Send once it is ready.', action: 'gpu' };
+    if (gpuPhase !== 'ready') return { message: 'The GPU is not clocked in.', action: 'clock-in' };
+    return { message: `${m?.label ?? eff.model} is not the model loaded on the GPU.`, action: 'switch' };
+  }
+  const provider = providers.find((p) => p.id === eff.provider);
+  const name = provider?.label || providerLabel(eff.provider);
+  if (m?.status === 'starting' || provider?.status === 'starting') return { message: `${name} is still starting.`, action: 'settings' };
+  if (!provider || provider.status !== 'online') {
+    return eff.provider === 'local'
+      ? { message: `The local model server isn't reachable${provider?.baseUrl ? ` at ${provider.baseUrl}` : ''}.`, action: 'settings' }
+      : { message: `${name} is offline.`, action: 'settings' };
+  }
+  return { message: `${eff.model} is not available on ${name}.`, action: 'switch' };
 }

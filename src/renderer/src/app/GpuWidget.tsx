@@ -8,7 +8,7 @@ import { LiveDuration, useNow } from '@renderer/components/ui/time';
 import { Tooltip } from '@renderer/components/ui/tooltip';
 import { cn } from '@renderer/lib/cn';
 import { formatMoney, formatPerHour } from '@renderer/lib/format';
-import { clockIn, clockOut, defaultGpuProfileId, loadGpuCatalog, navigate } from '@renderer/state/actions';
+import { clockIn, clockOut, defaultGpuProfileId, loadGpuCatalog, navigate, requestClockOut } from '@renderer/state/actions';
 import { useConnection } from '@renderer/state/connection';
 import { GPU_BUSY_PHASES, useGpu } from '@renderer/state/gpu';
 import { useSettings } from '@renderer/state/settings';
@@ -54,9 +54,17 @@ export function useModelLabel(modelId: string | undefined): string | null {
   return modelId;
 }
 
-/** Shared click behaviour: clock in with the default profile (or open the GPU view if setup is missing), or clock out. */
+/**
+ * Shared click behaviour: clock in with the default profile (or open the GPU view if setup is missing), or clock out
+ * (asking first when sessions are using the GPU or a rented clock-in would be cancelled — see clockOutPrompt).
+ */
 export async function gpuPrimaryAction(status: GpuStatus | null, hasApiKey: boolean | null): Promise<void> {
   const phase = status?.phase ?? 'off';
+  // Error with a tracked instance (e.g. from the last run): offer the clock-out, never a second rental.
+  if (phase === 'error' && status?.instanceId != null) {
+    await clockOut();
+    return;
+  }
   if (phase === 'off' || phase === 'error') {
     const profiles = useSettings.getState().settings?.vast.profiles ?? [];
     if (hasApiKey === false || profiles.length === 0) {
@@ -67,18 +75,20 @@ export async function gpuPrimaryAction(status: GpuStatus | null, hasApiKey: bool
     await clockIn(defaultGpuProfileId());
     return;
   }
-  if (phase !== 'stopping') await clockOut();
+  if (phase !== 'stopping') await requestClockOut();
 }
 
 export function GpuWidget() {
   const status = useGpu((s) => s.status);
   const hasApiKey = useGpu((s) => s.hasApiKey);
   const busy = useGpu((s) => s.busy);
+  const gpuLoadFailed = useConnection((c) => !!c.syncErrors.gpu);
   const profiles = useSettings((s) => s.settings?.vast.profiles);
   const phase = status?.phase ?? 'off';
   const cost = useLiveGpuCost(status);
   const modelLabel = useModelLabel(status?.modelId);
   const on = phase !== 'off' && phase !== 'error';
+  const trackedInError = phase === 'error' && status?.instanceId != null;
   const inProgress = GPU_BUSY_PHASES.has(phase);
   const profile = profiles?.find((p) => p.id === (status?.profileId ?? defaultGpuProfileId()));
   const budget = status?.monthlyBudget ?? 0;
@@ -116,7 +126,9 @@ export function GpuWidget() {
       </div>
 
       <div className="mt-1.5 truncate pl-[15px] text-small text-ob-text-3" title={status?.message}>
-        {phase === 'off'
+        {phase === 'off' && status?.orphanInstanceIds?.length
+          ? `${status.orphanInstanceIds.length} instance${status.orphanInstanceIds.length === 1 ? '' : 's'} may still be billing — open the GPU view`
+          : phase === 'off'
           ? `${profile ? profile.description.split('—')[0].trim() : 'Rent a GPU by the hour'}`
           : phase === 'error'
             ? (status?.lastError ?? status?.message ?? 'Clock-in failed')
@@ -145,21 +157,21 @@ export function GpuWidget() {
                   {formatMoney(month)} <span className="text-ob-text-3">/ {formatMoney(budget)}</span>
                 </>
               ) : (
-                <span className="text-ob-text-3">Not connected</span>
+                <span className="text-ob-text-3">{gpuLoadFailed ? 'Status unavailable' : 'Not connected'}</span>
               )}
             </span>
           )}
         </div>
         <Button
           size="sm"
-          variant={on ? 'danger' : 'primary'}
+          variant={on || trackedInError ? 'danger' : 'primary'}
           loading={busy || phase === 'stopping'}
           icon={Power}
           className="h-[26px] px-2"
           data-testid="gpu-clock-button"
           onClick={() => void gpuPrimaryAction(status, hasApiKey)}
         >
-          {on ? (inProgress ? 'Cancel' : 'Clock out') : 'Clock in'}
+          {on ? (inProgress ? 'Cancel' : 'Clock out') : trackedInError ? 'Clock out' : 'Clock in'}
         </Button>
       </div>
     </div>

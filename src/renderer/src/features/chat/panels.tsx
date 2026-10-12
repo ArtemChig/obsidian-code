@@ -20,6 +20,7 @@ import { insertIntoComposer } from './state';
 import { Elapsed } from './ui';
 import { TodoChecklist } from './tools/bodies';
 import { DiffStat, DiffView } from './tools/DiffView';
+import { FileActions } from './tools/FileActions';
 
 function PanelLoading() {
   return (
@@ -94,12 +95,12 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
           const rel = displayPath(f.path, cwd);
           const dir = dirname(rel.replace(/\\/g, '/'));
           return (
-            <li key={f.path}>
+            <li key={f.path} className="group/row flex items-center rounded-ctl hover:bg-ob-hover">
               <button
                 type="button"
                 onClick={() => setSelected(f.path)}
                 data-testid="changed-file"
-                className="ob-transition group flex h-9 w-full items-center gap-2.5 rounded-ctl px-2 text-left hover:bg-ob-hover"
+                className="ob-transition group flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-ctl px-2 text-left"
                 title={f.path}
               >
                 {f.isNew ? <FilePlus size={14} aria-label="New file" className="shrink-0 text-ob-success" /> : <FileDiff size={14} aria-hidden className="shrink-0 text-ob-text-3" />}
@@ -110,6 +111,7 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
                 <DiffStat additions={f.additions} deletions={f.deletions} className="shrink-0" />
                 <ChevronRight size={13} aria-hidden className="shrink-0 text-ob-text-3 opacity-0 transition-opacity group-hover:opacity-100" />
               </button>
+              <FileActions path={f.path} cwd={cwd} className="pr-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100" />
             </li>
           );
         })}

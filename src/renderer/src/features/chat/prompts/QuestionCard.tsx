@@ -79,8 +79,9 @@ export function QuestionCard({ request, active }: { request: QuestionRequest; ac
       data-request-id={request.requestId}
       role="group"
       aria-label="Question from the agent"
+      tabIndex={-1}
       className={cn(
-        'overflow-hidden rounded-[12px] border bg-ob-surface-1 animate-ob-slide-up',
+        'overflow-hidden rounded-[12px] border bg-ob-surface-1 outline-none animate-ob-slide-up focus:shadow-[0_0_0_4px_rgba(143,184,222,0.14)]',
         active ? 'border-[rgba(143,184,222,0.42)] shadow-[0_0_0_4px_rgba(143,184,222,0.05)]' : 'border-ob-border',
       )}
     >

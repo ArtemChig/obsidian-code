@@ -1,4 +1,5 @@
-// Global keyboard shortcuts: Ctrl+N new session, Ctrl+K palette, Ctrl+B sidebar, Ctrl+\ right panel, Ctrl+, settings.
+// Global keyboard shortcuts: Ctrl+N new session, Ctrl+K palette, Ctrl+B sidebar, Ctrl+\ right panel, Ctrl+, settings,
+// Ctrl+/ keyboard shortcuts reference.
 // Owner: ui-foundation.
 import { useEffect } from 'react';
 import { createSession, openSettings, toggleRightPanel, toggleSidebar } from '@renderer/state/actions';
@@ -10,6 +11,7 @@ export const SHORTCUTS = {
   sidebar: 'Ctrl+B',
   rightPanel: 'Ctrl+\\',
   settings: 'Ctrl+,',
+  help: 'Ctrl+/',
 } as const;
 
 export function useGlobalShortcuts(): void {
@@ -35,6 +37,9 @@ export function useGlobalShortcuts(): void {
       } else if (key === ',') {
         e.preventDefault();
         openSettings();
+      } else if (key === '/' || e.code === 'Slash') {
+        e.preventDefault();
+        useUi.setState((s) => ({ shortcutsOpen: !s.shortcutsOpen, paletteOpen: false }));
       }
     };
     window.addEventListener('keydown', onKey, { capture: true });

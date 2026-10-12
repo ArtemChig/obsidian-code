@@ -5,7 +5,7 @@ import { Skeleton } from '@renderer/components/ui/feedback';
 import { cn } from '@renderer/lib/cn';
 import { useSettings } from '@renderer/state/settings';
 import { useUi } from '@renderer/state/ui';
-import { CoreMissing, useCoreMissing } from './core-missing';
+import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from './core-missing';
 import { ModelsSection } from './sections/ModelsSection';
 import { AboutSection, ContextSection, GeneralSection, HooksSection, McpSection, MemorySection, SearchSection, ShellSection } from './sections/OtherSections';
 import { PermissionsSection } from './sections/PermissionsSection';
@@ -88,6 +88,7 @@ export function SettingsView() {
   const requested = useUi((s) => s.settingsSection);
   const loaded = useSettings((s) => s.settings !== null);
   const coreMissing = useCoreMissing();
+  const syncError = useSyncError('settings');
   const active = resolveSection(requested);
 
   // Keep the store pointing at a real section id so a later openSettings() round-trips.
@@ -126,6 +127,8 @@ export function SettingsView() {
             <SectionBody key={active} id={active} />
           ) : coreMissing ? (
             <CoreMissing what="Settings" />
+          ) : syncError ? (
+            <SyncFailed what="settings" error={syncError} />
           ) : (
             <div className="flex flex-col gap-4" aria-hidden>
               <Skeleton className="h-6 w-56" />

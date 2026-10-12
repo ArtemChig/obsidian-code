@@ -25,8 +25,10 @@ import {
 import { createCore, type CoreHandle } from '@core/index';
 import { loadServerScripts, resolveResourcesDir } from '@core/gpu/server-scripts';
 import { getRipgrepPath } from '@core/tools/lib/ripgrep';
+import { checkOpenPath, checkRevealPath } from './open-path';
 import type { NativeBridge } from '@core/contracts';
 import type { GpuStatus, Settings } from '@shared/types';
+import { createAttentionRouter, type AttentionRouter } from './attention';
 
 const APP_ID = 'com.obsidian.code';
 const BG = '#0B1215';
@@ -54,6 +56,7 @@ if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? APP_ID 
 let core: CoreHandle | null = null;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let attention: AttentionRouter | null = null;
 const liveNotifications = new Set<Notification>();
 
 const devUrl = !app.isPackaged ? process.env['ELECTRON_RENDERER_URL'] || '' : '';
@@ -74,7 +77,7 @@ function errMessage(err: unknown): string {
 
 // ───────────────────────────── notifications / native bridge ─────────────────────────────
 
-function showNotification(title: string, body: string): void {
+function showNotification(title: string, body: string, sessionId?: string): void {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title, body, icon: loadImage(iconPng) });
   liveNotifications.add(n);
@@ -83,15 +86,27 @@ function showNotification(title: string, body: string): void {
   };
   n.on('click', () => {
     showWindow();
+    // Open the session the notification is about (the preload relays it to the renderer).
+    if (sessionId && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('obsidian:openSession', sessionId);
     release();
   });
   n.on('close', release);
   n.show();
 }
 
+/** The user is looking at the app (in-app toasts and prompt cards are enough then). */
+function windowFocused(): boolean {
+  const w = mainWindow;
+  return !!w && !w.isDestroyed() && w.isVisible() && !w.isMinimized() && w.isFocused();
+}
+
 const native: NativeBridge = {
   isElectron: true,
   notify(title, body) {
+    if (attention) {
+      attention.notify({ title, body });
+      return;
+    }
     try {
       if (core && !core.ctx.settings.get().notifications) return;
     } catch {
@@ -138,7 +153,7 @@ function openExternalSafe(url: string): boolean {
   return true;
 }
 
-function createWindow(coreUrl: string | null): BrowserWindow {
+function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -157,7 +172,6 @@ function createWindow(coreUrl: string | null): BrowserWindow {
       sandbox: true,
       nodeIntegration: false,
       webSecurity: true,
-      additionalArguments: [`--obsidian-core-url=${coreUrl ?? ''}`],
     },
   });
   win.setMenuBarVisibility(false);
@@ -186,7 +200,7 @@ function createWindow(coreUrl: string | null): BrowserWindow {
 
 function showWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
-    mainWindow = createWindow(core?.url ?? null);
+    mainWindow = createWindow();
     mainWindow.on('closed', () => {
       mainWindow = null;
     });
@@ -211,7 +225,7 @@ function gpuLabel(st: GpuStatus | null): string {
   if (!st) return 'GPU: unavailable';
   switch (st.phase) {
     case 'off':
-      return 'GPU: off';
+      return st.orphanInstanceIds?.length ? `GPU: off · ${st.orphanInstanceIds.length} instance(s) to check` : 'GPU: off';
     case 'ready':
       return `GPU: ready${st.gpuName ? ` — ${st.numGpus && st.numGpus > 1 ? `${st.numGpus}× ` : ''}${st.gpuName}` : ''}${
         st.pricePerHour ? ` · $${st.pricePerHour.toFixed(2)}/h` : ''
@@ -245,12 +259,14 @@ function updateTray(force = false): void {
   const st = gpuStatus();
   const phase = st?.phase ?? 'off';
   const label = gpuLabel(st);
-  const key = `${phase}|${label}|${core ? 1 : 0}`;
+  const key = `${phase}|${label}|${st?.instanceId ?? ''}|${core ? 1 : 0}`;
   tray.setToolTip(`Obsidian Code — ${label}`);
   if (!force && key === lastTrayKey) return;
   lastTrayKey = key;
+  // An error with a still-tracked instance offers the clock-out (never a second rental on top of it).
+  const trackedInError = phase === 'error' && st?.instanceId != null;
   const gpuItem: MenuItemConstructorOptions =
-    phase === 'off' || phase === 'error'
+    (phase === 'off' || phase === 'error') && !trackedInError
       ? { label: 'Clock in (Standard)', enabled: Boolean(core), click: trayClockIn }
       : { label: 'Clock out', enabled: Boolean(core) && phase !== 'stopping', click: trayClockOut };
   const template: MenuItemConstructorOptions[] = [
@@ -291,7 +307,7 @@ function applyLoginItem(settings: Settings): void {
 
 // ───────────────────────────── IPC for the preload ─────────────────────────────
 
-function trusted(event: IpcMainInvokeEvent): boolean {
+function trusted(event: Pick<IpcMainInvokeEvent, 'senderFrame'>): boolean {
   const url = event.senderFrame?.url ?? '';
   return isAppUrl(url);
 }
@@ -310,12 +326,20 @@ function registerIpc(): void {
     return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
   });
   ipcMain.handle('obsidian:openPath', async (event, p: unknown) => {
-    if (!trusted(event) || typeof p !== 'string' || !p) return 'Invalid path';
-    return shell.openPath(p);
+    if (!trusted(event)) return 'Invalid path';
+    // never launch programs (.exe/.bat/.lnk… by association) or touch network shares from a renderer request
+    const bad = checkOpenPath(p);
+    if (bad) return bad;
+    return shell.openPath(p as string);
   });
   ipcMain.handle('obsidian:showItemInFolder', (event, p: unknown) => {
-    if (!trusted(event) || typeof p !== 'string' || !p) return;
-    shell.showItemInFolder(p);
+    if (!trusted(event) || checkRevealPath(p)) return;
+    shell.showItemInFolder(p as string);
+  });
+  // The core URL carries the auth token: hand it over IPC (only to the app's own page) instead of the process
+  // command line, where other processes could read it.
+  ipcMain.on('obsidian:coreUrl', (event) => {
+    event.returnValue = trusted(event) ? (core?.url ?? null) : null;
   });
   ipcMain.handle('obsidian:openExternal', (event, url: unknown) => {
     if (!trusted(event) || typeof url !== 'string') return false;
@@ -363,6 +387,9 @@ let shutdownPromise: Promise<void> | null = null;
 function shutdown(): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = (async () => {
+    // Quitting interrupts running turns: no "Task finished" notifications for those.
+    attention?.dispose();
+    attention = null;
     for (const w of BrowserWindow.getAllWindows()) {
       try {
         w.hide();
@@ -435,6 +462,14 @@ if (!gotLock) {
       applyLoginItem(c.ctx.settings.get());
       c.ctx.bus.on('settings.updated', (s) => applyLoginItem(s));
       c.ctx.bus.on('gpu.status', () => updateTray());
+      // Desktop notifications when the agent needs the user, a long turn ends, or the GPU changes state (window unfocused).
+      attention = createAttentionRouter({
+        bus: c.ctx.bus,
+        enabled: () => c.ctx.settings.get().notifications,
+        focused: windowFocused,
+        session: (id) => c.ctx.sessions.get(id),
+        show: (n) => showNotification(n.title, n.body, n.sessionId),
+      });
     }
 
     app.on('activate', () => {

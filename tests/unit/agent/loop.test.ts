@@ -239,6 +239,21 @@ describe('agent loop', () => {
     expect(msgs[2]!.id).toBe(b.messageId);
   });
 
+  it('dequeue withdraws queued messages that have not started (the running turn is untouched)', async () => {
+    h = await createHarness();
+    const s = h.createSession();
+    h.mock.enqueue({ text: 'first answer', chunkDelayMs: 40 }, { text: 'third answer' });
+    await h.agent.send(s.id, 'one');
+    const b = await h.agent.send(s.id, 'two');
+    const c = await h.agent.send(s.id, 'three');
+    expect(h.agent.dequeue(s.id, b.messageId)).toEqual([{ messageId: b.messageId, text: 'two' }]);
+    expect(h.agent.dequeue(s.id, b.messageId)).toEqual([]); // already gone
+    await h.waitIdle(s.id);
+    const msgs = h.session(s.id).messages;
+    expect(msgs.filter((m) => m.role === 'user').map((m) => m.id)).toEqual([msgs[0]!.id, c.messageId]);
+    expect(h.agent.dequeue(s.id)).toEqual([]);
+  });
+
   it('interrupt mid-stream keeps partial text, marks interrupted, closes the HTTP stream', async () => {
     h = await createHarness();
     const s = h.createSession();

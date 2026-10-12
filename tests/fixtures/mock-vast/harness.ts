@@ -41,6 +41,11 @@ export const FAST_TIMINGS: Partial<GpuTimings> = {
   destroyAttempts: 3,
   destroyVerifyPolls: 2,
   creditRefreshMs: 600_000,
+  goneConfirmMs: 30,
+  watchdogArmTimeoutMs: 1000,
+  watchdogGraceMs: 300,
+  parkCheckMs: 100,
+  reconcileRetryMs: 50,
 };
 
 export interface HarnessOptions {

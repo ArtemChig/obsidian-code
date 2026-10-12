@@ -1,6 +1,6 @@
 // Composer: auto-growing textarea, "/" command palette, "@" file palette, image paste/drop, permission mode,
 // thinking toggle, model picker, Send / Stop. Owner: ui-chat.
-import { ArrowUp, Brain, Clock, FileCode, Folder, Paperclip, Square, SquareSlash, TriangleAlert } from 'lucide-react';
+import { ArrowUp, Brain, Clock, FileCode, Folder, Paperclip, Square, SquareSlash, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import type { SessionSummary, SlashCommandInfo } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -10,14 +10,16 @@ import { Tooltip } from '@renderer/components/ui/tooltip';
 import { cn } from '@renderer/lib/cn';
 import { basename, dirname, truncate } from '@renderer/lib/format';
 import { rpc } from '@renderer/lib/rpc';
-import { interrupt, sendMessage, setPermissionMode, setSessionModel, setThinking } from '@renderer/state/actions';
+import { sendMessage, setPermissionMode, setSessionModel, setThinking, withdrawQueued } from '@renderer/state/actions';
 import { useModelInfo, useQueued } from '@renderer/state/selectors';
+import { useSettings } from '@renderer/state/settings';
 import { fuzzyRank } from '../lib/fuzzy';
 import { applyCompletion, detectTrigger, mentionFor, nextPermissionMode, slashInsert, type Trigger } from '../lib/composer';
-import { setAttachments, setDraft, useChatLocal } from '../state';
+import { restoreToDraft, setAttachments, setDraft, stopTurn, useChatLocal } from '../state';
 import { ImageLightbox, ImageThumb } from '../ui';
 import { addImageFiles, filesFrom, removeAttachment } from './attachments';
 import { ModeSelector } from './ModeSelector';
+import { ModelNotice } from './ModelNotice';
 import { ModelPicker } from './ModelPicker';
 import { optionId, Palette, type PaletteItem } from './Palette';
 import type { ImageBlock } from '@shared/types';
@@ -142,6 +144,8 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
   const queued = useQueued(sessionId);
   const model = useModelInfo(session.model);
   const running = session.status === 'running' || session.status === 'waiting';
+  // Bypass joins the Shift+Tab cycle (and skips its confirmation) only when it is the user's default mode.
+  const bypassOptIn = useSettings((s) => s.settings?.defaultPermissionMode === 'bypassPermissions');
 
   const ta = useRef<HTMLTextAreaElement | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -283,7 +287,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
     }
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault();
-      void setPermissionMode(sessionId, nextPermissionMode(session.permissionMode));
+      void setPermissionMode(sessionId, nextPermissionMode(session.permissionMode, bypassOptIn));
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -293,7 +297,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
     }
     if (e.key === 'Escape' && running) {
       e.preventDefault();
-      void interrupt(sessionId);
+      void stopTurn(sessionId);
       return;
     }
     if (e.key === 'ArrowUp' && !text && lastUserText) {
@@ -325,16 +329,30 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
       {queued.length ? (
         <div className="mb-2 flex flex-wrap gap-1.5" data-testid="queued">
           {queued.map((q) => (
-            <Tooltip key={q.messageId} content="Sent automatically after the current turn">
-              <span
-                className="flex max-w-full items-center gap-1.5 rounded-pill border border-ob-border bg-ob-surface-1 py-0.5 pl-2 pr-2.5 text-small text-ob-text-2 animate-ob-fade-in"
-                data-testid="queued-chip"
-              >
-                <Clock size={12} aria-hidden className="shrink-0 text-ob-accent" />
-                <span className="text-ob-text-3">Queued</span>
-                <span className="min-w-0 truncate">{truncate(q.text.replace(/\s+/g, ' '), 90)}</span>
-              </span>
-            </Tooltip>
+            <span
+              key={q.messageId}
+              className="flex max-w-full items-center gap-1.5 rounded-pill border border-ob-border bg-ob-surface-1 py-0.5 pl-2 pr-1 text-small text-ob-text-2 animate-ob-fade-in"
+              data-testid="queued-chip"
+            >
+              <Tooltip content="Sent automatically after the current turn">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <Clock size={12} aria-hidden className="shrink-0 text-ob-accent" />
+                  <span className="text-ob-text-3">Queued</span>
+                  <span className="min-w-0 truncate">{truncate(q.text.replace(/\s+/g, ' '), 90)}</span>
+                </span>
+              </Tooltip>
+              <IconButton
+                label="Withdraw (back to the composer)"
+                icon={X}
+                size="xs"
+                data-testid="queued-withdraw"
+                onClick={() =>
+                  void withdrawQueued(sessionId, q.messageId).then((r) => {
+                    if (r.length) restoreToDraft(sessionId, r.map((x) => x.text));
+                  })
+                }
+              />
+            </span>
           ))}
         </div>
       ) : null}
@@ -390,6 +408,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
         />
       ) : null}
 
+      <ModelNotice model={session.model} className="mb-2" />
       <div
         className={cn(
           'ob-transition rounded-[14px] border bg-ob-surface-1',
@@ -460,7 +479,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
               void addImageFiles(sessionId, list);
             }}
           />
-          <ModeSelector mode={session.permissionMode} onChange={(m) => void setPermissionMode(sessionId, m)} />
+          <ModeSelector mode={session.permissionMode} confirmBypass={!bypassOptIn} onChange={(m) => void setPermissionMode(sessionId, m)} />
           <Tooltip content={session.thinking ? 'Thinking on — click to turn off' : 'Thinking off — click to turn on'}>
             <button
               type="button"
@@ -484,7 +503,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
                 type="button"
                 aria-label="Stop"
                 data-testid="stop-button"
-                onClick={() => void interrupt(sessionId)}
+                onClick={() => void stopTurn(sessionId)}
                 className="ob-transition ml-1 flex size-8 items-center justify-center rounded-[8px] border border-ob-border bg-ob-surface-2 text-ob-text hover:border-[rgba(240,113,120,0.4)] hover:bg-ob-danger-soft hover:text-ob-danger"
               >
                 <Square size={12} fill="currentColor" aria-hidden />

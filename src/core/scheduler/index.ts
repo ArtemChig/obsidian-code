@@ -202,6 +202,7 @@ export function createScheduler(ctx: CoreContext): SchedulerImpl {
 
     const needsGpu = task.model?.provider === 'vast';
     let willClockIn = false;
+    let recheckAfterGpuStart = false;
     let profileId = AUTO_CLOCK_IN_PROFILE;
     if (needsGpu) {
       const phase = gpuPhase();
@@ -211,6 +212,10 @@ export function createScheduler(ctx: CoreContext): SchedulerImpl {
         const problem = budgetProblem(profileId);
         if (problem) return { skipped: problem };
         willClockIn = true;
+      } else if (phase !== 'ready' && task.allowAutoClockIn) {
+        // Possibly just the GPU manager's startup check of the instance tracked from the last run (phase
+        // 'connecting'): never clock in on top of it; decide again once that check has finished.
+        recheckAfterGpuStart = true;
       }
     }
 
@@ -270,15 +275,27 @@ export function createScheduler(ctx: CoreContext): SchedulerImpl {
         if (needsGpu) {
           gpuUsers++;
           usedGpu = true;
+          if (recheckAfterGpuStart) {
+            await ctx.gpu.whenStarted?.();
+            const ph = gpuPhase();
+            if (ph !== 'ready' && !TRANSITIONAL.includes(ph) && !clockInPromise) {
+              profileId = profileFor(task.model?.model);
+              const problem = budgetProblem(profileId);
+              if (problem) throw new Error(problem);
+              willClockIn = true;
+            }
+          }
           if (gpuPhase() !== 'ready') {
             if (willClockIn && !clockInPromise && !TRANSITIONAL.includes(gpuPhase())) {
               await waitWhileStopping();
               activity('running', `Clocking in GPU (${profileId})…`);
-              gpuOwned = true;
               const p = ctx.gpu.clockIn({ profileId, modelId: task.model?.model });
               clockInPromise = p;
               try {
                 await p;
+                // Owned only once our clock-in was accepted: a rejected one (e.g. someone else's session is up) must
+                // not make the finally block below clock out a GPU this task did not start.
+                gpuOwned = true;
               } finally {
                 if (clockInPromise === p) clockInPromise = null;
               }

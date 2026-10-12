@@ -154,6 +154,16 @@ export class MockVast {
     stopFails: false,
     /** Start (resume) leaves the instance 'scheduling' forever. */
     startNeverRuns: false,
+    /** Every instance list request answers 500. */
+    listAlwaysFails: false,
+    /** Delay (ms) before answering instance list requests (a slow API right after login). */
+    listDelayMs: 0,
+    /** Next N GET /instances/{id}/ answer {"instances": null} although the instance exists. */
+    getNullTimes: 0,
+    /** Every GET /instances/{id}/ answers {"instances": null} (e.g. a key of another account). */
+    getAlwaysNull: false,
+    /** Create answers without instance_api_key. */
+    noInstanceKey: false,
   };
   private server: http.Server | null = null;
   private nextId = 9_000_001;
@@ -358,11 +368,14 @@ export class MockVast {
         this.fail.createAmbiguousTimes--;
         return this.send(res, 500, { success: false, error: 'server_error', msg: 'Internal error' });
       }
+      if (this.fail.noInstanceKey) return this.send(res, 200, { success: true, new_contract: id });
       return this.send(res, 200, { success: true, new_contract: id, instance_api_key: `ckey-${id}` });
     }
 
     // ── list (v1)
     if (p === '/api/v1/instances/' && method === 'GET') {
+      if (this.fail.listDelayMs > 0) await new Promise((r) => setTimeout(r, this.fail.listDelayMs));
+      if (this.fail.listAlwaysFails) return this.send(res, 500, { success: false, error: 'server_error', msg: 'list failed' });
       let list = this.liveInstances();
       const sf = u.searchParams.get('select_filters');
       if (sf) {
@@ -397,7 +410,14 @@ export class MockVast {
     if (instM) {
       const id = Number(instM[1]);
       const inst = this.instances.get(id);
-      if (method === 'GET') return this.send(res, 200, { instances: inst ?? null });
+      if (method === 'GET') {
+        if (this.fail.getAlwaysNull) return this.send(res, 200, { instances: null });
+        if (this.fail.getNullTimes > 0) {
+          this.fail.getNullTimes--;
+          return this.send(res, 200, { instances: null });
+        }
+        return this.send(res, 200, { instances: inst ?? null });
+      }
       if (method === 'DELETE') {
         if (!inst) return this.send(res, 404, { success: false, error: 'not_found', msg: 'Instance not found' });
         if (this.fail.destroyAlwaysFails) return this.send(res, 500, { success: false, error: 'server_error', msg: 'destroy failed' });

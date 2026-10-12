@@ -195,3 +195,25 @@ describe.each(['powershell', 'cmd'] as const)('runHooks through the %s shell (Wi
     expect((await ext.runHooks('PostToolUse', { tool_name: 'Rëad中' }, cwd)).additionalContext).toBe('ctx for Rëad中');
   });
 });
+
+describe('abort', () => {
+  it('an aborted hook run kills the hook process and resolves promptly', async () => {
+    const { cwd, ext } = setup({ UserPromptSubmit: [{ command: cmd('sleep'), timeoutMs: 30_000 }] });
+    const ac = new AbortController();
+    const started = Date.now();
+    const p = ext.runHooks('UserPromptSubmit', { prompt: 'x' }, cwd, ac.signal);
+    setTimeout(() => ac.abort(), 300);
+    await expect(p).resolves.toEqual({ block: false });
+    expect(Date.now() - started).toBeLessThan(5000);
+  }, 15_000);
+
+  it('an already-aborted signal runs nothing', async () => {
+    const root = tmpDir();
+    const out = path.join(root, 'ran.json');
+    const { cwd, ext } = setup({ SessionStart: [{ command: cmd('context', out) }] });
+    const ac = new AbortController();
+    ac.abort();
+    expect(await ext.runHooks('SessionStart', {}, cwd, ac.signal)).toEqual({ block: false });
+    expect(() => readFileSync(out)).toThrow();
+  });
+});

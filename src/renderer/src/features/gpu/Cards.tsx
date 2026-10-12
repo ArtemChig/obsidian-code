@@ -125,7 +125,7 @@ export function ParkedCard({
       <p className="mt-1 text-small text-ob-text-3">
         Stopped <RelativeTime ts={parked.parkedAt} className="text-ob-text-2" ago />. The model stays on its disk, so the next clock-in skips the download. Storage is billed at{' '}
         <span className="ob-tabular font-mono text-ob-text-2">{formatMoney(parked.storageCostPerHour, { precise: true })}/h</span>
-        {parkMaxDays ? `; it is destroyed automatically after ${pluralize(parkMaxDays, 'day')}.` : '.'}
+        {parkMaxDays ? `; it is destroyed automatically after ${pluralize(parkMaxDays, 'day')} (checked while the app is running).` : '.'}
       </p>
       <div className="mt-auto flex items-center gap-2 pt-3.5">
         <Button size="sm" variant="primary" icon={Play} disabled={disabled} loading={busy} data-testid="gpu-parked-resume" onClick={onResume}>
@@ -152,6 +152,7 @@ export function ParkedCard({
 
 export function OrphanBanner({ ids, onDestroy }: { ids: number[]; onDestroy: () => Promise<unknown> }) {
   const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
   return (
     <div
       role="alert"
@@ -164,7 +165,7 @@ export function OrphanBanner({ ids, onDestroy }: { ids: number[]; onDestroy: () 
           {pluralize(ids.length, 'untracked instance')} on your Vast.ai account
         </span>
         <span className="text-small text-ob-text-2">
-          Labelled <code className="font-mono text-[11.5px]">obsidian-code</code> but not tracked by this app (e.g. after a crash), so {ids.length === 1 ? 'it' : 'they'} may still be billing you:{' '}
+          Labelled <code className="font-mono text-[11.5px]">obsidian-code</code> but not tracked by this app (e.g. after a crash), or a destroy that was not confirmed yet, so {ids.length === 1 ? 'it' : 'they'} may still be billing you:{' '}
           <span className="ob-tabular font-mono text-[11.5px]">{ids.map((i) => `#${i}`).join(', ')}</span>
         </span>
       </div>
@@ -174,7 +175,18 @@ export function OrphanBanner({ ids, onDestroy }: { ids: number[]; onDestroy: () 
         icon={Trash2}
         loading={busy}
         data-testid="gpu-orphan-destroy"
-        onClick={async () => {
+        onClick={() => setConfirm(true)}
+      >
+        Destroy
+      </Button>
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        danger
+        title={`Destroy ${pluralize(ids.length, 'untracked instance')}?`}
+        description={`${ids.map((i) => `#${i}`).join(', ')} ${ids.length === 1 ? 'is' : 'are'} deleted on Vast.ai, with ${ids.length === 1 ? 'its' : 'their'} disk. If another copy of this app (or a script) is using ${ids.length === 1 ? 'it' : 'them'}, that work stops. Check the Vast.ai console first if you are unsure.`}
+        confirmLabel="Destroy instances"
+        onConfirm={async () => {
           setBusy(true);
           try {
             await onDestroy();
@@ -182,9 +194,7 @@ export function OrphanBanner({ ids, onDestroy }: { ids: number[]; onDestroy: () 
             setBusy(false);
           }
         }}
-      >
-        Destroy
-      </Button>
+      />
     </div>
   );
 }

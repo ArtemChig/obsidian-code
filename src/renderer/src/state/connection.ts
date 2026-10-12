@@ -12,7 +12,21 @@ export interface ConnectionStore {
   ready: boolean;
   /** Epoch ms of the last successful state refetch. */
   lastSyncAt: number | null;
+  /** Resources the last refetch could not load (message per resource); views show "Couldn't load — Retry". */
+  syncErrors: Partial<Record<SyncResource, string>>;
 }
+
+/** The pieces of client state refetchAll loads. */
+export type SyncResource = 'sessions' | 'models' | 'gpu' | 'settings' | 'activity' | 'schedules';
+
+export const SYNC_RESOURCE_LABEL: Record<SyncResource, string> = {
+  sessions: 'sessions',
+  models: 'models',
+  gpu: 'GPU status',
+  settings: 'settings',
+  activity: 'activity',
+  schedules: 'scheduled tasks',
+};
 
 export const useConnection = create<ConnectionStore>(() => ({
   mode: 'none',
@@ -20,4 +34,5 @@ export const useConnection = create<ConnectionStore>(() => ({
   state: { status: 'idle', attempt: 0, nextRetryAt: null, lastError: null, everConnected: false },
   ready: false,
   lastSyncAt: null,
+  syncErrors: {},
 }));

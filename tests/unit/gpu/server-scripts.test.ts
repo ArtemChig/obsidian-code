@@ -118,4 +118,49 @@ describe.skipIf(!bash)('onstart.sh + watchdog (real bash)', () => {
       }
     }
   }, 45_000);
+
+  it('GPU-3: refuses to arm without the container key (logs NOT armed, no pid) and arms after the app writes wd.env', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'oc-root-'));
+    const rootPosix = root.replace(/\\/g, '/');
+    const oc = path.join(root, 'oc');
+    try {
+      const scripts = loadServerScripts(RESOURCES_DIR);
+      writeFileSync(path.join(root, 'onstart.sh'), scripts.onstart);
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        OC_ROOT: rootPosix,
+        CONTAINER_ID: '4243',
+        CONTAINER_API_KEY: '',
+        OC_API_KEY: 'server-key',
+        OC_MODEL_ID: 'no-such-model',
+        OC_HEARTBEAT_MIN: '600',
+        OC_API_BASE: 'http://127.0.0.1:9',
+        OC_WD_TICK: '1',
+        OC_WD_MIN: '1',
+      };
+      const code = await new Promise<number | null>((resolve) => {
+        const p = spawn(bash!, [`${rootPosix}/onstart.sh`], { env, stdio: 'ignore' });
+        p.on('exit', (c) => resolve(c));
+      });
+      expect(code).toBe(0);
+      await waitFor(() => read(path.join(oc, 'watchdog.log')).includes('NOT armed: id=4243 key='), 10_000, 'NOT armed');
+      expect(read(path.join(oc, 'watchdog.log'))).not.toContain('armed id=');
+      expect(existsSync(path.join(oc, 'watchdog.pid'))).toBe(false);
+
+      // the app's repair: wd.env with the instance key from create, then restart watchdog.sh
+      writeFileSync(path.join(oc, 'wd.env'), "export CONTAINER_ID='4243'\nexport CONTAINER_API_KEY='ckey-4243'\n");
+      spawn(bash!, [`${rootPosix}/oc/watchdog.sh`], { env: { ...process.env }, stdio: 'ignore', detached: true }).unref();
+      await waitFor(() => read(path.join(oc, 'watchdog.log')).includes('armed id=4243 key=set'), 10_000, 'armed after repair');
+      expect(read(path.join(oc, 'watchdog.pid')).trim()).toMatch(/^\d+$/);
+    } finally {
+      const pid = read(path.join(oc, 'watchdog.pid')).trim();
+      if (pid) spawnSync(bash!, ['-c', `kill -9 ${pid} 2>/dev/null; true`]);
+      await new Promise((r) => setTimeout(r, 300));
+      try {
+        rmSync(root, { recursive: true, force: true });
+      } catch {
+        /* a lingering sleep may still hold the dir briefly on Windows */
+      }
+    }
+  }, 30_000);
 });

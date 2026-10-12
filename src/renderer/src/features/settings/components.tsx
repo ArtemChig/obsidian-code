@@ -3,6 +3,7 @@ import { Check, CircleAlert, KeyRound, Lock, Plus, RotateCcw, Trash2, WandSparkl
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
+import { ConfirmDialog } from '@renderer/components/ui/dialog';
 import { Input, Textarea } from '@renderer/components/ui/input';
 import { cn } from '@renderer/lib/cn';
 import { rpc } from '@renderer/lib/rpc';
@@ -276,14 +277,24 @@ export interface SecretFieldProps {
   onChanged?: (present: boolean) => void;
   extra?: ReactNode;
   testId?: string;
+  /** Removal is not allowed right now (the reason is shown instead of the Remove button). */
+  removeBlocked?: string;
+  /** Replacing the saved key needs an explicit confirmation (the warning is shown in the dialog). */
+  replaceWarning?: string;
 }
 
-/** Write-only input for a secret: shows presence, never the value. */
-export function SecretField({ name, placeholder = 'Paste a new key…', onChanged, extra, testId }: SecretFieldProps) {
+/** Write-only input for a secret: shows presence, never the value. Removal (and risky replacement) asks first. */
+export function SecretField({ name, placeholder = 'Paste a new key…', onChanged, extra, testId, removeBlocked, replaceWarning }: SecretFieldProps) {
   const present = useSecretPresence([name])[name];
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<'remove' | 'replace' | null>(null);
 
+  const requestSave = () => {
+    if (!value.trim()) return;
+    if (present && replaceWarning) setConfirm('replace');
+    else void save();
+  };
   const save = async () => {
     const v = value.trim();
     if (!v) return;
@@ -297,6 +308,7 @@ export function SecretField({ name, placeholder = 'Paste a new key…', onChange
     }
   };
   const remove = async () => {
+    if (removeBlocked) return;
     setBusy(true);
     const ok = await setSecret(name, null);
     setBusy(false);
@@ -325,15 +337,22 @@ export function SecretField({ name, placeholder = 'Paste a new key…', onChange
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              void save();
+              requestSave();
             }
           }}
         />
-        <Button variant="primary" loading={busy} disabled={!value.trim()} data-testid={`${testId ?? `secret-${name}`}-save`} onClick={() => void save()}>
+        <Button variant="primary" loading={busy} disabled={!value.trim()} data-testid={`${testId ?? `secret-${name}`}-save`} onClick={requestSave}>
           Save key
         </Button>
         {present ? (
-          <Button variant="ghost" disabled={busy} icon={Trash2} data-testid={`${testId ?? `secret-${name}`}-remove`} onClick={() => void remove()}>
+          <Button
+            variant="ghost"
+            disabled={busy || !!removeBlocked}
+            title={removeBlocked}
+            icon={Trash2}
+            data-testid={`${testId ?? `secret-${name}`}-remove`}
+            onClick={() => setConfirm('remove')}
+          >
             Remove
           </Button>
         ) : null}
@@ -343,6 +362,30 @@ export function SecretField({ name, placeholder = 'Paste a new key…', onChange
         <SecretPresence present={present} />
         <span>{present ? 'Stored encrypted on this PC. It cannot be displayed again.' : 'Nothing stored yet.'}</span>
       </div>
+      {present && removeBlocked ? (
+        <div className="flex items-start gap-1.5 text-small text-ob-warning" data-testid={`${testId ?? `secret-${name}`}-locked`}>
+          <CircleAlert size={13} aria-hidden className="mt-[2px] shrink-0" />
+          <span>{removeBlocked}</span>
+        </div>
+      ) : null}
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(o) => {
+          if (!o) setConfirm(null);
+        }}
+        danger
+        title={confirm === 'replace' ? 'Replace the saved key?' : 'Remove the saved key?'}
+        description={
+          confirm === 'replace'
+            ? (replaceWarning ?? '')
+            : 'Features that use it stop working until you paste a key again. The key cannot be recovered from this app.'
+        }
+        confirmLabel={confirm === 'replace' ? 'Replace key' : 'Remove key'}
+        onConfirm={async () => {
+          if (confirm === 'replace') await save();
+          else await remove();
+        }}
+      />
     </div>
   );
 }
@@ -455,13 +498,13 @@ export function JsonEditor<T>({ value, validate, onApply, example, testId, minRo
 
 // ───────────────────────────── Rule list (permissions) ─────────────────────────────
 
-export function RuleList({ rules, onChange, tone, placeholder, testId, empty }: { rules: string[]; onChange: (rules: string[]) => Promise<boolean> | void; tone: 'allow' | 'deny'; placeholder: string; testId: string; empty: string }) {
+export function RuleList({ rules, onChange, tone, placeholder, testId, empty, validate = validateRule, itemLabel = 'rule' }: { rules: string[]; onChange: (rules: string[]) => Promise<boolean> | void; tone: 'allow' | 'deny'; placeholder: string; testId: string; empty: string; validate?: (value: string) => string | null; itemLabel?: string }) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const add = async () => {
     const r = draft.trim();
-    const err = validateRule(r) ?? (rules.includes(r) ? 'That rule is already in the list' : null);
+    const err = validate(r) ?? (rules.includes(r) ? `That ${itemLabel} is already in the list` : null);
     if (err) {
       setError(err);
       return;
@@ -476,7 +519,7 @@ export function RuleList({ rules, onChange, tone, placeholder, testId, empty }: 
       <div className="flex flex-col px-4 pt-3.5">
         <div className="flex items-center gap-2">
           <Input
-            aria-label={`Add ${tone} rule`}
+            aria-label={`Add ${tone} ${itemLabel}`}
             data-testid={`${testId}-input`}
             mono
             wrapperClassName="flex-1"

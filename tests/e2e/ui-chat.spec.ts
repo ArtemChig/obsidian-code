@@ -83,6 +83,9 @@ test.describe('ui-chat (demo mode)', () => {
     }
     await expect(view.locator('[data-testid="tool-card"][data-tool^="mcp__"]')).toHaveCount(1);
     await expect(view.getByTestId('subagent-card')).toBeVisible();
+    // A finished subagent loads its steps only when expanded (a running one shows them live).
+    const steps = view.getByTestId('subagent-steps-toggle');
+    if (await steps.count()) await steps.first().click();
     await expect(view.getByTestId('subagent-preview')).toBeVisible();
     await expect(view.getByTestId('compact-divider')).toBeVisible();
     await expect(view.getByTestId('thinking-block').first()).toContainText('Thought for 8');
@@ -165,8 +168,14 @@ test.describe('ui-chat (demo mode)', () => {
     await input.press('Enter');
     await expect(page.getByTestId('queued-chip')).toContainText('then summarize');
 
-    // Composer is empty again → number keys reach the prompt.
+    // Keys typed into the composer never answer the prompt, even when it is empty.
     await input.focus();
+    await page.keyboard.press('1');
+    await expect(prompt).toBeVisible();
+    await expect(input).toHaveValue('1');
+    await input.fill('');
+    // With focus on the card, number keys answer it.
+    await prompt.focus();
     await page.keyboard.press('1');
     await expect(prompt).toHaveCount(0);
     await expect(page.locator('[data-tool="Bash"][data-status="done"]')).toBeVisible({ timeout: 20_000 });
@@ -181,6 +190,7 @@ test.describe('ui-chat (demo mode)', () => {
     await newSession(page);
     await send(page, 'Install the deps and run the build');
     await expect(page.getByTestId('permission-prompt')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('permission-prompt').focus();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('permission-prompt')).toHaveCount(0);
     await expect(page.locator('[data-tool="Bash"][data-status="denied"]')).toBeVisible();
@@ -207,7 +217,7 @@ test.describe('ui-chat (demo mode)', () => {
     const card = page.getByTestId('question-card');
     await expect(card).toBeVisible({ timeout: 20_000 });
     await expect(card.getByTestId('question-submit')).toBeDisabled();
-    await page.getByTestId('composer-input').focus();
+    await card.focus();
     await page.keyboard.press('2');
     await expect(card.getByTestId('question-option').nth(1)).toHaveAttribute('data-selected', 'true');
     await shot(page, 'question');
@@ -237,6 +247,7 @@ test.describe('ui-chat (demo mode)', () => {
     await expect(card).toBeVisible({ timeout: 20_000 });
     await expect(card.getByTestId('plan-body')).toContainText('backoffDelay');
     await shot(page, 'plan');
+    await card.focus();
     await page.keyboard.press('1');
     await expect(card).toHaveCount(0);
     await expect(page.getByTestId('mode-selector')).toHaveAttribute('data-mode', 'acceptEdits');
@@ -251,6 +262,7 @@ test.describe('ui-chat (demo mode)', () => {
     await send(page, 'Make a plan for caching model lists');
     const card = page.getByTestId('plan-approval');
     await expect(card).toBeVisible({ timeout: 20_000 });
+    await card.focus();
     await page.keyboard.press('3');
     await expect(card.getByTestId('plan-feedback')).toBeFocused();
     await card.getByTestId('plan-feedback').fill('Cover cache invalidation on settings change');
@@ -329,8 +341,13 @@ test.describe('ui-chat (demo mode)', () => {
     await send(page, 'This will fail on purpose');
     const banner = page.getByTestId('error-banner');
     await expect(banner).toContainText('ECONNRESET', { timeout: 10_000 });
+    // Retry rewinds to the failed prompt and sends it again: one copy in the transcript, not one per click.
     await banner.getByTestId('error-retry').click();
-    await expect(page.getByTestId('msg-user')).toHaveCount(2);
+    await expect(banner).toContainText('ECONNRESET', { timeout: 10_000 });
+    await banner.getByTestId('error-retry').click();
+    await expect(banner).toContainText('ECONNRESET', { timeout: 10_000 });
+    await expect(page.getByTestId('msg-user')).toHaveCount(1);
+    await expect(page.getByTestId('msg-user')).toContainText('This will fail on purpose');
     expect(errors.filter((e) => !e.includes('ECONNRESET'))).toEqual([]);
   });
 

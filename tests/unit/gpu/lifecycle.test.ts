@@ -201,9 +201,11 @@ describe('start(): orphans and adoption', () => {
     h = await createHarness({ kv: { [LEDGER_KV_KEY]: { version: 1, records: [], pendingDestroy: [888] } } });
     h.vast.addInstance({ id: 888, actual_status: 'running' });
     await h.manager.start();
-    expect(h.manager.status().orphanInstanceIds).toBeUndefined();
+    // GPU-8: an unconfirmed destroy is shown (it may still bill) until the retry confirms it
+    expect(h.manager.status().orphanInstanceIds).toEqual([888]);
     await h.waitFor(() => !h!.vast.instances.has(888), 3000, 'pending destroy');
     await h.waitFor(() => (ledger(h!).pendingDestroy ?? []).length === 0, 2000, 'pending cleared');
+    expect(h.manager.status().orphanInstanceIds).toBeUndefined();
   });
 });
 

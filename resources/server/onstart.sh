@@ -12,13 +12,13 @@ for v in VAST_CONTAINERLABEL OC_BOOTSTRAP_GZB64 OC_CONFIG_GZB64 $V; do eval "[ -
 [ -n "$CONTAINER_ID" ] || CONTAINER_ID=${VAST_CONTAINERLABEL#C.}
 [ -n "$CONTAINER_API_KEY" ] || CONTAINER_API_KEY=$(cat $R/.vast_api_key 2>/dev/null)
 for v in $V; do eval "printf \"export %s='%s'\n\" $v \"\${$v:-}\""; done > env
-rm -f was_ready busy last_inference switching
+rm -f was_ready busy last_inference switching watchdog.pid
 date +%s > boot_time
 touch heartbeat
 printf '{"phase":"starting","progress":0,"message":"Instance booted","modelId":"","bytesDone":0,"bytesTotal":0}\n' > status.json
 cat > watchdog.sh <<'WD'
 #!/bin/bash
-cd "${0%/*}"; . ./env; echo $$ > watchdog.pid
+cd "${0%/*}"; . ./env; [ -f wd.env ] && . ./wd.env
 L=watchdog.log; M=${OC_WD_MIN:-60}; T=${OC_WD_TICK:-30}
 HB=${OC_HEARTBEAT_MIN:-10}; IDLE=${OC_IDLE_MIN:-20}; MAXH=${OC_MAX_HOURS:-6}; BOOT=${OC_BOOT_MAX_MIN:-60}
 START=$(cat boot_time 2>/dev/null || date +%s)
@@ -35,6 +35,10 @@ destroy() {
   done
   log "destroy not effective; stopping instance"; api PUT '{"state":"stopped"}' >> $L
 }
+# Without the instance id and its API key a self-destroy is impossible: say so (the app checks this log + the pid and
+# repairs it by writing wd.env and restarting this script) instead of pretending to be armed.
+[ -n "$CONTAINER_ID" ] && [ -n "$CONTAINER_API_KEY" ] || { log "NOT armed: id=$CONTAINER_ID key=${CONTAINER_API_KEY:+set}"; exit 1; }
+echo $$ > watchdog.pid
 log "armed id=$CONTAINER_ID key=${CONTAINER_API_KEY:+set} hb=$HB idle=$IDLE max=${MAXH}h boot=$BOOT"
 SIG=
 while sleep $T; do

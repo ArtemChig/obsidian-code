@@ -49,6 +49,28 @@ function tokenMatches(expected: string, given: string | null | undefined): boole
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/**
+ * Second barrier besides the token (WebSockets are not covered by CORS, and DNS rebinding can point a web page's
+ * host name at 127.0.0.1): the Host header must name the loopback interface we listen on, and a browser Origin must
+ * be the app itself (file:// / null in Electron) or a loopback dev server. Non-browser clients send no Origin.
+ */
+export function requestAllowed(headers: { host?: string; origin?: string }, port: number, listenHost = '127.0.0.1'): boolean {
+  const host = (headers.host ?? '').toLowerCase();
+  const allowedHosts = new Set([...LOOPBACK_HOSTS, listenHost.toLowerCase()]);
+  const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(host);
+  if (!m || !allowedHosts.has(m[1]!) || (m[2] !== undefined && Number(m[2]) !== port)) return false;
+  const origin = headers.origin;
+  if (origin === undefined || origin === 'null' || origin === 'file://') return true;
+  try {
+    const o = new URL(origin);
+    return (o.protocol === 'http:' || o.protocol === 'https:') && LOOPBACK_HOSTS.has(o.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function errorPayload(err: unknown): { message: string; code?: string } {
   if (err instanceof RpcError) return err.code ? { message: err.message, code: err.code } : { message: err.message };
   if (err instanceof Error) {
@@ -95,6 +117,9 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
       req.on('error', reject);
     });
 
+  const originOk = (req: IncomingMessage): boolean =>
+    requestAllowed({ host: req.headers.host, origin: req.headers.origin }, (httpServer.address() as AddressInfo | null)?.port ?? 0, host);
+
   const httpServer = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     if (req.method === 'GET' && url.pathname === '/health') {
@@ -104,6 +129,10 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
     if (url.pathname === '/rpc') {
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: { message: 'Method not allowed' } });
+        return;
+      }
+      if (!originOk(req)) {
+        sendJson(res, 403, { error: { message: 'Forbidden' } });
         return;
       }
       const auth = req.headers.authorization;
@@ -144,6 +173,10 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     if (url.pathname !== '/ws') {
       socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      return;
+    }
+    if (!originOk(req)) {
+      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       return;
     }
     if (!tokenMatches(token, url.searchParams.get('token'))) {

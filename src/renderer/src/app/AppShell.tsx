@@ -65,7 +65,7 @@ export function AppShell() {
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col" aria-label="Main">
+        <main className={showRight ? 'flex min-w-[min(420px,50vw)] flex-1 flex-col' : 'flex min-w-0 flex-1 flex-col'} aria-label="Main">
           <ConnectionBanner />
           <div className="min-h-0 flex-1">
             <MainView />

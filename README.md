@@ -56,12 +56,15 @@ without renting a new machine.
 
 - **Clock out on quit** (default on): closing the app destroys the instance.
 - **Server-side watchdog:** the rented machine deletes itself after **30 min without any model use**, after
-  **10 min without hearing from your app** (PC off, crash, network loss), or after **6 hours** total.
+  **10 min without hearing from your app** (PC off, crash, network loss), or after **6 hours** total. The app
+  checks that this watchdog is armed before a GPU is ready (and on every heartbeat); if it cannot be armed, the
+  clock-in fails and the machine is destroyed.
 - **Monthly budget** (default $200): clock-in is refused once you reach it, and you are auto-clocked-out when
   you hit it.
 - **On every start** the app checks your Vast account for leftover instances and offers to destroy them.
 - **Park mode** (Settings → Vast.ai → clock-out mode): keeps the model on the stopped machine's disk so the next
-  clock-in skips the download. You pay a small storage fee, and parked machines are deleted after 3 days.
+  clock-in skips the download. You pay a small storage fee, and parked machines are deleted after 3 days (or once
+  the monthly budget is reached). A stopped machine cannot delete itself, so this is checked while the app runs.
 
 ## Everyday use
 
@@ -94,7 +97,9 @@ Settings), WebFetch, TodoWrite, AskUserQuestion, Task (subagents: general-purpos
 and tools from any MCP servers you configure.
 
 **Compatible with your Claude Code setup:** it reads `CLAUDE.md`, `AGENTS.md`, `.claude/skills`, `.claude/agents`,
-`.claude/commands` and `.claude/settings.json` permission rules (Settings → Memory & import).
+`.claude/commands` and `.claude/settings.json` permission rules (Settings → Memory & import). Hooks and allow rules
+from a project's own settings files are only used once you add that folder under Settings → Permissions → Trusted
+folders (deny rules always apply); "Always allow" choices are saved in the app's settings per project folder.
 
 **Scheduled tasks:** **Scheduled** view → New task: a prompt, a folder and a schedule (hourly, daily, weekdays,
 cron, or once). Tasks run while the app is open. A task that was missed while the app was closed runs once at the

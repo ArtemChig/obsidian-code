@@ -109,10 +109,17 @@ function interpretJson(event: HookEvent, stdout: string): HookOutcome {
   return { block: false };
 }
 
-interface RunResult { code: number | null; stdout: string; stderr: string; timedOut: boolean; spawnError?: string }
+interface RunResult { code: number | null; stdout: string; stderr: string; timedOut: boolean; aborted?: boolean; spawnError?: string }
 
-function runShellCommand(hook: HookConfig, stdin: string, cwd: string, event: HookEvent, deps: HookDeps): Promise<RunResult> {
+/** After the hook process exits, wait at most this long for its pipes to close (a backgrounded grandchild may hold them). */
+const EXIT_GRACE_MS = 300;
+
+function runShellCommand(hook: HookConfig, stdin: string, cwd: string, event: HookEvent, deps: HookDeps, signal?: AbortSignal): Promise<RunResult> {
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ code: null, stdout: '', stderr: '', timedOut: false, aborted: true });
+      return;
+    }
     const shell = resolveShell(deps.settings().shell);
     const timeoutMs = Math.max(50, Math.min(hook.timeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS, 600_000));
     const env = {
@@ -141,17 +148,29 @@ function runShellCommand(hook: HookConfig, stdin: string, cwd: string, event: Ho
     let errBytes = 0;
     let timedOut = false;
     let settled = false;
+    let exitCode: number | null = null;
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    const kill = (): void => {
+      if (child.pid) treeKill(child.pid, 'SIGKILL', () => undefined);
+      else child.kill('SIGKILL');
+    };
+    const onAbort = (): void => {
+      kill();
+      finish({ code: null, aborted: true });
+    };
     const finish = (r: Omit<RunResult, 'stdout' | 'stderr' | 'timedOut'>): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (graceTimer) clearTimeout(graceTimer);
+      signal?.removeEventListener('abort', onAbort);
       resolve({ ...r, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8'), timedOut });
     };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     const timer = setTimeout(() => {
       timedOut = true;
-      if (child.pid) treeKill(child.pid, 'SIGKILL', () => undefined);
-      else child.kill('SIGKILL');
+      kill();
       // Resolve even if a grandchild keeps the pipes open after the kill.
       setTimeout(() => finish({ code: null }), 1000).unref();
     }, timeoutMs);
@@ -165,7 +184,12 @@ function runShellCommand(hook: HookConfig, stdin: string, cwd: string, event: Ho
     });
     child.stdin.on('error', () => undefined); // hook exited without reading stdin (EPIPE)
     child.on('error', (e) => finish({ code: null, spawnError: e.message }));
-    child.on('close', (code) => finish({ code }));
+    child.on('exit', (code) => {
+      exitCode = code;
+      graceTimer = setTimeout(() => finish({ code: exitCode }), EXIT_GRACE_MS);
+      graceTimer.unref?.();
+    });
+    child.on('close', (code) => finish({ code: exitCode ?? code }));
     try {
       child.stdin.end(stdin);
     } catch {
@@ -196,7 +220,8 @@ export function createHookRunner(deps: HookDeps) {
     return all;
   }
 
-  async function runHooks(event: HookEvent, payload: Record<string, unknown>, cwd: string): Promise<HookOutcome> {
+  async function runHooks(event: HookEvent, payload: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<HookOutcome> {
+    if (signal?.aborted) return { block: false };
     const isTool = event === 'PreToolUse' || event === 'PostToolUse';
     const toolName = toolNameOf(payload);
     const hooks = collect(event, cwd).filter((h) => !isTool || matcherMatches(h.matcher, toolName));
@@ -205,7 +230,8 @@ export function createHookRunner(deps: HookDeps) {
     const stdin = buildHookStdin(event, payload, cwd);
     const results = await Promise.all(
       hooks.map(async (h): Promise<HookOutcome> => {
-        const r = await runShellCommand(h, stdin, cwd, event, deps);
+        const r = await runShellCommand(h, stdin, cwd, event, deps, signal);
+        if (r.aborted) return { block: false };
         const label = `${event} hook \`${h.command.length > 80 ? h.command.slice(0, 77) + '...' : h.command}\``;
         if (r.spawnError) {
           deps.log.error(`${label} failed to start: ${r.spawnError}`);

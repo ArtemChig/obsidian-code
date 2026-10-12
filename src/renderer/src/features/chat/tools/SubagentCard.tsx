@@ -1,6 +1,6 @@
 // Task (subagent) card: live status + a nested mini transcript of the child session + Open. Owner: ui-chat.
-import { ArrowUpRight, Bot } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowUpRight, Bot, ChevronDown, ChevronRight } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { SessionSummary, ToolUseBlock } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
@@ -75,6 +75,10 @@ export function SubagentCard({ tool, className }: { tool: ToolUseBlock; classNam
   const finished = tool.status === 'done' || tool.status === 'error' || tool.status === 'interrupted' || tool.status === 'denied';
   const ms = tool.startedAt && tool.endedAt ? tool.endedAt - tool.startedAt : null;
   const result = finished ? (tool.result?.content ?? '').trim() : '';
+  // The live mini transcript costs a full sessions.get of the child: only running/waiting children load it up front;
+  // a finished one (its result is shown below) loads it when the user expands "Steps".
+  const live = running || waiting || !finished;
+  const [showSteps, setShowSteps] = useState(false);
 
   return (
     <div
@@ -113,9 +117,24 @@ export function SubagentCard({ tool, className }: { tool: ToolUseBlock; classNam
           </Button>
         ) : null}
       </div>
-      {child ? (
+      {child && live ? (
         <div className="border-t border-ob-border">
           <MiniTranscript childId={child.id} cwd={child.cwd} />
+        </div>
+      ) : null}
+      {child && !live ? (
+        <div className="border-t border-ob-border">
+          <button
+            type="button"
+            onClick={() => setShowSteps((v) => !v)}
+            aria-expanded={showSteps}
+            data-testid="subagent-steps-toggle"
+            className="ob-transition flex h-7 w-full items-center gap-1.5 px-3.5 text-left text-small text-ob-text-3 hover:bg-ob-hover hover:text-ob-text-2"
+          >
+            {showSteps ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}
+            Steps
+          </button>
+          {showSteps ? <MiniTranscript childId={child.id} cwd={child.cwd} /> : null}
         </div>
       ) : null}
       {result ? (

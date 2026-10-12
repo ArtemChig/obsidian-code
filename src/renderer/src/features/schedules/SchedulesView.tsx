@@ -16,7 +16,7 @@ import { useSchedules } from '@renderer/state/activity';
 import { useModels } from '@renderer/state/models';
 import { findModel } from '@renderer/state/selectors';
 import { useSessions } from '@renderer/state/sessions';
-import { CoreMissing, useCoreMissing } from '../settings/core-missing';
+import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from '../settings/core-missing';
 import { permissionModeLabel } from '../settings/permission-modes';
 import { deleteSchedule, runScheduleNow, setScheduleEnabled } from './actions';
 import { describeSchedule, isDescribed, isIsoTimestamp } from './cron';
@@ -30,6 +30,7 @@ export function SchedulesView() {
   const [deleting, setDeleting] = useState<ScheduledTask | null>(null);
   const [running, setRunning] = useState<Record<string, boolean>>({});
   const coreMissing = useCoreMissing();
+  const syncError = useSyncError('schedules');
 
   const sorted = useMemo(
     () =>
@@ -73,6 +74,10 @@ export function SchedulesView() {
         {!loaded && coreMissing ? (
           <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
             <CoreMissing what="Scheduled tasks" />
+          </div>
+        ) : !loaded && syncError ? (
+          <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
+            <SyncFailed what="scheduled tasks" error={syncError} />
           </div>
         ) : !loaded ? (
           <div className="flex flex-col gap-3" aria-hidden>

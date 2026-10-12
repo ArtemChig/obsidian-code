@@ -99,6 +99,7 @@ export function makeCtx(dataDir: string, opts: { native?: Partial<NativeBridge>;
     agent: {
       send: vi.fn(async () => ({ messageId: 'm1', queued: false })),
       interrupt: vi.fn(),
+      dequeue: vi.fn(() => []),
       respondPermission: vi.fn(),
       answerQuestion: vi.fn(),
       respondPlan: vi.fn(),

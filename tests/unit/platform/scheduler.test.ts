@@ -220,6 +220,42 @@ describe('scheduler', () => {
     expect(sched.list()[0].lastRunMessage).toMatch(/budget/);
   });
 
+  it('auto clock-in (GPU-1): waits for the GPU startup check, then clocks in only if nothing was adopted', async () => {
+    gpu.current = { ...gpu.current, phase: 'connecting' }; // checking the instance tracked from the last run
+    gpu.whenStarted = vi.fn(async () => {
+      gpu.current = { ...gpu.current, phase: 'off' }; // it was gone
+    });
+    const t = sched.create(baseTask({ model: { provider: 'vast', model: 'x' }, allowAutoClockIn: true }));
+    await sched.tick(t.nextRunAt! + 1);
+    await sched.idle();
+    expect(gpu.whenStarted).toHaveBeenCalled();
+    expect(gpu.clockIn).toHaveBeenCalledTimes(1);
+    expect(ctx.agent.runHeadless).toHaveBeenCalledTimes(1);
+    expect(gpu.clockOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('auto clock-in (GPU-1): an adopted instance is used, never a second clock-in', async () => {
+    gpu.current = { ...gpu.current, phase: 'connecting' };
+    gpu.whenStarted = vi.fn(async () => {
+      gpu.current = { ...gpu.current, phase: 'ready' }; // re-attached to the running instance
+    });
+    const t = sched.create(baseTask({ model: { provider: 'vast', model: 'x' }, allowAutoClockIn: true }));
+    await sched.tick(t.nextRunAt! + 1);
+    await sched.idle();
+    expect(gpu.clockIn).not.toHaveBeenCalled();
+    expect(gpu.clockOut).not.toHaveBeenCalled();
+    expect(ctx.agent.runHeadless).toHaveBeenCalledTimes(1);
+  });
+
+  it('auto clock-in: a rejected clock-in never clocks out a GPU this task did not start', async () => {
+    vi.mocked(gpu.clockIn).mockRejectedValue(new Error('Already clocked in.'));
+    const t = sched.create(baseTask({ model: { provider: 'vast', model: 'x' }, allowAutoClockIn: true }));
+    await sched.tick(t.nextRunAt! + 1);
+    await sched.idle();
+    expect(gpu.clockOut).not.toHaveBeenCalled();
+    expect(sched.list()[0].lastRunStatus).toBe('error');
+  });
+
   it('auto clock-in: clocks out and reports an error when the GPU never becomes ready', async () => {
     vi.mocked(gpu.clockIn).mockImplementation(async () => {
       gpu.current = { ...gpu.current, phase: 'loading' };

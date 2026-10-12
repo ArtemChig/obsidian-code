@@ -31,6 +31,10 @@ export interface McpManagerDeps {
   log: ExtLogger;
   connectTimeoutMs?: number;
   toolTimeoutMs?: number;
+  /** First auto-reconnect delay (doubles per attempt, capped at 30 s). Default 2000. */
+  reconnectBaseMs?: number;
+  /** Uptime after which a dropped connection gets a fresh retry budget. Default 60 s. */
+  stableMs?: number;
   version?: string;
 }
 
@@ -51,7 +55,10 @@ interface Conn {
   stderrTail: string;
   tools: ToolDef[];
   closing: boolean;
+  /** Auto-reconnect attempts since the connection was last stable; only reset after STABLE uptime or a manual reconnect. */
   retries: number;
+  /** When the current connection came up (for the stability window). */
+  connectedAt?: number;
   retryTimer?: ReturnType<typeof setTimeout>;
   /** Cancels the connect attempt currently in flight (closes its client / kills its process). */
   abortAttempt?: () => Promise<void>;
@@ -195,6 +202,9 @@ export function createMcpManager(deps: McpManagerDeps) {
   const conns = new Map<string, Conn>();
   const connectTimeout = deps.connectTimeoutMs ?? 45_000;
   const toolTimeout = deps.toolTimeoutMs ?? 120_000;
+  const reconnectBase = deps.reconnectBaseMs ?? 2000;
+  const stableMs = deps.stableMs ?? 60_000;
+  const MAX_RETRIES = 5;
   let disposed = false;
   let chain: Promise<void> = Promise.resolve();
   let cachedTools: ToolDef[] = [];
@@ -390,7 +400,9 @@ export function createMcpManager(deps: McpManagerDeps) {
       () => {
         if (conn.closing || disposed) return;
         conn.status = 'connected';
-        conn.retries = 0;
+        // retries are NOT reset here: a server that initialises and then dies right away would otherwise be
+        // respawned every 2 s forever. The budget comes back after the connection has been stable (onUnexpectedClose).
+        conn.connectedAt = Date.now();
         deps.log.info(`mcp ${conn.name}: connected (${conn.tools.length} tools)`);
         rebuild();
       },
@@ -411,6 +423,8 @@ export function createMcpManager(deps: McpManagerDeps) {
     if (conn.closing || disposed || conn.client !== client) return;
     conn.client = undefined;
     conn.pid = undefined;
+    if (conn.connectedAt !== undefined && Date.now() - conn.connectedAt >= stableMs) conn.retries = 0;
+    conn.connectedAt = undefined;
     conn.status = 'error';
     conn.error = 'connection closed unexpectedly';
     conn.tools = [];
@@ -420,8 +434,14 @@ export function createMcpManager(deps: McpManagerDeps) {
   }
 
   function scheduleReconnect(conn: Conn): void {
-    if (conn.closing || disposed || conn.retries >= 5) return;
-    const delay = Math.min(30_000, 2000 * 2 ** conn.retries);
+    if (conn.closing || disposed) return;
+    if (conn.retries >= MAX_RETRIES) {
+      conn.status = 'error';
+      conn.error = `${conn.error ?? 'connection lost'} — gave up after ${MAX_RETRIES} reconnect attempts (use Reconnect to try again)`;
+      deps.log.error(`mcp ${conn.name}: gave up reconnecting after ${MAX_RETRIES} attempts`);
+      return;
+    }
+    const delay = Math.min(30_000, reconnectBase * 2 ** conn.retries);
     conn.retries++;
     conn.retryTimer = setTimeout(() => {
       conn.retryTimer = undefined;

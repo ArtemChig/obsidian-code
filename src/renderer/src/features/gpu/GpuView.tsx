@@ -7,12 +7,12 @@ import { Skeleton } from '@renderer/components/ui/feedback';
 import { SectionLabel } from '@renderer/components/ui/layout';
 import { useLiveGpuCost, useModelLabel } from '@renderer/app/GpuWidget';
 import { errorMessage, rpc } from '@renderer/lib/rpc';
-import { clockIn, clockOut, defaultGpuProfileId, loadGpuCatalog, switchGpuModel } from '@renderer/state/actions';
+import { clockIn, defaultGpuProfileId, loadGpuCatalog, requestClockOut, switchGpuModel } from '@renderer/state/actions';
 import { isGpuClockedIn, useGpu } from '@renderer/state/gpu';
 import { useSessions } from '@renderer/state/sessions';
 import { useSettings } from '@renderer/state/settings';
 import { toast } from '@renderer/state/toasts';
-import { CoreMissing, useCoreMissing } from '../settings/core-missing';
+import { CoreMissing, useCoreMissing, SyncFailed, useSyncError } from '../settings/core-missing';
 import { KeyRejectedBanner, NoKeyCard, OrphanBanner, ParkedCard, SafetyCard, SpendCard } from './Cards';
 import { HistoryTable, ServerLog } from './HistoryAndLog';
 import { useAccountCheck, useHistory, useIsConnected, useOffers } from './hooks';
@@ -30,6 +30,7 @@ export function GpuView() {
   const sessions = useSessions((s) => s.sessions);
   const connected = useIsConnected();
   const coreMissing = useCoreMissing();
+  const syncError = useSyncError('gpu', 'settings');
 
   const profiles = settings?.vast.profiles;
   const profileList = useMemo(() => profiles ?? [], [profiles]);
@@ -115,22 +116,32 @@ export function GpuView() {
     }
   }, []);
 
+  const parkedId = status?.parked?.instanceId;
   const destroyParked = useCallback(async () => {
     try {
       // A user clock-out with nothing rented also discards the parked instance (stops its storage billing).
-      useGpu.setState({ status: await rpc.request('gpu.clockOut', { reason: 'clock_out' }) });
-      toast({ title: 'Parked instance destroyed', level: 'success' });
+      const st = await rpc.request('gpu.clockOut', { reason: 'clock_out' });
+      useGpu.setState({ status: st });
+      // Only claim success when the instance is really gone (not still parked, nor left as unconfirmed).
+      const left = parkedId !== undefined && (st.parked?.instanceId === parkedId || (st.orphanInstanceIds ?? []).includes(parkedId));
+      if (left) {
+        toast({ title: 'Destroy not confirmed', body: `Instance #${parkedId} may still exist; retrying in the background. Check console.vast.ai.`, level: 'warning' });
+      } else toast({ title: 'Parked instance destroyed', level: 'success' });
     } catch (err) {
       toast({ title: 'Could not destroy the parked instance', body: errorMessage(err), level: 'error' });
     }
-  }, []);
+  }, [parkedId]);
 
   const resumeParked = useCallback(() => {
     const p = status?.parked;
     if (p) void clockIn(p.profileId, p.modelId);
   }, [status?.parked]);
 
-  if (!status || !settings) return coreMissing ? <div className="h-full" data-testid="gpu-view"><CoreMissing what="GPU controls" /></div> : <GpuSkeleton />;
+  if (!status || !settings) {
+    if (coreMissing) return <div className="h-full" data-testid="gpu-view"><CoreMissing what="GPU controls" /></div>;
+    if (syncError) return <div className="h-full" data-testid="gpu-view"><SyncFailed what="the GPU status" error={syncError} /></div>;
+    return <GpuSkeleton />;
+  }
 
   const orphanIds = status.orphanInstanceIds ?? [];
   const accountRejected = hasApiKey && account.result && !account.result.ok;
@@ -166,7 +177,7 @@ export function GpuView() {
           maxSessionHours={settings.vast.maxSessionHours}
           parkedElsewhere={!!status.parked && !!profile && status.parked.profileId !== profile.id && !active}
           onClockIn={onClockIn}
-          onClockOut={() => clockOut()}
+          onClockOut={() => requestClockOut()}
         />
 
         <section className="flex flex-col gap-2.5" aria-label="Profiles">

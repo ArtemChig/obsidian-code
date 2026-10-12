@@ -13,6 +13,17 @@ import { listDir, readTextFile, searchFiles } from './files';
 export type RpcHandler<M extends RpcMethod> = (params: RpcParams<M>) => Promise<RpcResult<M>> | RpcResult<M>;
 export type RpcHandlers = { [M in RpcMethod]: RpcHandler<M> };
 
+/** A Vast.ai instance exists that only the API key can stop: rented (any active phase), or parked. */
+function gpuHoldsInstance(ctx: CoreContext): boolean {
+  let st: ReturnType<CoreContext['gpu']['status']>;
+  try {
+    st = ctx.gpu.status();
+  } catch {
+    return false;
+  }
+  return st.instanceId != null || (st.phase !== 'off' && st.phase !== 'error') || !!st.parked;
+}
+
 export class RpcError extends Error {
   constructor(
     message: string,
@@ -248,6 +259,10 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
       ctx.agent.interrupt(reqStr(obj(params), 'sessionId'));
       return { ok: true as const };
     },
+    'chat.dequeue': (params) => {
+      const p = obj(params);
+      return { removed: ctx.agent.dequeue(reqStr(p, 'sessionId'), optStr(p, 'messageId')) };
+    },
     'chat.respondPermission': (params) => {
       const p = obj(params);
       const decision = p.decision;
@@ -400,6 +415,13 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
       const value = p.value;
       if (value !== null && typeof value !== 'string') {
         throw new RpcError('Invalid params: "value" must be a string or null', 'invalid_params');
+      }
+      if (name === 'vast.apiKey' && value === null && gpuHoldsInstance(ctx)) {
+        // Without the key the app can no longer destroy the instance: it would keep billing until the server watchdog.
+        throw new RpcError(
+          'Clock out first (and destroy any parked instance). Without the Vast.ai API key the app cannot stop the instance, so it would keep billing.',
+          'gpu_active',
+        );
       }
       ctx.secrets.set(name, value);
       if (name.startsWith('local.') || name.startsWith('custom.')) {

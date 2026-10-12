@@ -9,6 +9,7 @@ export interface BridgeApi {
   openPath?: (path: string) => Promise<unknown> | unknown;
   showItemInFolder?: (path: string) => unknown;
   openExternal?: (url: string) => Promise<unknown> | unknown;
+  onOpenSession?: (cb: (sessionId: string) => void) => () => void;
   window?: {
     minimize?: () => void;
     maximize?: () => void;
@@ -78,4 +79,23 @@ export function showItemInFolder(path: string): void {
 
 export function canRevealFiles(): boolean {
   return !!getBridge()?.showItemInFolder;
+}
+
+/** Run `cb` when the main process asks to open a session (a desktop notification was clicked). */
+export function onOpenSessionRequest(cb: (sessionId: string) => void): () => void {
+  const b = getBridge();
+  return b?.onOpenSession ? b.onOpenSession(cb) : () => undefined;
+}
+
+/** Save text as a file through the browser download flow (Electron shows a Save dialog). */
+export function downloadText(filename: string, text: string, mime = 'text/markdown'): void {
+  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

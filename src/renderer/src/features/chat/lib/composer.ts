@@ -56,10 +56,15 @@ export function mentionFor(path: string): string {
 
 export const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 
-/** Shift+Tab order: default → acceptEdits → plan → bypassPermissions → default. */
-export function nextPermissionMode(mode: PermissionMode): PermissionMode {
-  const i = PERMISSION_MODES.indexOf(mode);
-  return PERMISSION_MODES[(i + 1) % PERMISSION_MODES.length];
+/**
+ * Shift+Tab order: default → acceptEdits → plan → default. Bypass ("never ask") joins the cycle only when the user
+ * opted into it (default permission mode = bypass in Settings); otherwise it is picked from the mode menu, with a
+ * confirmation. From bypass, Shift+Tab goes back to default.
+ */
+export function nextPermissionMode(mode: PermissionMode, allowBypass = false): PermissionMode {
+  const cycle = allowBypass ? PERMISSION_MODES : PERMISSION_MODES.filter((m) => m !== 'bypassPermissions');
+  const i = cycle.indexOf(mode);
+  return i < 0 ? 'default' : cycle[(i + 1) % cycle.length];
 }
 
 /** Slash command text for a palette pick: no-arg commands run on Enter, others wait for arguments. */

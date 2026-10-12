@@ -97,16 +97,16 @@ describe('rules and titles', () => {
   it('derives allow rules from the first two words for simple commands', () => {
     expect(bashTool.ruleFor?.({ command: 'npm test' })).toBe('Bash(npm test:*)');
     expect(bashTool.ruleFor?.({ command: 'npm test -- --watch' })).toBe('Bash(npm test:*)');
-    expect(bashTool.ruleFor?.({ command: 'npm run build' })).toBe('Bash(npm run:*)');
+    expect(bashTool.ruleFor?.({ command: 'npm run build' })).toBe('Bash(npm run build:*)'); // script name kept (security F4)
     expect(bashTool.ruleFor?.({ command: 'ls -la src' })).toBe('Bash(ls:*)');
-    expect(bashTool.ruleFor?.({ command: 'python script.py --x' })).toBe('Bash(python:*)');
+    expect(bashTool.ruleFor?.({ command: 'python script.py --x' })).toBe('Bash(python script.py --x)'); // interpreters: exact only
     expect(bashTool.ruleFor?.({ command: 'git status' })).toBe('Bash(git status:*)');
   });
   it('uses the exact command for compound commands (so a prefix rule cannot be abused)', () => {
     expect(bashTool.ruleFor?.({ command: 'git status && rm -rf /' })).toBe('Bash(git status && rm -rf /)');
     expect(bashTool.ruleFor?.({ command: 'echo hi > f.txt' })).toBe('Bash(echo hi > f.txt)');
     expect(commandRule('PowerShell', 'Get-ChildItem -Recurse', 'powershell')).toBe('PowerShell(Get-ChildItem:*)');
-    expect(powershellTool.ruleFor?.({ command: 'Remove-Item x' })).toBe('PowerShell(Remove-Item x:*)'.replace('Remove-Item x:*', 'Remove-Item:*').replace('Remove-Item:*', 'Remove-Item x:*'));
+    expect(powershellTool.ruleFor?.({ command: 'Remove-Item x' })).toBe('PowerShell(Remove-Item x)'); // deletion: exact only
   });
   it('titles', () => {
     expect(bashTool.title({ command: 'npm install' })).toBe('Run: npm install');

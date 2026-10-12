@@ -5,12 +5,20 @@
 // server emits notifications/tools/list_changed).
 // FIXTURE_PIDFILE=<path> makes it write its pid there on startup (tests use it to verify the process is cleaned up).
 
-import { writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
 if (process.env.FIXTURE_PIDFILE) writeFileSync(process.env.FIXTURE_PIDFILE, String(process.pid));
+// FIXTURE_COUNTFILE=<path>: append one line per start (tests count respawns).
+if (process.env.FIXTURE_COUNTFILE) appendFileSync(process.env.FIXTURE_COUNTFILE, `${process.pid}\n`);
+// FIXTURE_EXIT_AFTER_LIST=1: answer initialize + tools/list, then die (a server that crashes right after connecting).
+if (process.env.FIXTURE_EXIT_AFTER_LIST === '1') {
+  process.stdin.on('data', (c) => {
+    if (String(c).includes('"tools/list"')) setTimeout(() => process.exit(0), 150);
+  });
+}
 
 const server = new McpServer({ name: 'fixture', version: '1.0.0' });
 

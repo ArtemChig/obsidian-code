@@ -11,7 +11,7 @@ import { Checkbox } from '@renderer/components/ui/toggles';
 import { Kbd } from '@renderer/components/ui/kbd';
 import { cn } from '@renderer/lib/cn';
 import { basename, pluralize } from '@renderer/lib/format';
-import { interrupt, openSession, rewind, sendMessage } from '@renderer/state/actions';
+import { openSession, resendFrom, rewind } from '@renderer/state/actions';
 import { usePending } from '@renderer/state/pending';
 import { useSessions } from '@renderer/state/sessions';
 import { useSessionSummary, useTranscript, useTranscriptLoading } from '@renderer/state/selectors';
@@ -21,19 +21,19 @@ import { ChatHeader } from './ChatHeader';
 import { AwaitingToolsContext } from './context';
 import { addImageFiles, filesFrom } from './composer/attachments';
 import { Composer } from './composer/Composer';
+import { isDisposableSession, REVEAL_STEP, windowStart } from './lib/session';
 import { activityLabel } from './lib/tool-meta';
 import { PermissionPrompt } from './prompts/PermissionPrompt';
 import { PlanApproval } from './prompts/PlanApproval';
 import { QuestionCard } from './prompts/QuestionCard';
-import { bindChatEvents, clearError, focusComposer, setDraft, useChatLocal } from './state';
+import { bindChatEvents, clearError, focusComposer, setDraft, stopTurn, useChatLocal } from './state';
 import { AssistantMessage, CompactDivider, messageImages, messageText, SystemNote, timingFor, UserMessage } from './transcript/Messages';
 import { useStickToBottom } from './transcript/useStickToBottom';
 import { Elapsed, ImageLightbox, isEditableTarget, overlayOpen } from './ui';
 
 bindChatEvents();
 
-/** Messages rendered before "Show earlier" kicks in. */
-const WINDOW = 120;
+
 
 type PendingItem =
   | { kind: 'permission'; req: PermissionRequest }
@@ -73,6 +73,16 @@ function lastUserMessage(messages: Message[]): Message | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role === 'user' && m.tag !== 'hook' && m.tag !== 'command') return m;
+  }
+  return undefined;
+}
+
+/** The last assistant reply, if the transcript ends with one (not a slash-command echo). */
+function lastReply(messages: Message[]): Message | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === 'assistant') return m.tag === 'command' ? undefined : m;
+    if (m.role === 'user' && m.tag !== 'hook') return undefined;
   }
   return undefined;
 }
@@ -117,6 +127,16 @@ function RunningStatus({ session, entry, waiting }: { session: SessionSummary; e
 
 // ───────────────────────────── Error banner ─────────────────────────────
 
+/** Retry / Regenerate: rewind to the user message and send it again (one copy in the transcript, not one per click). */
+async function resendLast(sessionId: string, m: Message): Promise<void> {
+  const r = await resendFrom(sessionId, m.id);
+  if (!r.ok && r.text) {
+    // The prompt was rewound but could not be re-sent: keep it in the composer instead of losing it.
+    setDraft(sessionId, r.text);
+    focusComposer(sessionId);
+  }
+}
+
 function ErrorBanner({ session, messages }: { session: SessionSummary; messages: Message[] }) {
   const err = useChatLocal((s) => s.errors[session.id]);
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -127,8 +147,7 @@ function ErrorBanner({ session, messages }: { session: SessionSummary; messages:
     if (!last) return;
     clearError(session.id);
     setDismissed(key);
-    const images = messageImages(last);
-    await sendMessage(session.id, messageText(last), images.length ? images : undefined);
+    await resendLast(session.id, last);
   };
   return (
     <div role="alert" data-testid="error-banner" className="flex items-start gap-3 rounded-[10px] border border-[rgba(240,113,120,0.32)] bg-ob-danger-soft px-3.5 py-2.5 animate-ob-fade-in">
@@ -210,10 +229,10 @@ function Transcript({
   onRewind: (m: Message) => void;
   onOpenImage: (img: ImageBlock) => void;
 }) {
-  const [showAll, setShowAll] = useState(false);
+  const [revealed, setRevealed] = useState(0);
   const messages = entry.session.messages;
   const awaiting = useMemo(() => new Set(pending.map((p) => p.req.toolUseId)), [pending]);
-  const start = showAll ? 0 : Math.max(0, messages.length - WINDOW);
+  const start = windowStart(messages.length, revealed);
   const visible = start > 0 ? messages.slice(start) : messages;
   const streamingId = entry.streamingMessageId;
   const running = session.status === 'running' || session.status === 'waiting';
@@ -223,13 +242,20 @@ function Transcript({
     [streamingMsg, entry.blockStarts, entry.blockEnds],
   );
   const rewindable = session.kind !== 'subagent';
+  // "Regenerate" on the last finished reply (rewind to its prompt and send it again).
+  const lastAssistant = !running && rewindable ? lastReply(messages) : undefined;
+  const lastPrompt = lastAssistant ? lastUserMessage(messages) : undefined;
+  const sessionId = session.id;
+  const regenerate = useCallback(() => {
+    if (lastPrompt) void resendLast(sessionId, lastPrompt);
+  }, [sessionId, lastPrompt]);
 
   return (
     <AwaitingToolsContext.Provider value={awaiting}>
       {start > 0 ? (
         <div className="flex justify-center">
-          <Button size="sm" variant="ghost" onClick={() => setShowAll(true)} data-testid="show-earlier">
-            Show {pluralize(start, 'earlier message')}
+          <Button size="sm" variant="ghost" onClick={() => setRevealed((r) => r + REVEAL_STEP)} data-testid="show-earlier">
+            {start > REVEAL_STEP ? `Show ${REVEAL_STEP} earlier messages (${start} hidden)` : `Show ${pluralize(start, 'earlier message')}`}
           </Button>
         </div>
       ) : null}
@@ -256,6 +282,7 @@ function Transcript({
               timing={streaming ? timing : undefined}
               prefill={streaming && entry.prefill?.messageId === m.id ? entry.prefill : undefined}
               onOpenImage={onOpenImage}
+              onRegenerate={lastPrompt && m.id === lastAssistant?.id ? regenerate : undefined}
             />
           );
         } else if (m.tag === 'compact_summary') {
@@ -299,6 +326,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const sessionsLoaded = useSessions((s) => s.loaded);
+  const queuedCount = useSessions((s) => s.queued[sessionId]?.length ?? 0);
 
   const session = summary ?? (entry ? entry.session : undefined);
   const messages = entry?.session.messages;
@@ -314,7 +342,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || overlayOpen() || isEditableTarget(e.target)) return;
       e.preventDefault();
-      void interrupt(sessionId);
+      void stopTurn(sessionId);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -386,7 +414,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <ChatHeader session={session} hasMessages={!!messages?.length} />
+      <ChatHeader session={session} disposable={isDisposableSession(session, messages, queuedCount)} />
 
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} className="h-full overflow-y-auto [scrollbar-gutter:stable]" data-testid="transcript" tabIndex={-1}>

@@ -41,6 +41,7 @@ const CALLS = {
   'sessions.search': { query: 'parser' },
   'chat.send': { sessionId: 's-hearth', text: '/cost' },
   'chat.interrupt': { sessionId: 's-hearth' },
+  'chat.dequeue': { sessionId: 's-sse-explore' },
   'chat.respondPermission': { requestId: 'none', decision: 'deny' },
   'chat.answerQuestion': { requestId: 'none', answers: {} },
   'chat.respondPlan': { requestId: 'none', approve: false },

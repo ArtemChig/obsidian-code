@@ -252,7 +252,7 @@ test('real app: local model, tools, palettes, views, settings, clean quit', asyn
       await expect(mode).toHaveAttribute('data-mode', 'plan');
       await expect.poll(async () => (await rpc<{ permissionMode: string }>(page, 'sessions.get', { id: sessionId })).permissionMode).toBe('plan');
       await shot(page, 'plan-mode');
-      await page.keyboard.press('Shift+Tab');
+      // Bypass is not in the Shift+Tab cycle unless it is the default mode: plan → default.
       await page.keyboard.press('Shift+Tab');
       await expect(mode).toHaveAttribute('data-mode', 'default');
     });

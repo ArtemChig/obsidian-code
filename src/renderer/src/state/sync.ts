@@ -3,11 +3,11 @@ import type { CoreEvents } from '@shared/protocol';
 import type { Session, SessionSummary } from '@shared/types';
 import { errorMessage, rpc } from '../lib/rpc';
 import { useActivity, useSchedules } from './activity';
-import { useConnection } from './connection';
+import { SYNC_RESOURCE_LABEL, useConnection, type SyncResource } from './connection';
 import { useGpu } from './gpu';
 import { useModels } from './models';
 import { addRecord, removeRecord, toRecord, usePending } from './pending';
-import { useSessions } from './sessions';
+import { reconcileQueued, setQueued, useSessions } from './sessions';
 import { useSettings } from './settings';
 import { toast } from './toasts';
 import { createEntry, reduceEntry, TRANSCRIPT_EVENTS, type TranscriptEventName } from './transcript';
@@ -40,11 +40,17 @@ export function loadTranscript(sessionId: string, opts: { force?: boolean } = {}
         const loadErrors = { ...s.loadErrors };
         delete loadErrors[sessionId];
         const summary = toSummary(session);
+        // Drop queued chips whose message already arrived (missed while disconnected) or that can no longer run.
+        const queued = { ...s.queued };
+        const left = reconcileQueued(s.queued[sessionId], new Set(session.messages.map((m) => m.id)), isBusy(session.status));
+        if (left.length) queued[sessionId] = left;
+        else delete queued[sessionId];
         return {
           transcripts: { ...s.transcripts, [sessionId]: next },
           sessions: { ...s.sessions, [sessionId]: summary },
           loading: { ...s.loading, [sessionId]: false },
           loadErrors,
+          queued,
         };
       });
     })
@@ -57,6 +63,27 @@ export function loadTranscript(sessionId: string, opts: { force?: boolean } = {}
     .finally(() => inflight.delete(sessionId));
   inflight.set(sessionId, p);
   return p;
+}
+
+const isBusy = (status: SessionSummary['status']): boolean => status === 'running' || status === 'waiting';
+
+const queueChecks = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * A session went idle: once it stays idle for a moment (the core starts the next queued item right away), its queue
+ * is empty — clear chips that never got a message.added (e.g. a queued /clear).
+ */
+function scheduleQueueCheck(sessionId: string): void {
+  if (!useSessions.getState().queued[sessionId]?.length) return;
+  clearTimeout(queueChecks.get(sessionId));
+  queueChecks.set(
+    sessionId,
+    setTimeout(() => {
+      queueChecks.delete(sessionId);
+      const s = useSessions.getState().sessions[sessionId];
+      if (!s || !isBusy(s.status)) setQueued(sessionId, []);
+    }, 1500),
+  );
 }
 
 function toSummary(session: Session): SessionSummary {
@@ -101,6 +128,7 @@ function markUnread(sessionId: string): void {
 }
 
 function upsertSummary(s: SessionSummary): void {
+  if (!isBusy(s.status)) scheduleQueueCheck(s.id);
   useSessions.setState((st) => {
     const prev = st.sessions[s.id];
     let transcripts = st.transcripts;
@@ -183,6 +211,15 @@ export function bindEvents(): () => void {
 
 // ───────────────────────────── Refetch ─────────────────────────────
 
+/** Pure: per-resource error messages from a refetch's settled results (fulfilled resources are absent). */
+export function syncErrorsOf(results: Partial<Record<SyncResource, PromiseSettledResult<unknown>>>): Partial<Record<SyncResource, string>> {
+  const out: Partial<Record<SyncResource, string>> = {};
+  for (const [name, r] of Object.entries(results) as [SyncResource, PromiseSettledResult<unknown> | undefined][]) {
+    if (r?.status === 'rejected') out[name] = errorMessage(r.reason);
+  }
+  return out;
+}
+
 /** Fetch the whole client state. Called on every (re)connect; safe to call any time. */
 export async function refetchAll(): Promise<void> {
   const [system, list, models, gpu, settings, activity, schedules, pending, secrets] = await Promise.allSettled([
@@ -216,7 +253,10 @@ export async function refetchAll(): Promise<void> {
         if (sessions[id]) transcripts[id] = { ...entry, stale: true };
       }
       const activeSessionId = st.activeSessionId && sessions[st.activeSessionId] ? st.activeSessionId : null;
-      return { sessions, transcripts, loaded: true, activeSessionId };
+      // Queued chips survive only for sessions that are still working (a restarted core has no queue).
+      const queued: typeof st.queued = {};
+      for (const [id, q] of Object.entries(st.queued)) if (sessions[id] && isBusy(sessions[id].status) && q.length) queued[id] = q;
+      return { sessions, transcripts, loaded: true, activeSessionId, queued };
     });
   }
   if (models.status === 'fulfilled') useModels.setState({ providers: models.value.providers, models: models.value.models, loaded: true });
@@ -234,9 +274,17 @@ export async function refetchAll(): Promise<void> {
   const active = useSessions.getState().activeSessionId;
   if (active) await loadTranscript(active, { force: true });
 
-  const failed = [system, list, models, gpu, settings].filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-  if (failed.length && list.status === 'rejected') {
-    toast({ title: 'Could not load state from the core', body: errorMessage(failed[0].reason), level: 'error' });
+  // Every resource that failed is recorded (views show "Couldn't load — Retry" instead of a skeleton forever) and
+  // reported in one toast.
+  const syncErrors = syncErrorsOf({ sessions: list, models, gpu, settings, activity, schedules });
+  const failedNames = Object.keys(syncErrors) as SyncResource[];
+  if (failedNames.length) {
+    toast({
+      id: 'sync-failed',
+      title: `Could not load ${failedNames.map((r) => SYNC_RESOURCE_LABEL[r]).join(', ')}`,
+      body: Object.values(syncErrors)[0],
+      level: 'error',
+    });
   }
-  useConnection.setState({ ready: true, lastSyncAt: Date.now() });
+  useConnection.setState({ ready: true, lastSyncAt: Date.now(), syncErrors });
 }

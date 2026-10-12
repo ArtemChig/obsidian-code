@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { ImageBlock } from '@shared/types';
 import { rpc } from '@renderer/lib/rpc';
+import { interrupt, withdrawQueued } from '@renderer/state/actions';
 
 export interface ChatError {
   message: string;
@@ -40,6 +41,24 @@ export function insertIntoComposer(sessionId: string, text: string): void {
   const sep = cur === '' || /\s$/.test(cur) ? '' : ' ';
   setDraft(sessionId, `${cur}${sep}${text} `);
   focusComposer(sessionId);
+}
+
+/** Put withdrawn text back into a session's composer (after whatever is already there) and focus it. */
+export function restoreToDraft(sessionId: string, texts: string[]): void {
+  const cur = useChatLocal.getState().drafts[sessionId] ?? '';
+  const next = [cur.trimEnd(), ...texts.map((t) => t.trim())].filter(Boolean).join('\n\n');
+  setDraft(sessionId, next);
+  focusComposer(sessionId);
+}
+
+/**
+ * Stop the running turn (Esc / Stop). Queued follow-ups are withdrawn first and go back into the composer, so a
+ * message queued behind a wrong turn does not fire on its own — the user edits or re-sends it.
+ */
+export async function stopTurn(sessionId: string): Promise<void> {
+  const withdrawn = await withdrawQueued(sessionId);
+  await interrupt(sessionId);
+  if (withdrawn.length) restoreToDraft(sessionId, withdrawn.map((q) => q.text));
 }
 
 export function clearError(sessionId: string): void {

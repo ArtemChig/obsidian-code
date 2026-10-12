@@ -12,6 +12,11 @@
 //   4. createInstance is never retried blindly; an ambiguous failure triggers a reconcile that destroys any instance
 //      carrying this attempt's nonce (or created during the attempt and not tracked).
 //   5. dispose() never destroys (the main process calls clockOut on quit); start() adopts or reports what is left.
+//   6. Nothing rents while start() is still reconciling the instance tracked from the last run (clockIn waits for it),
+//      and the ledger refuses to track a second instance over a tracked one.
+//   7. The server watchdog is verified armed (pid alive + "armed id=<id> key=set") before 'ready' and on every
+//      heartbeat; it is repaired over SSH with the instance key from create, and a clock-in that cannot arm it fails.
+//   8. Ledger writes never block a destroy (a failed write keeps the in-memory state and is reported).
 
 import { randomBytes, randomUUID } from 'node:crypto';
 import http from 'node:http';
@@ -66,6 +71,16 @@ export interface GpuTimings {
   destroyAttempts: number;
   destroyVerifyPolls: number;
   creditRefreshMs: number;
+  /** Delay before re-checking an instance that one GET reported gone. */
+  goneConfirmMs: number;
+  /** How long the pre-'ready' check waits (with repairs) for the server watchdog to be armed. */
+  watchdogArmTimeoutMs: number;
+  /** Grace after SSH connect before an unarmed watchdog is repaired from the heartbeat (onstart may still be running). */
+  watchdogGraceMs: number;
+  /** Parked-instance expiry / budget check interval. */
+  parkCheckMs: number;
+  /** Re-check interval for a tracked instance that could not be reconciled (no API key at start). */
+  reconcileRetryMs: number;
 }
 
 export const DEFAULT_TIMINGS: GpuTimings = {
@@ -95,6 +110,11 @@ export const DEFAULT_TIMINGS: GpuTimings = {
   destroyAttempts: 6,
   destroyVerifyPolls: 5,
   creditRefreshMs: 10 * 60_000,
+  goneConfirmMs: 5000,
+  watchdogArmTimeoutMs: 60_000,
+  watchdogGraceMs: 2 * 60_000,
+  parkCheckMs: 15 * 60_000,
+  reconcileRetryMs: 15_000,
 };
 
 export const DEFAULT_VAST_SETTINGS: Settings['vast'] = {
@@ -139,6 +159,12 @@ class AbortedError extends Error {
 }
 
 const HB_MARK = 'OC_HB_OK';
+const WD_MARK = 'OC_WD';
+/** Prints the watchdog's last "armed id=… key=…" log line, only if the process in watchdog.pid is the watchdog. */
+export const WD_CHECK_CMD = 'p=$(cat /root/oc/watchdog.pid 2>/dev/null) && grep -q watchdog.sh /proc/$p/cmdline 2>/dev/null && grep -a "armed id=" /root/oc/watchdog.log | tail -n 1';
+/** (Re)start the watchdog (kills a running one first; it re-reads env + wd.env). */
+const WD_RESTART_CMD =
+  'p=$(cat /root/oc/watchdog.pid 2>/dev/null) && grep -q watchdog.sh /proc/$p/cmdline 2>/dev/null && kill $p; cd /root/oc && setsid nohup bash /root/oc/watchdog.sh >/dev/null 2>&1 </dev/null &';
 
 function isStoppedState(inst: VastInstance): boolean {
   return inst.actual_status === 'stopped' || (inst.intended_status === 'stopped' && inst.actual_status !== 'running');
@@ -198,13 +224,28 @@ export class GpuManagerImpl implements GpuManager {
   private hbFailures = 0;
   private lastAliveCheck = 0;
   private disposed = false;
-  private started = false;
+  /** The latest startup/retry reconciliation of the instance tracked from the last run. */
+  private reconcileRun: Promise<void> | null = null;
+  private reconciling = false;
+  /** A tracked instance could not be checked (no API key at start); retried when a key appears. */
+  private needsReconcile = false;
+  private goneCheck: Promise<boolean> | null = null;
+  /** Instance ids whose foreground destroy is in flight (not shown as "unconfirmed"). */
+  private readonly destroying = new Set<number>();
+  private connectedAt = 0;
+  private wdFailures = 0;
+  private wdRepairs = 0;
+  private wdRepairing = false;
+  private lastSaveErrorNotice = 0;
 
   private tickTimer: NodeJS.Timeout | null = null;
   private persistTimer: NodeJS.Timeout | null = null;
   private hbTimer: NodeJS.Timeout | null = null;
   private destroyRetryTimer: NodeJS.Timeout | null = null;
   private creditTimer: NodeJS.Timeout | null = null;
+  private parkTimer: NodeJS.Timeout | null = null;
+  private reconcileTimer: NodeJS.Timeout | null = null;
+  private readonly bgTimers = new Set<NodeJS.Timeout>();
   private readyWaiters: ((ok: boolean) => void)[] = [];
   /** Counters for tests/diagnostics. */
   readonly stats = { heartbeats: 0, heartbeatFailures: 0, reconnects: 0 };
@@ -237,8 +278,24 @@ export class GpuManagerImpl implements GpuManager {
 
   /** Bound lazily to ctx.kv (factories must not touch other modules during construction). */
   private get ledger(): GpuLedger {
-    if (!this.ledgerInst) this.ledgerInst = new GpuLedger(this.ctx.kv);
+    if (!this.ledgerInst) this.ledgerInst = new GpuLedger(this.ctx.kv, (err) => this.onLedgerSaveError(err));
     return this.ledgerInst;
+  }
+
+  private onLedgerSaveError(err: unknown): void {
+    const now = Date.now();
+    if (now - this.lastSaveErrorNotice < 10 * 60_000) return;
+    this.lastSaveErrorNotice = now;
+    this.notify(
+      'GPU ledger not saved',
+      `Could not save the GPU cost ledger (${errMsg(err)}). Clock-in/out keeps working, but if the app crashes now it may not know which instance to stop. Free up disk space.`,
+      'error',
+    );
+  }
+
+  /** The tracked instance: the adopted one, or the one from the last run while it is being (or cannot be) checked. */
+  private tracked(): ActiveInstance | null {
+    return this.active ?? (this.reconciling || this.needsReconcile ? this.ledger.active ?? null : null);
   }
 
   private secret(name: string): string | null {
@@ -381,12 +438,12 @@ export class GpuManagerImpl implements GpuManager {
   }
 
   private liveSessionCost(now = this.now()): number {
-    const a = this.active;
+    const a = this.tracked();
     return a ? costFor(a.pricePerHour, a.startedAt, now, a.bandwidthUsd) : 0;
   }
 
   private monthCost(now = this.now()): number {
-    return this.ledger.monthCost(now, this.active ? this.liveSessionCost(now) : undefined);
+    return this.ledger.monthCost(now);
   }
 
   private steps(): GpuStatus['steps'] {
@@ -424,7 +481,7 @@ export class GpuManagerImpl implements GpuManager {
 
   status(): GpuStatus {
     const now = this.now();
-    const a = this.active;
+    const a = this.tracked();
     const vs = this.vastSettings();
     const parked = this.ledger.parked;
     const st: GpuStatus = {
@@ -452,7 +509,9 @@ export class GpuManagerImpl implements GpuManager {
     if (this.phase === 'ready' && this.endpointUrl) st.endpoint = this.endpointUrl;
     if (this.creditBalance !== undefined) st.creditBalance = this.creditBalance;
     if (this.lastError) st.lastError = this.lastError;
-    if (this.orphanIds.length) st.orphanInstanceIds = [...this.orphanIds];
+    // Untracked labelled instances + destroys that were never confirmed (retried in the background): both may bill.
+    const unconfirmed = [...new Set([...this.orphanIds, ...this.ledger.pendingDestroy])].filter((id) => !this.destroying.has(id) && id !== a?.instanceId);
+    if (unconfirmed.length) st.orphanInstanceIds = unconfirmed;
     if (parked) {
       st.parked = {
         instanceId: parked.instanceId,
@@ -495,10 +554,21 @@ export class GpuManagerImpl implements GpuManager {
 
   async clockIn(opts: { profileId: string; modelId?: string; offerId?: number }): Promise<GpuStatus> {
     if (this.disposed) throw new Error('The GPU manager is shut down.');
+    // Never rent while the instance tracked from the last run is still being checked (it may be running).
+    await this.whenStarted();
+    await this.retryReconcile();
     if (this.tearingDown) throw new Error('A clock-out is still in progress. Try again in a moment.');
+    // The check just re-attached to the instance from the last run: that is the clock-in (no second rental).
+    if (this.job?.kind === 'adopt' && this.phase !== 'ready') return this.status();
     if (this.job || this.active) {
       if (this.phase === 'ready') throw new Error('Already clocked in.');
       throw new Error('A clock-in is already in progress.');
+    }
+    const stale = this.ledger.active;
+    if (stale) {
+      throw new Error(
+        `GPU instance #${stale.instanceId} from the last run is still tracked and could not be checked${this.vast.hasKey() ? '' : ' (no Vast.ai API key set)'}. Resolve it before renting another one.`,
+      );
     }
     const vs = this.vastSettings();
     const profile = findProfile(vs.profiles, opts.profileId);
@@ -524,6 +594,13 @@ export class GpuManagerImpl implements GpuManager {
   }
 
   async clockOut(reason: EndReason = 'clock_out'): Promise<GpuStatus> {
+    await this.whenStarted();
+    await this.retryReconcile();
+    if (this.needsReconcile) {
+      const t = this.ledger.active;
+      if (reason !== 'clock_out' || !t) return this.status();
+      throw new Error(`Add your Vast.ai API key in Settings > Vast.ai to stop GPU instance #${t.instanceId}.`);
+    }
     if (this.tearingDown) {
       await this.tearingDown.catch(() => undefined);
       return this.status();
@@ -546,13 +623,23 @@ export class GpuManagerImpl implements GpuManager {
     } else {
       // Nothing rented. A user clock-out also discards a parked instance (stops its storage billing).
       if (reason === 'clock_out' && this.ledger.parked) await this.destroyParked('clock_out');
-      if (this.phase !== 'off') {
+      if (this.ledger.pendingDestroy.length) {
+        // Never report "Clocked out" while a destroy is still unconfirmed: that instance may still bill.
+        this.lastError = this.unconfirmedMessage(this.ledger.pendingDestroy);
+        this.setPhase('error', this.lastError);
+        this.scheduleDestroyRetry(true);
+      } else if (this.phase !== 'off') {
         this.lastError = undefined;
         this.failedStep = undefined;
         this.setPhase('off', 'Clocked out');
       } else this.emit();
     }
     return this.status();
+  }
+
+  private unconfirmedMessage(ids: number[]): string {
+    const list = ids.map((i) => `#${i}`).join(', ');
+    return `Could not confirm that instance${ids.length > 1 ? 's' : ''} ${list} ${ids.length > 1 ? 'were' : 'was'} destroyed. Retrying in the background; please check console.vast.ai.`;
   }
 
   async switchModel(modelId: string): Promise<GpuStatus> {
@@ -582,9 +669,11 @@ export class GpuManagerImpl implements GpuManager {
   }
 
   async destroyOrphans(): Promise<number[]> {
+    await this.whenStarted();
     if (!this.vast.hasKey()) throw new Error('No Vast.ai API key set.');
+    if (this.ledger.pendingDestroy.length) this.scheduleDestroyRetry(true);
     const list = await this.vast.listInstances(APP_LABEL);
-    const keep = new Set([this.active?.instanceId, this.ledger.parked?.instanceId]);
+    const keep = new Set([this.active?.instanceId, this.ledger.active?.instanceId, this.ledger.parked?.instanceId]);
     const ids = list.filter((i) => !keep.has(i.id) && !instanceIsGone(i)).map((i) => i.id);
     const destroyed: number[] = [];
     for (const id of ids) {
@@ -622,6 +711,7 @@ export class GpuManagerImpl implements GpuManager {
 
   async testKey(): Promise<{ ok: boolean; message: string; creditBalance?: number }> {
     if (!this.vast.hasKey()) return { ok: false, message: 'No Vast.ai API key set.' };
+    void this.retryReconcile();
     try {
       const u = await this.vast.currentUser();
       this.creditBalance = u.creditBalance;
@@ -635,7 +725,7 @@ export class GpuManagerImpl implements GpuManager {
 
   waitUntilReady(timeoutMs: number): Promise<boolean> {
     if (this.phase === 'ready') return Promise.resolve(true);
-    if (!this.job && !this.active) return Promise.resolve(false);
+    if (!this.job && !this.active && !this.reconciling) return Promise.resolve(false);
     return new Promise((resolve) => {
       let done = false;
       const finish = (ok: boolean) => {
@@ -649,30 +739,92 @@ export class GpuManagerImpl implements GpuManager {
     });
   }
 
-  /** Startup reconciliation: adopt the tracked instance, account for vanished ones, report orphans, expire parked. */
-  async start(): Promise<void> {
-    if (this.started || this.disposed) return;
-    this.started = true;
+  /**
+   * Startup reconciliation: adopt the tracked instance, account for vanished ones, report orphans, expire parked.
+   * The tracked instance is claimed synchronously (phase 'connecting'/'stopping') before the first await, and
+   * clockIn/clockOut/destroyOrphans wait for this to finish, so nothing can rent a second instance meanwhile.
+   */
+  start(): Promise<void> {
+    if (this.reconcileRun) return this.reconcileRun;
+    if (this.disposed) return Promise.resolve();
     try {
       this.ctx.activity?.onStop('gpu', () => {
-        void this.clockOut('clock_out');
+        void this.clockOut('clock_out').catch(() => undefined);
       });
     } catch {
       /* activity not available */
     }
-    if (this.ledger.pendingDestroy.length) this.scheduleDestroyRetry(true);
+    return this.runReconcile(true);
+  }
+
+  /** Resolves once no startup/retry reconciliation is running (never rejects). */
+  async whenStarted(): Promise<void> {
+    while (this.reconciling && this.reconcileRun) await this.reconcileRun;
+  }
+
+  /** A tracked instance could not be checked at start (no key): check it now if a key has been added since. */
+  private async retryReconcile(): Promise<void> {
+    if (this.needsReconcile && !this.reconciling && !this.disposed && this.vast.hasKey()) await this.runReconcile(false);
+    else await this.whenStarted();
+  }
+
+  private runReconcile(initial: boolean): Promise<void> {
+    this.reconciling = true;
+    const a = this.ledger.active;
+    if (a) {
+      this.target = { profileId: a.profileId, modelId: a.modelId };
+      if (this.needsReconcile) this.lastError = undefined;
+      this.setPhase(
+        a.stopping ? 'stopping' : 'connecting',
+        a.stopping ? `Finishing the interrupted clock-out of GPU instance #${a.instanceId}…` : `Checking GPU instance #${a.instanceId} from the last run…`,
+      );
+    }
+    const run = this.reconcile(initial)
+      .catch((err: unknown) => {
+        this.lastError = `GPU startup check failed: ${errMsg(err)}`;
+      })
+      .finally(() => {
+        this.reconciling = false;
+        this.settleAfterReconcile();
+      });
+    this.reconcileRun = run;
+    return run;
+  }
+
+  /** After reconciliation: leave the transient "checking" phase unless something (adopt job, teardown) took over. */
+  private settleAfterReconcile(): void {
+    if (this.disposed || this.job || this.active || this.tearingDown || this.needsReconcile) {
+      this.emit();
+      return;
+    }
+    if (this.phase === 'connecting' || this.phase === 'stopping') {
+      const pending = this.ledger.pendingDestroy.filter((id) => !this.destroying.has(id));
+      if (pending.length) {
+        this.lastError = this.unconfirmedMessage(pending);
+        this.setPhase('error', this.lastError);
+      } else this.setPhase('off', 'Clocked out');
+    } else this.emit();
+  }
+
+  private async reconcile(initial: boolean): Promise<void> {
+    if (initial && this.ledger.pendingDestroy.length) this.scheduleDestroyRetry(true);
+    if (initial) this.startPeriodicTimers();
 
     const a = this.ledger.active;
     if (!this.vast.hasKey()) {
       if (a) {
-        this.active = a;
-        this.target = { profileId: a.profileId, modelId: a.modelId };
-        this.startBillingTimers();
-        this.lastError = `An instance (#${a.instanceId}) is still tracked but no Vast.ai API key is set; it will self-destroy within ${this.vastSettings().heartbeatMinutes} min. Add the key to manage it.`;
+        // Cannot check or stop it. Do not adopt it (no billing timers, no clock-in on top of it); once a key is set the
+        // !alive branch below bounds its end time by lastSeenAt + the watchdog window.
+        this.needsReconcile = true;
+        this.lastError = `GPU instance #${a.instanceId} from the last run is still tracked, but no Vast.ai API key is set, so it cannot be checked or stopped. Its server watchdog destroys it within ${this.vastSettings().heartbeatMinutes} min of the last heartbeat; add the key in Settings > Vast.ai to manage it.`;
         this.setPhase('error', this.lastError);
+        this.armReconcileRetry();
       }
       return;
     }
+    this.needsReconcile = false;
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    this.reconcileTimer = null;
 
     let instances: VastInstance[] | null = null;
     try {
@@ -680,8 +832,10 @@ export class GpuManagerImpl implements GpuManager {
     } catch (err) {
       this.lastError = `Could not list Vast.ai instances: ${errMsg(err)}`;
     }
+    if (this.disposed) return;
     const now = this.now();
     const vs = this.vastSettings();
+    const hbWindow = (vs.heartbeatMinutes + 1) * 60_000;
 
     if (a) {
       let inst: VastInstance | null | undefined = instances?.find((i) => i.id === a.instanceId);
@@ -692,13 +846,18 @@ export class GpuManagerImpl implements GpuManager {
           inst = undefined; // unknown (network): try to adopt anyway
         }
       }
+      if (this.disposed) return;
       const alive = inst !== null && !(inst && instanceIsGone(inst));
+      const stopped = Boolean(inst && isStoppedState(inst));
       const stopReason: EndReason | undefined = a.stopping ?? (this.ledger.pendingDestroy.includes(a.instanceId) ? 'error' : undefined);
       if (stopReason) {
         // The app exited in the middle of a clock-out/teardown: finish it (never adopt an instance being stopped).
-        this.ledger.finalizeActive(stopReason, now);
-        if (alive && a.parkIntent && inst && isStoppedState(inst)) {
-          this.ledger.setParked(this.parkedFrom(a, now));
+        // Bill to now only if it may still be running (alive and not stopped, or unknown). Otherwise it stopped right
+        // after lastSeenAt (teardown stamps it when it starts) or, at the latest, when its watchdog fired.
+        const end = alive && !stopped ? now : Math.min(now, a.lastSeenAt + hbWindow);
+        this.ledger.finalizeActive(stopReason, end);
+        if (alive && a.parkIntent && stopped) {
+          this.ledger.setParked(this.parkedFrom(a, end));
         } else {
           this.setSecret(SERVER_KEY_SECRET, null);
           if (alive) await this.destroyInstanceSafe(a.instanceId);
@@ -706,7 +865,7 @@ export class GpuManagerImpl implements GpuManager {
         }
       } else if (!alive) {
         // Gone while the app was closed: the server watchdog (or Vast) destroyed it.
-        const end = Math.min(now, a.lastSeenAt + (vs.heartbeatMinutes + 1) * 60_000);
+        const end = Math.min(now, a.lastSeenAt + hbWindow);
         this.ledger.finalizeActive('server_watchdog', end);
         this.setSecret(SERVER_KEY_SECRET, null);
         this.notify('GPU instance ended', `Instance #${a.instanceId} was destroyed while the app was closed (server watchdog).`, 'info');
@@ -725,26 +884,63 @@ export class GpuManagerImpl implements GpuManager {
     const parked = this.ledger.parked;
     if (parked && instances) {
       const pinst = instances.find((i) => i.id === parked.instanceId);
-      if (!pinst || instanceIsGone(pinst)) {
-        this.ledger.closeParked(now, 'orphan_cleanup');
-      } else if (now - parked.parkedAt > Math.max(0, vs.parkMaxDays) * 86_400_000) {
-        await this.destroyParked('orphan_cleanup');
-        this.notify('Parked GPU destroyed', `Parked instance #${parked.instanceId} was older than ${vs.parkMaxDays} days and was destroyed.`, 'info');
-      }
+      if (!pinst || instanceIsGone(pinst)) this.ledger.closeParked(now, 'orphan_cleanup');
     }
+    // Expiry does not need the listing (a failed listing used to skip it); it also runs periodically (parkTimer).
+    await this.checkParked(true);
 
     if (instances) {
       const pending = new Set(this.ledger.pendingDestroy);
-      const keep = new Set([this.active?.instanceId, this.ledger.parked?.instanceId]);
+      const keep = new Set([this.active?.instanceId, this.ledger.active?.instanceId, this.ledger.parked?.instanceId]);
       this.orphanIds = instances.filter((i) => !keep.has(i.id) && !pending.has(i.id) && !instanceIsGone(i)).map((i) => i.id);
       if (this.orphanIds.length) {
         this.notify('Untracked GPU instances', `${this.orphanIds.length} Vast.ai instance(s) labelled "${APP_LABEL}" are still running. Open the GPU view to destroy them.`, 'warning');
       }
     }
-    void this.refreshCredit();
-    this.creditTimer = setInterval(() => void this.refreshCredit(), this.t.creditRefreshMs);
-    this.creditTimer.unref?.();
     this.emit();
+  }
+
+  private startPeriodicTimers(): void {
+    if (this.disposed) return;
+    if (!this.creditTimer) {
+      void this.refreshCredit();
+      this.creditTimer = setInterval(() => void this.refreshCredit(), this.t.creditRefreshMs);
+      this.creditTimer.unref?.();
+    }
+    if (!this.parkTimer) {
+      this.parkTimer = setInterval(() => void this.checkParked().catch(() => undefined), this.t.parkCheckMs);
+      this.parkTimer.unref?.();
+    }
+  }
+
+  private armReconcileRetry(): void {
+    if (this.reconcileTimer || this.disposed) return;
+    this.reconcileTimer = setInterval(() => {
+      if (this.needsReconcile && !this.reconciling && this.vast.hasKey()) void this.runReconcile(false);
+    }, this.t.reconcileRetryMs);
+    this.reconcileTimer.unref?.();
+  }
+
+  /**
+   * A parked (stopped) instance cannot run its watchdog, so the app expires it: older than parkMaxDays, or the monthly
+   * budget is used up. Runs on start and every parkCheckMs while the app runs (never while a clock-in may resume it).
+   */
+  private async checkParked(fromReconcile = false): Promise<void> {
+    const p = this.ledger.parked;
+    if (!p || this.disposed || this.tearingDown || this.job?.kind === 'clockIn' || (this.reconciling && !fromReconcile)) return;
+    if (!this.vast.hasKey()) return;
+    const vs = this.vastSettings();
+    const now = this.now();
+    const expired = now - p.parkedAt > Math.max(0, vs.parkMaxDays) * 86_400_000;
+    const overBudget = vs.monthlyBudget > 0 && this.monthCost(now) >= vs.monthlyBudget;
+    if (!expired && !overBudget) return;
+    await this.destroyParked(expired ? 'orphan_cleanup' : 'budget');
+    const confirmed = !this.ledger.pendingDestroy.includes(p.instanceId);
+    this.notify(
+      'Parked GPU destroyed',
+      `Parked instance #${p.instanceId} ${expired ? `was older than ${vs.parkMaxDays} days` : 'was still billing storage after the monthly budget was reached'} and was destroyed${confirmed ? '' : ' (not confirmed yet; retrying in the background)'}.`,
+      confirmed ? 'info' : 'warning',
+    );
   }
 
   async dispose(): Promise<void> {
@@ -754,13 +950,18 @@ export class GpuManagerImpl implements GpuManager {
       job.abort.abort();
       await Promise.race([job.promise.catch(() => undefined), new Promise((r) => setTimeout(r, 3000))]);
     }
-    if (this.active) this.ledger.updateActive({ lastSeenAt: this.now(), hostKeys: Object.fromEntries(this.hostKeys) });
+    // The last time it was actually seen alive (not "now": the instance may have been unreachable for a while).
+    if (this.active) this.ledger.updateActive({ lastSeenAt: this.active.lastSeenAt, hostKeys: Object.fromEntries(this.hostKeys) });
     this.stopHeartbeat();
     this.stopBillingTimers();
     if (this.destroyRetryTimer) clearInterval(this.destroyRetryTimer);
     this.destroyRetryTimer = null;
-    if (this.creditTimer) clearInterval(this.creditTimer);
+    for (const t of [this.creditTimer, this.parkTimer, this.reconcileTimer]) if (t) clearInterval(t);
     this.creditTimer = null;
+    this.parkTimer = null;
+    this.reconcileTimer = null;
+    for (const t of this.bgTimers) clearTimeout(t);
+    this.bgTimers.clear();
     await this.closeTunnel();
     this.closeSsh();
     this.resolveWaiters(false);
@@ -900,7 +1101,9 @@ export class GpuManagerImpl implements GpuManager {
       configSh: renderConfigSh(CATALOG, vs.extraLlamaArgs),
     });
     const attemptStart = this.now();
-    let created: { instanceId: number };
+    const tracked = this.ledger.active;
+    if (tracked) throw new Error(`GPU instance #${tracked.instanceId} is still tracked; not renting a second one.`);
+    let created: { instanceId: number; instanceApiKey?: string };
     try {
       created = await this.vast.createInstance(offer.id, {
         image: vs.image,
@@ -913,7 +1116,17 @@ export class GpuManagerImpl implements GpuManager {
       });
     } catch (err) {
       if (err instanceof VastError && err.isAuth) throw err;
-      if (err instanceof VastError && err.ambiguous) await this.reconcileAmbiguousCreate(nonce, attemptStart, offer, profile, model);
+      if (err instanceof VastError && err.ambiguous) {
+        const r = await this.reconcileAmbiguousCreate(nonce, attemptStart, offer, profile, model);
+        if (!r.listed) {
+          // Could not see whether the create went through: renting another offer could bill two machines with one
+          // untracked. Stop here and keep looking for this attempt's instance in the background.
+          this.backgroundReconcile(nonce, attemptStart, offer, profile, model, 0);
+          throw new Error(
+            `Renting offer #${offer.id} failed ambiguously (${errMsg(err)}) and the instance list could not be checked, so no other offer was tried. A background check destroys the instance if it was created; try again in a minute.`,
+          );
+        }
+      }
       this.setMessage(`Offer #${offer.id} could not be rented (${errMsg(err)}); trying the next one…`);
       return { kind: 'create_failed', err };
     }
@@ -939,8 +1152,9 @@ export class GpuManagerImpl implements GpuManager {
       lastSeenAt: now,
       reachedReady: false,
       nonce,
+      ...(created.instanceApiKey ? { instanceApiKey: created.instanceApiKey } : {}),
     };
-    this.ledger.beginSession(this.active);
+    await this.trackNewSession(this.active);
     this.serverApiKey = apiKey;
     this.setSecret(SERVER_KEY_SECRET, apiKey);
     this.hostKeys.clear();
@@ -964,25 +1178,51 @@ export class GpuManagerImpl implements GpuManager {
     }
   }
 
-  /** After a create whose outcome is unknown: destroy any instance that this attempt may have created. */
-  private async reconcileAmbiguousCreate(nonce: string, sinceMs: number, offer: VastRawOffer, profile: GpuProfile, model: CatalogModel): Promise<void> {
+  /** beginSession, but never leave a just-rented/resumed instance untracked if the ledger refuses it. */
+  private async trackNewSession(a: ActiveInstance): Promise<void> {
+    try {
+      this.ledger.beginSession(a);
+    } catch (err) {
+      this.active = null;
+      if (!(await this.destroyInstanceSafe(a.instanceId)) && !this.orphanIds.includes(a.instanceId)) this.orphanIds.push(a.instanceId);
+      throw err;
+    }
+  }
+
+  /**
+   * After a create whose outcome is unknown: destroy any instance that this attempt may have created.
+   * `listed` is false when no listing succeeded (the outcome is still unknown). In the background (the clock-in has
+   * already given up) only the nonce, or the time window while no clock-in is in flight, identifies the instance.
+   */
+  private async reconcileAmbiguousCreate(
+    nonce: string,
+    sinceMs: number,
+    offer: VastRawOffer,
+    profile: GpuProfile,
+    model: CatalogModel,
+    background = false,
+  ): Promise<{ listed: boolean }> {
+    let listed = false;
     for (let i = 0; i < 3; i++) {
       await this.sleep(this.t.pollIntervalMs);
+      if (this.disposed) return { listed };
       let list: VastInstance[];
       try {
         list = await this.vast.listInstances(APP_LABEL);
       } catch {
         continue;
       }
-      const known = new Set<number | undefined>([this.active?.instanceId, this.ledger.parked?.instanceId, ...this.orphanIds]);
+      listed = true;
+      const known = new Set<number | undefined>([this.active?.instanceId, this.ledger.active?.instanceId, this.ledger.parked?.instanceId, ...this.orphanIds]);
+      const timeHeuristic = !background || !this.job;
       const suspects = list.filter((inst) => {
         if (known.has(inst.id) || instanceIsGone(inst)) return false;
         const env = JSON.stringify(inst.extra_env ?? inst.env ?? '');
         if (env.includes(nonce)) return true;
-        return inst.start_date == null || Number(inst.start_date) * 1000 >= sinceMs - 120_000;
+        return timeHeuristic && (inst.start_date == null || Number(inst.start_date) * 1000 >= sinceMs - 120_000);
       });
       for (const s of suspects) {
-        await this.destroyInstanceSafe(s.id);
+        if (!(await this.destroyInstanceSafe(s.id)) && !this.orphanIds.includes(s.id)) this.orphanIds.push(s.id);
         const end = this.now();
         this.ledger.addRecord({
           id: randomUUID(),
@@ -998,8 +1238,27 @@ export class GpuManagerImpl implements GpuManager {
           endReason: 'error',
         });
       }
-      if (suspects.length) return;
+      if (suspects.length) {
+        this.emit();
+        return { listed };
+      }
     }
+    return { listed };
+  }
+
+  /** Keep reconciling an ambiguous create whose instance list could not be read during the clock-in. */
+  private backgroundReconcile(nonce: string, sinceMs: number, offer: VastRawOffer, profile: GpuProfile, model: CatalogModel, attempt: number): void {
+    if (this.disposed || attempt >= 20) return;
+    const timer = setTimeout(() => {
+      this.bgTimers.delete(timer);
+      void this.reconcileAmbiguousCreate(nonce, sinceMs, offer, profile, model, true)
+        .catch(() => ({ listed: false }))
+        .then((r) => {
+          if (!r.listed) this.backgroundReconcile(nonce, sinceMs, offer, profile, model, attempt + 1);
+        });
+    }, this.t.destroyRetryMs);
+    timer.unref?.();
+    this.bgTimers.add(timer);
   }
 
   private async waitRunning(id: number, signal: AbortSignal, timeoutMs: number): Promise<VastInstance> {
@@ -1032,10 +1291,100 @@ export class GpuManagerImpl implements GpuManager {
     this.startHeartbeat();
     if (!this.serverApiKey) await this.recoverServerKey();
     const finalModel = await this.waitServerReady(model, scripts, signal, false);
+    // Never reach 'ready' without a working self-destroy watchdog: it is the only stop if the app dies.
+    await this.ensureWatchdogArmed(signal);
     this.setMessage('Opening the local tunnel…');
     await this.openTunnel();
     await this.healthCheck(signal);
     this.markReady(finalModel);
+  }
+
+  /** 'armed' when the watchdog process runs and logged "armed id=<this instance> key=set"; 'unknown' if exec failed. */
+  private async watchdogState(): Promise<'armed' | 'unarmed' | 'unknown'> {
+    const a = this.active;
+    if (!a || !this.ssh?.isConnected()) return 'unknown';
+    try {
+      const r = await this.ssh.exec(WD_CHECK_CMD, { timeoutMs: 15_000 });
+      return this.parseWatchdog(r.stdout, a.instanceId);
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  private parseWatchdog(out: string, instanceId: number): 'armed' | 'unarmed' {
+    return out.includes(`armed id=${instanceId} key=set`) ? 'armed' : 'unarmed';
+  }
+
+  /** Give the watchdog the instance id + key (wd.env, sourced by watchdog.sh) and restart it. */
+  private async repairWatchdog(): Promise<void> {
+    const a = this.active;
+    const ssh = this.ssh;
+    if (!a || !ssh?.isConnected() || this.wdRepairing) return;
+    this.wdRepairing = true;
+    this.wdRepairs++;
+    try {
+      const lines = [`export CONTAINER_ID=${shQuote(String(a.instanceId))}`];
+      if (a.instanceApiKey) lines.push(`export CONTAINER_API_KEY=${shQuote(a.instanceApiKey)}`);
+      const r = await ssh.exec('mkdir -p /root/oc && base64 -d > /root/oc/wd.env.tmp && mv -f /root/oc/wd.env.tmp /root/oc/wd.env', {
+        stdin: `${Buffer.from(`${lines.join('\n')}\n`, 'utf8').toString('base64')}\n`,
+        timeoutMs: 30_000,
+      });
+      if (r.code !== 0) throw new Error(r.stderr.trim() || `exit ${r.code}`);
+      await ssh.exec(WD_RESTART_CMD, { timeoutMs: 30_000 });
+    } catch {
+      /* the next check decides */
+    } finally {
+      this.wdRepairing = false;
+    }
+  }
+
+  private async ensureWatchdogArmed(signal: AbortSignal): Promise<void> {
+    const deadline = this.now() + this.t.watchdogArmTimeoutMs;
+    let repairs = 0;
+    for (;;) {
+      this.checkAbort(signal);
+      const st = await this.watchdogState();
+      if (st === 'armed') {
+        this.wdFailures = 0;
+        return;
+      }
+      if (st === 'unarmed' && repairs < 2) {
+        this.setMessage('The server self-destroy watchdog is not armed; repairing it…');
+        repairs++;
+        await this.repairWatchdog();
+      }
+      if (this.now() >= deadline) {
+        throw new Error(
+          `The server-side self-destroy watchdog could not be armed on instance #${this.active?.instanceId ?? '?'}${this.active?.instanceApiKey ? '' : ' (Vast.ai returned no instance API key)'}. Without it a crash of this app could leave the GPU billing, so the instance is destroyed.`,
+        );
+      }
+      await this.sleep(Math.min(1000, this.t.statusPollMs), signal);
+    }
+  }
+
+  /** Heartbeat-side watchdog supervision: repair a dead/unarmed watchdog; after 'ready', give up and destroy. */
+  private onWatchdogCheck(state: 'armed' | 'unarmed'): void {
+    if (!this.active || this.tearingDown || this.disposed) return;
+    if (state === 'armed') {
+      this.wdFailures = 0;
+      return;
+    }
+    if (this.job) {
+      // Still booting: onstart may not have run yet. Repair after a grace; the pre-'ready' check decides.
+      if (this.now() - this.connectedAt > this.t.watchdogGraceMs && this.wdRepairs < 2) void this.repairWatchdog();
+      return;
+    }
+    this.wdFailures++;
+    if (this.wdFailures <= 2) {
+      void this.repairWatchdog();
+      return;
+    }
+    if (this.wdFailures >= 4) {
+      this.failedStep = undefined;
+      void this.teardown('error', {
+        error: `The server-side self-destroy watchdog on instance #${this.active.instanceId} stopped and could not be restarted; the instance was destroyed so a crash of this app cannot leave it billing.`,
+      }).catch(() => undefined);
+    }
   }
 
   private async adopt(id: number, known: VastInstance | null, signal: AbortSignal): Promise<void> {
@@ -1089,6 +1438,9 @@ export class GpuManagerImpl implements GpuManager {
           const t = await conn.connect(targets, signal);
           this.closeSsh();
           this.ssh = conn;
+          this.connectedAt = this.now();
+          this.wdFailures = 0;
+          this.wdRepairs = 0;
           conn.onLost = (err) => this.onSshLost(err);
           if (this.active) this.ledger.updateActive({ hostKeys: Object.fromEntries(this.hostKeys), lastSeenAt: this.now() });
           this.setMessage(`SSH connected (${t.kind} ${t.host}:${t.port}).`);
@@ -1131,10 +1483,8 @@ export class GpuManagerImpl implements GpuManager {
         try {
           const inst = await this.vast.getInstance(a.instanceId);
           if (inst === null || (inst && instanceIsGone(inst))) {
-            await this.handleInstanceGone();
-            return;
-          }
-          if (inst) targets = sshTargets(inst);
+            if (await this.handleInstanceGone()) return;
+          } else if (inst) targets = sshTargets(inst);
         } catch {
           /* API unreachable: still try the last known target */
         }
@@ -1375,15 +1725,20 @@ export class GpuManagerImpl implements GpuManager {
       return;
     }
     try {
-      const r = await ssh.exec(`touch /root/oc/heartbeat && echo ${HB_MARK}; cat /root/oc/status.json 2>/dev/null`, { timeoutMs: 20_000 });
+      const r = await ssh.exec(`touch /root/oc/heartbeat && echo ${HB_MARK}; cat /root/oc/status.json 2>/dev/null; echo ${WD_MARK}; ${WD_CHECK_CMD}`, {
+        timeoutMs: 20_000,
+      });
       if (!r.stdout.startsWith(HB_MARK)) throw new Error(r.stderr || `heartbeat touch failed (exit ${r.code})`);
       this.hbFailures = 0;
       this.stats.heartbeats++;
       if (this.active) {
         this.active.lastSeenAt = this.now();
       }
-      const st = parseServerStatus(r.stdout.slice(HB_MARK.length));
+      const rest = r.stdout.slice(HB_MARK.length);
+      const wdAt = rest.lastIndexOf(`${WD_MARK}\n`);
+      const st = parseServerStatus(wdAt >= 0 ? rest.slice(0, wdAt) : rest);
       if (st && !this.job) this.onRuntimeStatus(st);
+      if (wdAt >= 0 && this.active) this.onWatchdogCheck(this.parseWatchdog(rest.slice(wdAt), this.active.instanceId));
     } catch {
       this.hbFailures++;
       this.stats.heartbeatFailures++;
@@ -1422,36 +1777,77 @@ export class GpuManagerImpl implements GpuManager {
     }
   }
 
-  /** The instance vanished under us (server watchdog / Vast). Close the books; nothing left to destroy. */
-  private async handleInstanceGone(): Promise<void> {
+  /**
+   * One GET said the instance is gone (server watchdog / Vast). A single null/404 is not trusted: confirm it with a
+   * second GET a few seconds later, then still send a DELETE (a cheap not_found when it really is gone; if it is in
+   * fact alive, e.g. the API answered for another account, this stops it or leaves it in pendingDestroy) and only
+   * then close the books. Returns true when the instance was handled (state cleared), false to keep going.
+   */
+  private handleInstanceGone(): Promise<boolean> {
+    if (this.goneCheck) return this.goneCheck;
+    const p = this.confirmGoneAndClose().finally(() => {
+      if (this.goneCheck === p) this.goneCheck = null;
+    });
+    this.goneCheck = p;
+    return p;
+  }
+
+  private async confirmGoneAndClose(): Promise<boolean> {
     const a = this.active;
-    if (!a || this.tearingDown) return;
-    const job = this.job;
-    if (job) job.abort.abort();
-    this.stopHeartbeat();
-    await this.closeTunnel();
-    this.closeSsh();
-    const idle = /no inference/.test(this.lastWatchdogMsg ?? '');
-    // Upper bound for when it died: the server watchdog fires at most heartbeatMinutes after the last heartbeat we saw
-    // (e.g. the PC slept), so do not bill the time after that.
-    const hbWindow = (this.vastSettings().heartbeatMinutes + 1) * 60_000;
-    this.ledger.finalizeActive(idle ? 'idle' : 'server_watchdog', Math.min(this.now(), a.lastSeenAt + hbWindow));
-    this.setSecret(SERVER_KEY_SECRET, null);
-    this.serverApiKey = null;
-    this.active = null;
-    this.stopBillingTimers();
-    this.endpointUrl = undefined;
-    this.failedStep = undefined;
-    if (idle) {
-      this.lastError = undefined;
-      this.setPhase('off', `Clocked out: the GPU was idle (${this.lastWatchdogMsg}).`);
-      this.notify('GPU clocked out (idle)', `Instance #${a.instanceId} destroyed itself after no inference. Billing has stopped.`, 'info');
-    } else {
-      this.lastError = `GPU instance #${a.instanceId} is gone (destroyed by its server-side watchdog or by Vast.ai). Billing has stopped.`;
-      this.setPhase('error', this.lastError);
-      this.notify('GPU instance gone', this.lastError, 'warning');
+    if (!a || this.tearingDown) return false;
+    await this.sleep(this.t.goneConfirmMs);
+    if (this.active !== a) return true;
+    if (this.tearingDown || this.disposed) return false;
+    try {
+      const again = await this.vast.getInstance(a.instanceId);
+      if (again !== null && !instanceIsGone(again)) return false;
+    } catch {
+      return false; // API unreachable: unknown, keep checking on the next heartbeat
     }
-    this.lastWatchdogMsg = undefined;
+    if (this.active !== a) return true;
+    if (this.tearingDown || this.disposed) return false;
+    const p = (async () => {
+      this.job?.abort.abort();
+      this.stopHeartbeat();
+      await this.closeTunnel();
+      this.closeSsh();
+      const idle = /no inference/.test(this.lastWatchdogMsg ?? '');
+      const destroyed = await this.destroyInstanceSafe(a.instanceId);
+      // Confirmed gone: it died at most heartbeatMinutes after the last heartbeat we saw (e.g. the PC slept), so do not
+      // bill the time after that. Not confirmed: it may still be running, so bill to now.
+      const hbWindow = (this.vastSettings().heartbeatMinutes + 1) * 60_000;
+      const end = destroyed ? Math.min(this.now(), a.lastSeenAt + hbWindow) : this.now();
+      this.ledger.finalizeActive(idle ? 'idle' : 'server_watchdog', end);
+      this.setSecret(SERVER_KEY_SECRET, null);
+      this.serverApiKey = null;
+      this.active = null;
+      this.stopBillingTimers();
+      this.endpointUrl = undefined;
+      this.failedStep = undefined;
+      this.autoStopping = false;
+      if (!destroyed) {
+        if (!this.orphanIds.includes(a.instanceId)) this.orphanIds.push(a.instanceId);
+        this.lastError = `GPU instance #${a.instanceId} stopped answering and Vast.ai reports it gone, but its destroy could not be confirmed. Retrying in the background; please check console.vast.ai.`;
+        this.setPhase('error', this.lastError);
+        this.notify('GPU destroy not confirmed', this.lastError, 'error');
+      } else if (idle) {
+        this.lastError = undefined;
+        this.setPhase('off', `Clocked out: the GPU was idle (${this.lastWatchdogMsg}).`);
+        this.notify('GPU clocked out (idle)', `Instance #${a.instanceId} destroyed itself after no inference. Billing has stopped.`, 'info');
+      } else {
+        this.lastError = `GPU instance #${a.instanceId} is gone (destroyed by its server-side watchdog or by Vast.ai). Billing has stopped.`;
+        this.setPhase('error', this.lastError);
+        this.notify('GPU instance gone', this.lastError, 'warning');
+      }
+      this.lastWatchdogMsg = undefined;
+    })();
+    this.tearingDown = p;
+    try {
+      await p;
+    } finally {
+      if (this.tearingDown === p) this.tearingDown = null;
+    }
+    return true;
   }
 
   private startBillingTimers(): void {
@@ -1494,71 +1890,79 @@ export class GpuManagerImpl implements GpuManager {
 
   private async teardown(reason: EndReason, opts: { error?: string } = {}): Promise<void> {
     if (this.tearingDown) return this.tearingDown;
-    const p = (async () => {
-      const a = this.active;
-      this.setPhase('stopping', a ? `Stopping GPU instance #${a.instanceId}…` : 'Stopping…');
-      this.stopHeartbeat();
-      if (opts.error && this.ssh?.isConnected()) {
-        try {
-          const r = await this.ssh.exec('tail -n 200 /root/oc/server.log /root/oc/watchdog.log 2>/dev/null', { timeoutMs: 5000 });
-          this.lastServerLog = r.stdout;
-        } catch {
-          /* ignore */
-        }
-      }
-      await this.closeTunnel();
-      this.closeSsh();
-      let destroyFailed: number | null = null;
-      let parked = false;
-      if (a) {
-        const vs = this.vastSettings();
-        const canPark = (reason === 'clock_out' || reason === 'app_quit') && vs.clockOutMode === 'park' && a.reachedReady && !opts.error;
-        // Persist the intent first: if the process dies mid-teardown, start() completes it instead of adopting.
-        this.ledger.updateActive({ stopping: reason, parkIntent: canPark, lastSeenAt: this.now() });
-        if (canPark) parked = await this.parkActive(a);
-        if (!parked) {
-          const ok = await this.destroyInstanceSafe(a.instanceId);
-          if (!ok) destroyFailed = a.instanceId;
-        }
-        this.ledger.finalizeActive(reason, this.now());
-        if (!parked) this.setSecret(SERVER_KEY_SECRET, null);
-        this.serverApiKey = null;
-        this.active = null;
-      }
-      this.stopBillingTimers();
-      this.endpointUrl = undefined;
-      this.autoStopping = false;
-      if (destroyFailed !== null) {
-        if (!this.orphanIds.includes(destroyFailed)) this.orphanIds.push(destroyFailed);
-        this.lastError = `Could not confirm that instance #${destroyFailed} was destroyed. Retrying in the background; please check console.vast.ai.${opts.error ? ` (Original error: ${opts.error})` : ''}`;
-        this.setPhase('error', this.lastError);
-        this.notify('GPU destroy not confirmed', this.lastError, 'error');
-      } else if (opts.error) {
-        this.lastError = opts.error;
-        this.setPhase('error', `Clock-in failed: ${opts.error}`);
-        this.notify('GPU error', `${opts.error}${a ? ` Instance #${a.instanceId} was destroyed.` : ''}`, 'error');
-      } else {
-        this.lastError = undefined;
-        this.failedStep = undefined;
-        const msg = parked
-          ? `Clocked out; instance parked (storage ~$${(this.ledger.parked?.storageCostPerHour ?? 0).toFixed(3)}/h).`
-          : reason === 'budget'
-            ? 'Clocked out: monthly budget reached.'
-            : reason === 'max_hours'
-              ? 'Clocked out: maximum session length reached.'
-              : reason === 'idle'
-                ? `Clocked out: the GPU was idle (${this.lastWatchdogMsg ?? 'idle watchdog'}).`
-                : 'Clocked out.';
-        this.lastWatchdogMsg = undefined;
-        this.setPhase('off', msg);
-        if (a && reason !== 'app_quit') this.notify('GPU clocked out', msg, 'info');
-      }
-    })();
+    const p = this.teardownBody(reason, opts).catch((err: unknown) => {
+      // Never stay stuck in 'stopping': whatever failed, report it (the destroy itself is retried via pendingDestroy).
+      if (!this.active) this.stopBillingTimers();
+      this.lastError = `Clock-out did not finish cleanly: ${errMsg(err)}. Please check console.vast.ai.`;
+      this.setPhase('error', this.lastError);
+      this.notify('GPU clock-out problem', this.lastError, 'error');
+    });
     this.tearingDown = p;
     try {
       await p;
     } finally {
-      this.tearingDown = null;
+      if (this.tearingDown === p) this.tearingDown = null;
+    }
+  }
+
+  private async teardownBody(reason: EndReason, opts: { error?: string }): Promise<void> {
+    const a = this.active;
+    this.setPhase('stopping', a ? `Stopping GPU instance #${a.instanceId}…` : 'Stopping…');
+    this.stopHeartbeat();
+    if (opts.error && this.ssh?.isConnected()) {
+      try {
+        const r = await this.ssh.exec('tail -n 200 /root/oc/server.log /root/oc/watchdog.log 2>/dev/null', { timeoutMs: 5000 });
+        this.lastServerLog = r.stdout;
+      } catch {
+        /* ignore */
+      }
+    }
+    await this.closeTunnel();
+    this.closeSsh();
+    let destroyFailed: number | null = null;
+    let parked = false;
+    if (a) {
+      const vs = this.vastSettings();
+      const canPark = (reason === 'clock_out' || reason === 'app_quit') && vs.clockOutMode === 'park' && a.reachedReady && !opts.error;
+      // Persist the intent first: if the process dies mid-teardown, start() completes it instead of adopting.
+      this.ledger.updateActive({ stopping: reason, parkIntent: canPark, lastSeenAt: this.now() });
+      if (canPark) parked = await this.parkActive(a);
+      if (!parked) {
+        const ok = await this.destroyInstanceSafe(a.instanceId);
+        if (!ok) destroyFailed = a.instanceId;
+      }
+      this.ledger.finalizeActive(reason, this.now());
+      if (!parked) this.setSecret(SERVER_KEY_SECRET, null);
+      this.serverApiKey = null;
+      this.active = null;
+    }
+    this.stopBillingTimers();
+    this.endpointUrl = undefined;
+    this.autoStopping = false;
+    if (destroyFailed !== null) {
+      if (!this.orphanIds.includes(destroyFailed)) this.orphanIds.push(destroyFailed);
+      this.lastError = `Could not confirm that instance #${destroyFailed} was destroyed. Retrying in the background; please check console.vast.ai.${opts.error ? ` (Original error: ${opts.error})` : ''}`;
+      this.setPhase('error', this.lastError);
+      this.notify('GPU destroy not confirmed', this.lastError, 'error');
+    } else if (opts.error) {
+      this.lastError = opts.error;
+      this.setPhase('error', `Clock-in failed: ${opts.error}`);
+      this.notify('GPU error', `${opts.error}${a ? ` Instance #${a.instanceId} was destroyed.` : ''}`, 'error');
+    } else {
+      this.lastError = undefined;
+      this.failedStep = undefined;
+      const msg = parked
+        ? `Clocked out; instance parked (storage ~$${(this.ledger.parked?.storageCostPerHour ?? 0).toFixed(3)}/h).`
+        : reason === 'budget'
+          ? 'Clocked out: monthly budget reached.'
+          : reason === 'max_hours'
+            ? 'Clocked out: maximum session length reached.'
+            : reason === 'idle'
+              ? `Clocked out: the GPU was idle (${this.lastWatchdogMsg ?? 'idle watchdog'}).`
+              : 'Clocked out.';
+      this.lastWatchdogMsg = undefined;
+      this.setPhase('off', msg);
+      if (a && reason !== 'app_quit') this.notify('GPU clocked out', msg, 'info');
     }
   }
 
@@ -1580,13 +1984,17 @@ export class GpuManagerImpl implements GpuManager {
 
   /** Destroy + verify; on failure remember it in pendingDestroy and keep retrying in the background. */
   private async destroyInstanceSafe(id: number): Promise<boolean> {
-    // Recorded before the DELETE goes out, so an app exit mid-destroy is finished by the next start().
+    // Recorded before the DELETE goes out, so an app exit mid-destroy is finished by the next start(). The ledger never
+    // throws (a failed write keeps it in memory), so the DELETE always goes out.
     this.ledger.addPendingDestroy(id);
+    this.destroying.add(id);
     let ok = false;
     try {
       ok = await this.vast.destroyInstanceVerified(id, { attempts: this.t.destroyAttempts, verifyPolls: this.t.destroyVerifyPolls });
     } catch {
       ok = false;
+    } finally {
+      this.destroying.delete(id);
     }
     if (ok) {
       this.ledger.removePendingDestroy(id);
@@ -1604,7 +2012,8 @@ export class GpuManagerImpl implements GpuManager {
           if (await this.vast.destroyInstanceVerified(id, { attempts: 1, verifyPolls: 2 })) {
             this.ledger.removePendingDestroy(id);
             this.orphanIds = this.orphanIds.filter((x) => x !== id);
-            if (this.phase === 'error' && this.lastError?.includes(`#${id} was destroyed`)) {
+            const unconfirmedErr = this.lastError?.startsWith('Could not confirm that instance') || this.lastError?.includes(`#${id} stopped answering`);
+            if (this.phase === 'error' && !this.active && !this.job && unconfirmedErr && this.ledger.pendingDestroy.length === 0) {
               this.lastError = undefined;
               this.setPhase('off', `Instance #${id} destroyed (confirmed).`);
             } else this.emit();
@@ -1660,6 +2069,7 @@ export class GpuManagerImpl implements GpuManager {
       diskGb: a.diskGb,
       location: a.location,
       hostKeys: Object.fromEntries(this.hostKeys.size ? this.hostKeys : Object.entries(a.hostKeys ?? {})),
+      ...(a.instanceApiKey ? { instanceApiKey: a.instanceApiKey } : {}),
     };
   }
 
@@ -1704,8 +2114,9 @@ export class GpuManagerImpl implements GpuManager {
       lastSeenAt: now,
       reachedReady: false,
       nonce: 'parked',
+      ...(p.instanceApiKey ? { instanceApiKey: p.instanceApiKey } : {}),
     };
-    this.ledger.beginSession(this.active);
+    await this.trackNewSession(this.active);
     this.hostKeys.clear();
     for (const [k, v] of Object.entries(p.hostKeys ?? {})) this.hostKeys.set(k, v);
     this.serverApiKey = this.secret(SERVER_KEY_SECRET);

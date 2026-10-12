@@ -1,6 +1,6 @@
 // Chat header: editable title, cwd chip (folder picker → new session in that folder), git branch, context meter,
 // right-panel toggle. Owner: ui-chat.
-import { Bot, ChevronRight, Folder, GitBranch, PanelRightClose, PanelRightOpen, Pencil } from 'lucide-react';
+import { Bot, ChevronRight, Folder, GitBranch, PanelRightClose, PanelRightOpen, Pencil, ShieldOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { SessionSummary } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -126,16 +126,17 @@ export function ContextMeter({ session }: { session: SessionSummary }) {
   );
 }
 
-async function changeFolder(session: SessionSummary, hasMessages: boolean): Promise<void> {
+async function changeFolder(session: SessionSummary, disposable: boolean): Promise<void> {
   const picked = await pickFolder(session.cwd);
   if (!picked || picked.replace(/[\\/]+$/, '').toLowerCase() === session.cwd.replace(/[\\/]+$/, '').toLowerCase()) return;
   // Sessions cannot move between folders (tools, memory and checkpoints are rooted at cwd), so a new folder means a
-  // new session with the same model and mode. An empty session is replaced instead of left behind.
+  // new session with the same model and mode. A provably empty session is replaced instead of left behind (see
+  // isDisposableSession: an unloaded transcript is never treated as empty).
   const next = await createSession({ cwd: picked, model: session.model, permissionMode: session.permissionMode });
-  if (next && !hasMessages) void deleteSession(session.id);
+  if (next && disposable) void deleteSession(session.id);
 }
 
-export function ChatHeader({ session, hasMessages }: { session: SessionSummary; hasMessages: boolean }) {
+export function ChatHeader({ session, disposable }: { session: SessionSummary; disposable: boolean }) {
   const branch = useGitBranch(session.cwd);
   const rightOpen = useUi((s) => s.rightPanelOpen);
   const parent = useSessionSummary(session.parentSessionId);
@@ -166,11 +167,20 @@ export function ChatHeader({ session, hasMessages }: { session: SessionSummary; 
           Scheduled
         </Badge>
       ) : null}
+      {session.permissionMode === 'bypassPermissions' ? (
+        <Tooltip content="Bypass permissions: every tool runs without asking. Shift+Tab or the mode menu to change.">
+          <span className="flex shrink-0" data-testid="bypass-badge">
+            <Badge tone="danger" icon={ShieldOff}>
+              Bypass
+            </Badge>
+          </span>
+        </Tooltip>
+      ) : null}
       <span className="mx-1 h-4 w-px shrink-0 bg-ob-border" aria-hidden />
       <Tooltip content={`${session.cwd} — click to start a session in another folder`}>
         <button
           type="button"
-          onClick={() => void changeFolder(session, hasMessages)}
+          onClick={() => void changeFolder(session, disposable)}
           disabled={isSub}
           data-testid="cwd-chip"
           className={cn(

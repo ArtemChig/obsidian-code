@@ -8,7 +8,7 @@ import { createEventBus } from '@core/server/bus';
 import { createRpcHandlers, startServer, type ServerHandle } from '@core/server/index';
 import { clearFileIndexCache, fuzzyScore } from '@core/server/files';
 import type { CoreEventMessage } from '@shared/protocol';
-import { makeCtx, tempDir } from './helpers';
+import { makeCtx, stubGpu, tempDir } from './helpers';
 
 interface Client {
   ws: WebSocket;
@@ -266,8 +266,24 @@ describe('rpc table, bus and activity', () => {
     const methods = Object.keys(handlers);
     expect(methods).toContain('system.info');
     expect(methods).toContain('secrets.has');
-    expect(methods.length).toBe(49);
+    expect(methods.length).toBe(50);
     for (const m of methods) expect(typeof handlers[m as keyof typeof handlers]).toBe('function');
+  });
+
+  it('refuses to remove the Vast.ai key while an instance is rented or parked (the app could not stop billing)', async () => {
+    const gpu = stubGpu({ phase: 'ready', instanceId: 42 });
+    const ctx = makeCtx(tmp.dir, { gpu });
+    const handlers = createRpcHandlers(ctx);
+    await handlers['secrets.set']({ name: 'vast.apiKey', value: 'k-1' });
+    await expect(async () => handlers['secrets.set']({ name: 'vast.apiKey', value: null })).rejects.toThrow(/Clock out first/);
+    expect(ctx.secrets.has('vast.apiKey')).toBe(true);
+    // Replacing the key stays possible (e.g. the old one was revoked); the UI asks for confirmation.
+    await handlers['secrets.set']({ name: 'vast.apiKey', value: 'k-2' });
+    gpu.current = { ...gpu.current, phase: 'off', instanceId: undefined, parked: { instanceId: 9, profileId: 'light', modelId: 'm', gpuName: 'RTX 5090', storageCostPerHour: 0.01, parkedAt: 0 } };
+    await expect(async () => handlers['secrets.set']({ name: 'vast.apiKey', value: null })).rejects.toThrow(/Clock out first/);
+    gpu.current = { ...gpu.current, parked: undefined };
+    await handlers['secrets.set']({ name: 'vast.apiKey', value: null });
+    expect(ctx.secrets.has('vast.apiKey')).toBe(false);
   });
 
   it('fuzzy score prefers basename matches', () => {

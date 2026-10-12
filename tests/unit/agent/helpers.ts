@@ -43,7 +43,7 @@ export function defaultSettings(): Settings {
       profiles: [], monthlyBudget: 100, idleMinutes: 15, heartbeatMinutes: 10, maxSessionHours: 4, clockOutOnQuit: true,
       clockOutMode: 'destroy', parkMaxDays: 3, image: '', localPort: 18080, extraLlamaArgs: [],
     },
-    search: { provider: 'duckduckgo' }, permissions: { allow: [], deny: [] }, hooks: {}, mcpServers: {}, importClaudeConfig: false,
+    search: { provider: 'duckduckgo' }, permissions: { allow: [], deny: [] }, trustedFolders: [], projectAllow: {}, hooks: {}, mcpServers: {}, importClaudeConfig: false,
     shell: 'auto', maxToolOutputChars: 30000, autoCompactPercent: 80, notifications: false, launchAtLogin: false,
   };
 }
@@ -134,7 +134,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     slashCommands: async () => [{ name: 'greet', description: 'Say hello', source: 'project' }],
     expandCommand: async (_cwd, name, args) => (name === 'greet' ? `Say hello to ${args || 'everyone'}` : null),
     mcpTools: () => [],
-    runHooks: async (event, payload, c) => (hooks.fn ? hooks.fn(event, payload, c) : { block: false }),
+    runHooks: async (event, payload, c, signal) => (hooks.fn ? hooks.fn(event, payload, c, signal) : { block: false }),
     ...opts.ext,
   };
 

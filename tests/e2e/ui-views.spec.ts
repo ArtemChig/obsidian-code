@@ -1,5 +1,5 @@
 // ui-views E2E (owner: ui-views). Drives GPU, Activity, Scheduled and Settings in DEMO MODE against the Vite dev server:
-//   npx vite --config vite.web.config.ts --port 5175 --strictPort
+//   npx vite --config vite.web.config.ts --port 5173 --strictPort     (or 5174/5175, or set OBSIDIAN_WEB_URL)
 //   npx playwright test tests/e2e/ui-views.spec.ts
 // Saves design-review screenshots to tests/e2e/screenshots/views-*.png.
 import { join } from 'node:path';
@@ -11,16 +11,26 @@ declare const window: any;
 declare const document: any;
 declare const getComputedStyle: any;
 
-const BASE = process.env.OBSIDIAN_WEB_URL ?? 'http://localhost:5175';
+const CANDIDATES = [process.env.OBSIDIAN_WEB_URL, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'].filter(
+  Boolean,
+) as string[];
+let BASE = CANDIDATES[0];
 const SHOTS = join(__dirname, 'screenshots');
 
+/** Picks the first reachable dev server (an explicit OBSIDIAN_WEB_URL wins). */
 async function serverUp(): Promise<boolean> {
-  try {
-    const r = await fetch(BASE, { signal: AbortSignal.timeout(3000) });
-    return r.ok;
-  } catch {
-    return false;
+  for (const url of CANDIDATES) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        BASE = url;
+        return true;
+      }
+    } catch {
+      /* try the next one */
+    }
   }
+  return false;
 }
 
 interface Demo {
@@ -81,7 +91,7 @@ async function settle(page: Page, ms = 450) {
 
 test.describe('ui-views (demo mode)', () => {
   test.beforeAll(async () => {
-    test.skip(!(await serverUp()), `Vite dev server not reachable at ${BASE}`);
+    test.skip(!(await serverUp()), `Vite dev server not reachable at ${CANDIDATES.join(', ')}`);
   });
 
   // ───────────────────────────── GPU ─────────────────────────────
@@ -231,6 +241,9 @@ test.describe('ui-views (demo mode)', () => {
     await page.screenshot({ path: join(SHOTS, 'views-gpu-orphans.png') });
 
     await page.getByTestId('gpu-orphan-destroy').click();
+    // destroying untracked instances asks first (they may belong to another copy of the app)
+    await expect(page.getByRole('dialog')).toContainText('#26500123, #26500456');
+    await page.getByRole('dialog').getByRole('button', { name: 'Destroy instances' }).click();
     await expect(page.getByTestId('gpu-orphan-banner')).toHaveCount(0);
 
     // destroy the parked instance (confirm first)
@@ -456,7 +469,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(auto).toBeEnabled();
     await auto.click();
     await expect(page.getByTestId('schedule-cost-warning')).toContainText('spends real money');
-    await expect(page.getByTestId('schedule-cost-warning')).toContainText('$2.50/h');
+    await expect(page.getByTestId('schedule-cost-warning')).toContainText('$2.20/h'); // the Standard profile's maxPricePerHour (profiles.ts / demo-data.ts)
     await dialog.getByRole('combobox', { name: 'Permission mode' }).click();
     await page.getByRole('option', { name: /Bypass permissions/ }).click();
     await expect(page.getByTestId('schedule-mode-note')).toContainText('without asking');
@@ -574,6 +587,8 @@ test.describe('ui-views (demo mode)', () => {
     await expect(key).toHaveAttribute('type', 'password');
     await key.fill('vast-key-xyz');
     await page.getByTestId('secret-vast-save').click();
+    // a GPU is rented in the demo: replacing the key asks first (it must be the same account)
+    await page.getByRole('dialog').getByRole('button', { name: 'Replace key' }).click();
     await expect(key).toHaveValue('');
     expect(await page.content()).not.toContain('vast-key-xyz');
     await expect(page.getByTestId('vast-test-result')).toHaveAttribute('data-ok', 'true');
@@ -581,8 +596,15 @@ test.describe('ui-views (demo mode)', () => {
     await page.getByTestId('vast-test-key').click();
     await expect(page.getByTestId('vast-test-result')).toContainText('Key OK');
 
-    // removing the key flips the presence indicator and disables the test
+    // while the instance is rented the key cannot be removed (the app could no longer stop the billing)
+    await expect(page.getByTestId('secret-vast-remove')).toBeDisabled();
+    await expect(page.getByTestId('secret-vast-locked')).toBeVisible();
+    await page.evaluate(() => (window as unknown as { __obsidianDemo: { request(m: string, p: object): Promise<unknown> } }).__obsidianDemo.request('gpu.clockOut', {}));
+    await expect(page.getByTestId('secret-vast-remove')).toBeEnabled({ timeout: 10_000 });
+
+    // removing the key (confirmed) flips the presence indicator and disables the test
     await page.getByTestId('secret-vast-remove').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove key' }).click();
     await expect(page.getByTestId('secret-vast').getByTestId('secret-missing')).toBeVisible();
     await expect(page.getByTestId('vast-test-key')).toBeDisabled();
     await page.getByTestId('secret-vast-input').fill('another-key');

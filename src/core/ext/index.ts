@@ -53,6 +53,8 @@ export function createExtensions(ctx: CoreContext, opts: ExtensionsOptions = {})
     log,
     connectTimeoutMs: opts.mcpConnectTimeoutMs,
     toolTimeoutMs: opts.mcpToolTimeoutMs,
+    reconnectBaseMs: opts.mcpReconnectBaseMs,
+    stableMs: opts.mcpStableMs,
   });
 
   let started = false;
@@ -84,7 +86,7 @@ export function createExtensions(ctx: CoreContext, opts: ExtensionsOptions = {})
     slashCommands: (cwd) => commands.slashCommands(cwd),
     expandCommand: (cwd, name, args) => commands.expandCommand(cwd, name, args),
     mcpTools: () => mcp.tools(),
-    runHooks: (event, payload, cwd) => hooks.runHooks(event, payload, cwd),
+    runHooks: (event, payload, cwd, signal) => hooks.runHooks(event, payload, cwd, signal),
     mcpStatus: () => mcp.status(),
     reconnectMcp: (name) => mcp.reconnect(name),
 

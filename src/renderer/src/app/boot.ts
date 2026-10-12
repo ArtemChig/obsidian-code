@@ -1,6 +1,7 @@
 // App boot: pick the transport (core WebSocket, demo, or none) and start syncing. Owner: ui-foundation.
-import { isDemoRequested, resolveCoreUrl } from '@renderer/lib/bridge';
+import { isDemoRequested, onOpenSessionRequest, resolveCoreUrl } from '@renderer/lib/bridge';
 import { RpcClient, rpc } from '@renderer/lib/rpc';
+import { openSession } from '@renderer/state/actions';
 import { useConnection } from '@renderer/state/connection';
 import { useSessions } from '@renderer/state/sessions';
 import { bindEvents } from '@renderer/state/sync';
@@ -14,6 +15,8 @@ export async function boot(): Promise<void> {
   if (booted) return;
   booted = true;
   bindEvents();
+  // A clicked desktop notification ("Permission needed", "Task finished") opens its session.
+  onOpenSessionRequest((id) => openSession(id));
 
   if (isDemoRequested()) {
     const demo = await import('@renderer/lib/demo');

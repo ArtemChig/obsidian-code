@@ -422,6 +422,12 @@ export class DemoTransport implements RpcTransport {
       this.queues.delete(p.sessionId);
       return { ok: true as const };
     },
+    'chat.dequeue': (p) => {
+      const q = this.queues.get(p.sessionId) ?? [];
+      const removed = q.filter((x) => !p.messageId || x.messageId === p.messageId);
+      this.queues.set(p.sessionId, q.filter((x) => !removed.includes(x)));
+      return { removed: removed.map((x) => ({ messageId: x.messageId, text: x.text })) };
+    },
     'chat.respondPermission': (p) => {
       const req = this.data.pending.permissions.find((r) => r.requestId === p.requestId);
       this.data.pending.permissions = this.data.pending.permissions.filter((r) => r.requestId !== p.requestId);

@@ -1,16 +1,15 @@
 // The hero card of the GPU view: clock-in summary when off; steps, progress, timer and live cost when clocked in. Owner: ui-views.
 import { Check, CircleX, Copy, Power, TriangleAlert } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { CatalogModel, GpuProfile, GpuStatus } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
-import { ConfirmDialog } from '@renderer/components/ui/dialog';
 import { ProgressBar, Spinner, StatusDot } from '@renderer/components/ui/feedback';
 import { LiveDuration } from '@renderer/components/ui/time';
 import { Tooltip } from '@renderer/components/ui/tooltip';
 import { GPU_PHASE_LABEL, gpuTone, useLiveGpuCost } from '@renderer/app/GpuWidget';
 import { cn } from '@renderer/lib/cn';
-import { formatMoney, formatPerHour, pluralize } from '@renderer/lib/format';
+import { formatMoney, formatPerHour } from '@renderer/lib/format';
 import { toast } from '@renderer/state/toasts';
 import { GPU_BUSY_PHASES } from '@renderer/state/gpu';
 import { formatWarmup, gpuSpec, splitModelLabel, warmupCost, warmupSeconds, type PriceStats } from './model';
@@ -125,10 +124,9 @@ function StepIcon({ state }: { state: GpuStatus['steps'][number]['state'] }) {
   return <span aria-hidden className="size-1.5 rounded-full bg-[#3a4a57]" />;
 }
 
-function ActivePanel({ status, profile, runningModelLabel, hasApiKey, busy, runningSessions, onClockIn, onClockOut }: SessionPanelProps) {
+function ActivePanel({ status, profile, runningModelLabel, hasApiKey, busy, onClockIn, onClockOut }: SessionPanelProps) {
   const phase = status.phase;
   const cost = useLiveGpuCost(status);
-  const [confirm, setConfirm] = useState(false);
   const inProgress = GPU_BUSY_PHASES.has(phase) && phase !== 'stopping';
   const steps = status.steps ?? [];
   const done = steps.filter((s) => s.state === 'done').length;
@@ -138,11 +136,8 @@ function ActivePanel({ status, profile, runningModelLabel, hasApiKey, busy, runn
   const barValue = phase === 'ready' ? 1 : determinate && status.progress != null ? frac : phase === 'error' || phase === 'stopping' ? frac : steps.length ? frac : null;
   const rental = status.clockedInAt != null && phase !== 'error';
   const label = [status.numGpus && status.numGpus > 1 ? `${status.numGpus}×` : null, status.gpuName].filter(Boolean).join(' ');
+  // The confirmation (running sessions / a rented clock-in) is app-wide: see requestClockOut + GpuClockOutConfirm.
   const out = async () => {
-    if (phase === 'ready' && runningSessions.length > 0) {
-      setConfirm(true);
-      return;
-    }
     await onClockOut();
   };
   return (
@@ -225,7 +220,12 @@ function ActivePanel({ status, profile, runningModelLabel, hasApiKey, busy, runn
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
-            {phase === 'error' ? (
+            {phase === 'error' && status.instanceId != null ? (
+              // An instance is still tracked (e.g. from the last run): stopping it comes first, never a second rental.
+              <Button size="lg" variant="danger" icon={Power} loading={busy} data-testid="gpu-main-button" className="h-11 min-w-[168px] px-6 text-[14px]" onClick={() => void onClockOut()}>
+                Clock out
+              </Button>
+            ) : phase === 'error' ? (
               <Button size="lg" variant="primary" icon={Power} loading={busy} disabled={hasApiKey === false} data-testid="gpu-main-button" className="h-11 min-w-[168px] px-6 text-[14px]" onClick={onClockIn}>
                 Try again
               </Button>
@@ -284,27 +284,6 @@ function ActivePanel({ status, profile, runningModelLabel, hasApiKey, busy, runn
         </dl>
       </div>
 
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        danger
-        title="Clock out while work is running?"
-        confirmLabel="Clock out"
-        cancelLabel="Keep running"
-        description={`${pluralize(runningSessions.length, 'session')} ${runningSessions.length === 1 ? 'is' : 'are'} using the GPU model right now. The turn will fail when the instance goes away.`}
-        onConfirm={async () => {
-          await onClockOut();
-        }}
-      >
-        <ul className="flex flex-col gap-1 text-ui text-ob-text-2" data-testid="gpu-confirm-sessions">
-          {runningSessions.slice(0, 5).map((t, i) => (
-            <li key={i} className="truncate">
-              · {t}
-            </li>
-          ))}
-          {runningSessions.length > 5 ? <li className="text-ob-text-3">and {runningSessions.length - 5} more</li> : null}
-        </ul>
-      </ConfirmDialog>
     </section>
   );
 }

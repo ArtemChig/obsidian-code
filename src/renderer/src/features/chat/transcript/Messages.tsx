@@ -149,6 +149,8 @@ export interface AssistantMessageProps {
   /** Prompt-processing progress while the model has not produced its first token yet (streaming message only). */
   prefill?: PrefillState | null;
   onOpenImage?: (img: ImageBlock) => void;
+  /** Offered on the last finished reply: rewind to its prompt and send it again. */
+  onRegenerate?: () => void;
 }
 
 /** "Reading context… 42%" with a thin progress bar — shown in the pending assistant message during a slow prefill. */
@@ -191,7 +193,7 @@ function segments(blocks: Block[]): Segment[] {
   return out;
 }
 
-export const AssistantMessage = memo(function AssistantMessage({ message, cwd, streaming, timing, prefill, onOpenImage }: AssistantMessageProps) {
+export const AssistantMessage = memo(function AssistantMessage({ message, cwd, streaming, timing, prefill, onOpenImage, onRegenerate }: AssistantMessageProps) {
   const segs = useMemo(() => segments(message.blocks), [message.blocks]);
   const lastIndex = message.blocks.length - 1;
   const text = messageText(message);
@@ -244,12 +246,12 @@ export const AssistantMessage = memo(function AssistantMessage({ message, cwd, s
         }
         return null;
       })}
-      {!streaming && (meta?.durationMs || meta?.interrupted) ? <AssistantFooter message={message} text={text} /> : null}
+      {!streaming && (meta?.durationMs || meta?.interrupted || onRegenerate) ? <AssistantFooter message={message} text={text} onRegenerate={onRegenerate} /> : null}
     </div>
   );
 });
 
-function AssistantFooter({ message, text }: { message: Message; text: string }) {
+function AssistantFooter({ message, text, onRegenerate }: { message: Message; text: string; onRegenerate?: () => void }) {
   const meta = message.meta ?? {};
   const parts: ReactNode[] = [];
   if (meta.model) parts.push(<span key="m">{shortModelName(meta.model)}</span>);
@@ -274,6 +276,11 @@ function AssistantFooter({ message, text }: { message: Message; text: string }) 
       {text ? (
         <span className="opacity-0 transition-opacity duration-150 group-hover/assistant:opacity-100 focus-within:opacity-100">
           <CopyButton text={text} label="Copy reply" />
+        </span>
+      ) : null}
+      {onRegenerate ? (
+        <span className="opacity-0 transition-opacity duration-150 group-hover/assistant:opacity-100 focus-within:opacity-100">
+          <IconButton label="Regenerate (send the prompt again)" icon={RotateCcw} size="xs" onClick={onRegenerate} data-testid="regenerate" />
         </span>
       ) : null}
     </div>

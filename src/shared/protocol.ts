@@ -31,6 +31,8 @@ export interface RpcMethods {
   /** Send a user message (or a slash command like "/compact"). Returns immediately; progress arrives via events. */
   'chat.send': { params: { sessionId: string; text: string; images?: ImageBlock[] }; result: { messageId: string; queued: boolean } };
   'chat.interrupt': { params: { sessionId: string }; result: { ok: true } };
+  /** Withdraw queued (not yet started) messages: one by id, or all of the session's when messageId is omitted. */
+  'chat.dequeue': { params: { sessionId: string; messageId?: string }; result: { removed: { messageId: string; text: string }[] } };
   'chat.respondPermission': { params: { requestId: string; decision: PermissionDecision; message?: string }; result: { ok: true } };
   'chat.answerQuestion': { params: { requestId: string; answers: Record<string, string> }; result: { ok: true } };
   'chat.respondPlan': { params: { requestId: string; approve: boolean; mode?: PermissionMode; feedback?: string }; result: { ok: true } };

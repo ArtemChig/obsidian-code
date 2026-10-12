@@ -5,7 +5,11 @@ import {
   Box,
   CalendarClock,
   Check,
+  ClipboardCopy,
   Cpu,
+  Download,
+  GitFork,
+  Keyboard,
   House,
   MessageSquare,
   PanelLeft,
@@ -14,6 +18,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Square,
   SquarePen,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -32,6 +37,7 @@ import { basename, providerLabel, sameModel } from '@renderer/lib/format';
 import {
   closePalette,
   createSession,
+  forkSession,
   goHome,
   navigate,
   openSession,
@@ -44,6 +50,8 @@ import { useGpu } from '@renderer/state/gpu';
 import { useActiveSession, useModelGroups, useRecentSessions } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { useUi } from '@renderer/state/ui';
+import { copySessionMarkdown, exportSessionMarkdown } from '@renderer/features/chat/session-actions';
+import { stopTurn } from '@renderer/features/chat/state';
 import { gpuPrimaryAction } from './GpuWidget';
 import { SHORTCUTS } from './shortcuts';
 
@@ -113,6 +121,9 @@ function RootPage({ go }: { go: (p: Page) => void }) {
   const gpu = useGpu((s) => s.status);
   const hasKey = useGpu((s) => s.hasApiKey);
   const active = useActiveSession();
+  const route = useUi((s) => s.route);
+  const current = route === 'session' && active ? active : null;
+  const busy = current?.status === 'running' || current?.status === 'waiting';
   const gpuOn = !!gpu && gpu.phase !== 'off' && gpu.phase !== 'error';
   const run = (fn: () => void) => () => {
     closePalette();
@@ -146,6 +157,31 @@ function RootPage({ go }: { go: (p: Page) => void }) {
         </CommandItem>
         <CommandItem icon={RefreshCw} onSelect={run(() => void refreshModels())} keywords={['reload', 'providers']}>
           Refresh models
+        </CommandItem>
+      </CommandGroup>
+      {current ? (
+        <CommandGroup heading="This session">
+          {busy ? (
+            <CommandItem icon={Square} shortcut="Esc" onSelect={run(() => void stopTurn(current.id))} keywords={['stop', 'interrupt', 'cancel']}>
+              Stop the running turn
+            </CommandItem>
+          ) : null}
+          <CommandItem icon={Download} onSelect={run(() => void exportSessionMarkdown(current.id))} keywords={['export', 'save', 'markdown', 'download']}>
+            Export session as Markdown
+          </CommandItem>
+          <CommandItem icon={ClipboardCopy} onSelect={run(() => void copySessionMarkdown(current.id))} keywords={['copy', 'transcript', 'markdown']}>
+            Copy transcript as Markdown
+          </CommandItem>
+          {current.kind !== 'subagent' ? (
+            <CommandItem icon={GitFork} onSelect={run(() => void forkSession(current.id))} keywords={['fork', 'branch', 'duplicate']}>
+              Fork session
+            </CommandItem>
+          ) : null}
+        </CommandGroup>
+      ) : null}
+      <CommandGroup heading="Help">
+        <CommandItem icon={Keyboard} shortcut={SHORTCUTS.help} onSelect={run(() => useUi.setState({ shortcutsOpen: true }))} keywords={['keys', 'hotkeys', 'help', 'keyboard']}>
+          Keyboard shortcuts
         </CommandItem>
       </CommandGroup>
       <CommandGroup heading="Go to">

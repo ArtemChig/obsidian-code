@@ -29,3 +29,32 @@ export function previewItems(messages: { id: string; role: string; blocks: Block
   }
   return out.slice(-limit);
 }
+
+// ───────────────────────────── Prompt-card keyboard routing ─────────────────────────────
+
+/**
+ * May a key press drive the front-most prompt card (1/2/3, Enter, Esc)?
+ * Never while focus is in a text field — not even an empty composer: a follow-up such as "1. also…" or an Esc meant
+ * for the field must not silently allow, deny or "always allow" a tool call. Inside the card, its own inputs handle
+ * their keys. Anything else (the card itself, a button, the page body) routes to the card.
+ */
+export function promptKeyRoutes(target: { editable: boolean; inCard: boolean }): boolean {
+  return !target.editable;
+}
+
+/** What has focus when a prompt card becomes the active one. */
+export type FocusHolder = 'none' | 'composer-empty' | 'composer-draft' | 'editable' | 'other';
+
+/** Typing in the last this-many ms keeps focus where it is (a keystroke in flight must not land on the card). */
+export const PROMPT_FOCUS_IDLE_MS = 1500;
+
+/**
+ * Should a newly active prompt card take keyboard focus (so 1/2/3 and Esc answer it)? Only when nothing else is being
+ * typed into: no focus at all, or an empty composer the user has not typed in for a moment.
+ */
+export function promptTakesFocus(holder: FocusHolder, msSinceTyping: number): boolean {
+  if (holder === 'none') return true;
+  if (holder === 'composer-empty') return msSinceTyping >= PROMPT_FOCUS_IDLE_MS;
+  return false; // a draft, another field, or a control the user is on: keys from a non-field still reach the card
+
+}

@@ -2,7 +2,7 @@
 // light validation, and project-level overrides (.obsidian-code/settings.json, .claude/settings(.local).json).
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import type { GpuProfile, HookConfig, PermissionMode, Settings } from '../../shared/types';
 import type { SettingsStore } from '../contracts';
 import { isPlainObject, readJsonSync, writeFileAtomicSync } from './fsutil';
@@ -41,6 +41,8 @@ export function defaultSettings(): Settings {
     },
     search: { provider: 'duckduckgo' },
     permissions: { allow: [], deny: [] },
+    trustedFolders: [],
+    projectAllow: {},
     hooks: {},
     mcpServers: {},
     importClaudeConfig: true,
@@ -53,7 +55,7 @@ export function defaultSettings(): Settings {
 }
 
 /** Keys whose values are replaced wholesale on update (maps / nullable objects), never deep-merged. */
-const REPLACE_KEYS = new Set(['defaultModel', 'mcpServers', 'hooks', 'env', 'headers']);
+const REPLACE_KEYS = new Set(['defaultModel', 'mcpServers', 'hooks', 'env', 'headers', 'projectAllow']);
 
 /**
  * Deep-merge `patch` into `base` (returns a new object). Plain objects merge recursively, arrays and primitives
@@ -108,6 +110,15 @@ export function validateSettings(input: unknown): Settings {
   if (!isPlainObject(m.mcpServers)) m.mcpServers = {};
   m.permissions.allow = m.permissions.allow.filter((r): r is string => typeof r === 'string');
   m.permissions.deny = m.permissions.deny.filter((r): r is string => typeof r === 'string');
+  m.trustedFolders = m.trustedFolders.filter((f): f is string => typeof f === 'string' && f.trim().length > 0);
+  const projectAllow: Record<string, string[]> = {};
+  if (isPlainObject(m.projectAllow)) {
+    for (const [k, v] of Object.entries(m.projectAllow)) {
+      const rules = stringList(v);
+      if (k.trim() && rules.length) projectAllow[k] = rules;
+    }
+  }
+  m.projectAllow = projectAllow;
   m.custom = m.custom.filter((c) => isPlainObject(c) && typeof c.id === 'string' && typeof c.baseUrl === 'string');
   m.vast.profiles = m.vast.profiles.filter((p) => isPlainObject(p) && typeof p.id === 'string');
   if (m.vast.profiles.length === 0) m.vast.profiles = defaultGpuProfiles();
@@ -163,6 +174,22 @@ export function projectSettingsFile(cwd: string): string {
   return join(cwd, '.obsidian-code', 'settings.json');
 }
 
+/** Comparison key for a folder: absolute, no trailing separator, case-folded on Windows. */
+export function folderKey(p: string): string {
+  let abs = resolve(String(p ?? '').trim() || '.');
+  while (abs.length > 1 && (abs.endsWith('/') || abs.endsWith('\\')) && !/^[a-zA-Z]:[\\/]$/.test(abs)) abs = abs.slice(0, -1);
+  return process.platform === 'win32' ? abs.toLowerCase() : abs;
+}
+
+/** Is `cwd` one of the trusted folders or inside one? (Trust lives only in the global settings, never in a project file.) */
+export function isTrustedFolder(trusted: readonly string[], cwd: string): boolean {
+  const c = folderKey(cwd);
+  return trusted.some((t) => {
+    const k = folderKey(t);
+    return c === k || c.startsWith(k.endsWith(sep) ? k : k + sep);
+  });
+}
+
 export interface SettingsStoreImpl extends SettingsStore {
   readonly file: string;
 }
@@ -182,29 +209,42 @@ export function createSettingsStore(dataDir: string): SettingsStoreImpl {
 
   const clone = (s: Settings): Settings => structuredClone(s);
 
+  const update = (patch: Partial<Settings> | undefined): Settings => {
+    const next = validateSettings(deepMerge(current, patch ?? {}));
+    writeFileAtomicSync(file, JSON.stringify(next, null, 2));
+    current = next;
+    const snapshot = clone(current);
+    for (const fn of [...listeners]) {
+      try {
+        fn(clone(snapshot));
+      } catch (err) {
+        console.error('[settings] listener threw:', err instanceof Error ? err.message : err);
+      }
+    }
+    return snapshot;
+  };
+
+  /** The "Always allow" rules granted for this folder (stored in the global settings, keyed by folder). */
+  const grantedFor = (cwd: string): { key: string | undefined; rules: string[] } => {
+    const k = folderKey(cwd);
+    const key = Object.keys(current.projectAllow ?? {}).find((x) => folderKey(x) === k);
+    return { key, rules: key ? [...(current.projectAllow[key] ?? [])] : [] };
+  };
+
   return {
     file,
     get() {
       return clone(current);
     },
-    update(patch) {
-      const next = validateSettings(deepMerge(current, patch ?? {}));
-      writeFileAtomicSync(file, JSON.stringify(next, null, 2));
-      current = next;
-      const snapshot = clone(current);
-      for (const fn of [...listeners]) {
-        try {
-          fn(clone(snapshot));
-        } catch (err) {
-          console.error('[settings] listener threw:', err instanceof Error ? err.message : err);
-        }
-      }
-      return snapshot;
-    },
+    update,
     forProject(cwd) {
-      const allow: string[] = [];
+      // Project files come with the repository, so their hooks (shell commands) and allow rules only count once the
+      // user has trusted the folder in the app; deny rules only restrict and always apply.
+      const trusted = isTrustedFolder(current.trustedFolders ?? [], cwd);
+      const allow: string[] = grantedFor(cwd).rules;
       const deny: string[] = [];
       const hooks: Settings['hooks'] = {};
+      const ignored = { hooks: 0, allow: [] as string[], files: [] as string[] };
       const addHooks = (h: Settings['hooks']): void => {
         for (const ev of HOOK_EVENTS) {
           const list = h[ev];
@@ -219,25 +259,32 @@ export function createSettingsStore(dataDir: string): SettingsStoreImpl {
         const raw = readJsonSync<unknown>(f);
         if (!isPlainObject(raw)) continue;
         const perms = raw.permissions;
-        if (isPlainObject(perms)) {
-          allow.push(...stringList(perms.allow));
-          deny.push(...stringList(perms.deny));
+        const fileAllow = isPlainObject(perms) ? stringList(perms.allow) : [];
+        if (isPlainObject(perms)) deny.push(...stringList(perms.deny));
+        const fileHooks = normalizeHooks(raw.hooks);
+        if (trusted) {
+          allow.push(...fileAllow);
+          addHooks(fileHooks);
+        } else {
+          const n = HOOK_EVENTS.reduce((acc, ev) => acc + (fileHooks[ev]?.length ?? 0), 0);
+          if (n || fileAllow.length) {
+            ignored.hooks += n;
+            ignored.allow.push(...fileAllow);
+            ignored.files.push(f);
+          }
         }
-        addHooks(normalizeHooks(raw.hooks));
       }
-      return { permissions: { allow: uniq(allow), deny: uniq(deny) }, hooks };
+      const out: ReturnType<SettingsStore['forProject']> = { permissions: { allow: uniq(allow), deny: uniq(deny) }, hooks };
+      if (ignored.files.length) out.untrusted = { hooks: ignored.hooks, allow: uniq(ignored.allow), files: ignored.files };
+      return out;
     },
     addProjectAllowRule(cwd, rule) {
-      const f = projectSettingsFile(cwd);
-      const raw = readJsonSync<unknown>(f);
-      const obj: Record<string, unknown> = isPlainObject(raw) ? raw : {};
-      const perms: Record<string, unknown> = isPlainObject(obj.permissions) ? obj.permissions : {};
-      const allow = stringList(perms.allow);
-      if (allow.includes(rule)) return;
-      perms.allow = [...allow, rule];
-      if (!Array.isArray(perms.deny)) perms.deny = [];
-      obj.permissions = perms;
-      writeFileAtomicSync(f, JSON.stringify(obj, null, 2));
+      // Kept in the app's own settings (keyed by folder), never in a file inside the repository.
+      const r = rule.trim();
+      if (!r) return;
+      const { key, rules } = grantedFor(cwd);
+      if (rules.includes(r)) return;
+      update({ projectAllow: { ...(current.projectAllow ?? {}), [key ?? resolve(cwd)]: [...rules, r] } });
     },
     onChange(fn) {
       listeners.add(fn);

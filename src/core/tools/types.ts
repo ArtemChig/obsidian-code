@@ -47,6 +47,7 @@ export function defineTool<I extends Record<string, unknown>>(def: ToolDef<I>, o
       try { return def.title(prep(input)); } catch { return def.name; }
     },
     ruleFor: def.ruleFor ? (input) => def.ruleFor!(prep(input)) : undefined,
+    normalize: (input) => prep(input),
     run: async (input, ctx) => {
       const normalized = prep(input);
       const problem = validateInput(schema, normalized);

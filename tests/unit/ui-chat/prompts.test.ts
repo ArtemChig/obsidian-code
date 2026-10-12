@@ -1,7 +1,7 @@
 // ui-chat: question answers and the subagent mini-transcript preview.
 import { describe, expect, it } from 'vitest';
 import type { Message, Question } from '@shared/types';
-import { answerFor, previewItems } from '@renderer/features/chat/lib/prompts';
+import { answerFor, previewItems, PROMPT_FOCUS_IDLE_MS, promptKeyRoutes, promptTakesFocus } from '@renderer/features/chat/lib/prompts';
 
 type Item = { kind: 'text'; key: string; text: string } | { kind: 'tool'; key: string; tool: { id: string } };
 
@@ -57,5 +57,26 @@ describe('previewItems', () => {
 
   it('returns only the last N steps', () => {
     expect(previewItems(messages, 2).map((i: Item) => i.key)).toEqual(['t2', 'a:5']);
+  });
+});
+
+describe('prompt-card keyboard routing', () => {
+  it('never routes keys typed into a text field (an empty composer included) to the card', () => {
+    // "1. also…" typed into the empty composer must not "Allow once"; "2" must not save an allow rule; Esc must not deny.
+    expect(promptKeyRoutes({ editable: true, inCard: false })).toBe(false);
+    // The card's own inputs (feedback, "Other") handle their keys themselves.
+    expect(promptKeyRoutes({ editable: true, inCard: true })).toBe(false);
+    // Focus on the card itself, a button or the page body routes to the card.
+    expect(promptKeyRoutes({ editable: false, inCard: true })).toBe(true);
+    expect(promptKeyRoutes({ editable: false, inCard: false })).toBe(true);
+  });
+
+  it('a new card takes focus only when nothing is being typed', () => {
+    expect(promptTakesFocus('none', 0)).toBe(true);
+    expect(promptTakesFocus('composer-empty', PROMPT_FOCUS_IDLE_MS + 1)).toBe(true);
+    expect(promptTakesFocus('composer-empty', 200)).toBe(false); // a keystroke in flight stays in the composer
+    expect(promptTakesFocus('composer-draft', 60_000)).toBe(false);
+    expect(promptTakesFocus('editable', 60_000)).toBe(false);
+    expect(promptTakesFocus('other', 60_000)).toBe(false);
   });
 });

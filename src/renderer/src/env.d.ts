@@ -14,6 +14,8 @@ export interface ObsidianBridge {
   showItemInFolder(path: string): Promise<void>;
   /** Open an http(s) URL in the default browser; resolves false for other schemes. */
   openExternal(url: string): Promise<boolean>;
+  /** Subscribe to "open this session" requests (a desktop notification was clicked). Returns an unsubscribe function. */
+  onOpenSession(cb: (sessionId: string) => void): () => void;
   /** Window controls (the title bar uses the native Windows controls overlay; these are for custom UI). */
   window: {
     minimize(): Promise<boolean>;

@@ -39,6 +39,8 @@ export interface ActiveInstance {
   stopping?: NonNullable<GpuSessionRecord['endReason']>;
   /** The interrupted clock-out intended to park (stop) rather than destroy. */
   parkIntent?: boolean;
+  /** Per-instance API key returned by create (what the server watchdog needs to self-destroy); used to repair it. */
+  instanceApiKey?: string;
 }
 
 export type ParkedInstance = NonNullable<GpuStatus['parked']> & {
@@ -49,6 +51,7 @@ export type ParkedInstance = NonNullable<GpuStatus['parked']> & {
   diskGb: number;
   location: string;
   hostKeys?: Record<string, string>;
+  instanceApiKey?: string;
 };
 
 export interface LedgerData {
@@ -68,16 +71,35 @@ export function round4(n: number): number {
   return Math.round(n * 10_000) / 10_000;
 }
 
-function sameMonth(a: number, b: number): boolean {
-  const x = new Date(a);
-  const y = new Date(b);
-  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth();
+/** [start, end) of the local calendar month containing `t`. */
+export function monthBounds(t: number): [number, number] {
+  const d = new Date(t);
+  return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime()];
+}
+
+/**
+ * The part of a time-billed amount that falls in [ms, me): the time cost is spread over [from, to) by overlap, fixed
+ * extras (bandwidth, rounding) count in the month the record started. Summed over all months it equals `total`.
+ */
+function costInMonth(pricePerHour: number, from: number, to: number, total: number, ms: number, me: number): number {
+  const startsHere = from >= ms && from < me;
+  const dur = Math.max(0, to - from);
+  if (!(pricePerHour > 0) || dur === 0) return startsHere ? total : 0;
+  const timeCost = Math.min(total, (pricePerHour * dur) / 3_600_000);
+  const overlap = Math.max(0, Math.min(to, me) - Math.max(from, ms));
+  return timeCost * (overlap / dur) + (startsHere ? total - timeCost : 0);
 }
 
 export class GpuLedger {
   private d: LedgerData;
 
-  constructor(private readonly kv: KvStore) {
+  /** True while the last kv write failed (the in-memory state stays authoritative and is written on the next save). */
+  saveFailed = false;
+
+  constructor(
+    private readonly kv: KvStore,
+    private readonly onSaveError?: (err: unknown) => void,
+  ) {
     this.d = GpuLedger.normalize(kv.read<unknown>(LEDGER_KV_KEY, null));
   }
 
@@ -96,9 +118,23 @@ export class GpuLedger {
     return { version: 1, records: [], pendingDestroy: [] };
   }
 
+  /**
+   * Persist. Never throws: a failed write (disk full, locked file) must not stop a destroy or a clock-out half way, so
+   * the in-memory state stays authoritative (pendingDestroy etc. keep working) and the next save writes it all.
+   */
   save(): void {
     if (this.d.records.length > MAX_RECORDS) this.d.records = this.d.records.slice(-MAX_RECORDS);
-    this.kv.write(LEDGER_KV_KEY, this.d);
+    try {
+      this.kv.write(LEDGER_KV_KEY, this.d);
+      this.saveFailed = false;
+    } catch (err) {
+      this.saveFailed = true;
+      try {
+        this.onSaveError?.(err);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   get active(): ActiveInstance | undefined {
@@ -119,8 +155,16 @@ export class GpuLedger {
     return limit && limit > 0 ? list.slice(0, limit) : list;
   }
 
-  /** Start tracking a freshly rented (or resumed) instance and open its ledger record. Persists immediately. */
+  /**
+   * Start tracking a freshly rented (or resumed) instance and open its ledger record. Persists immediately.
+   * Throws (before changing anything) when another instance is still tracked: overwriting it would lose track of a
+   * billed machine.
+   */
   beginSession(a: ActiveInstance): void {
+    const cur = this.d.active;
+    if (cur && cur.instanceId !== a.instanceId) {
+      throw new Error(`GPU instance #${cur.instanceId} is still tracked; refusing to track #${a.instanceId} over it.`);
+    }
     this.d.active = a;
     this.d.records.push({
       id: a.recordId,
@@ -238,18 +282,27 @@ export class GpuLedger {
   }
 
   /**
-   * Spend this calendar month (local time): finished records + the live active session + live parked storage.
-   * The active record's persisted cost is replaced by `liveActiveCost` when given.
+   * Spend this calendar month (local time): finished records + the live active session (to `now`) + live parked
+   * storage. Time-billed costs are split across months by overlap (a session from Oct 31 20:00 to Nov 1 02:00 puts
+   * 2 h in November), so the figure does not jump when a session that crossed midnight ends.
    */
-  monthCost(now: number, liveActiveCost?: number): number {
+  monthCost(now: number): number {
+    const [ms, me] = monthBounds(now);
     const activeId = this.d.active?.recordId;
     let sum = 0;
     for (const r of this.d.records) {
       if (r.id === activeId) continue;
-      if (sameMonth(r.startedAt, now)) sum += r.cost || 0;
+      const cost = r.cost || 0;
+      if (r.endedAt === undefined) {
+        if (r.startedAt >= ms && r.startedAt < me) sum += cost;
+        continue;
+      }
+      sum += costInMonth(r.pricePerHour, r.startedAt, r.endedAt, cost, ms, me);
     }
-    if (this.d.active) sum += liveActiveCost ?? this.activeCost(now);
-    sum += this.parkedCost(now);
+    const a = this.d.active;
+    if (a) sum += costInMonth(a.pricePerHour, a.startedAt, Math.max(now, a.startedAt), this.activeCost(now), ms, me);
+    const p = this.d.parked;
+    if (p) sum += costInMonth(p.storageCostPerHour, p.parkedAt, Math.max(now, p.parkedAt), this.parkedCost(now), ms, me);
     return round4(sum);
   }
 }
