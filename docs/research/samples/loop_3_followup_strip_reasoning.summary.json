@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 3.414,
+    "ttfb_s": 1.662,
+    "ttft_s": 1.757,
+    "slot": 1
+  },
+  "summary": {
+    "n_chunks": 50,
+    "delta_keys_seen": [
+      "content",
+      "role"
+    ],
+    "reasoning": "",
+    "content": "The current weather in Paris is 18°C with light rain. The current time in Tokyo (Asia/Tokyo) is 07:42 JST on October 13, 2026.",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 49,
+      "prompt_tokens": 492,
+      "total_tokens": 541,
+      "prompt_tokens_details": {
+        "cached_tokens": 387
+      }
+    },
+    "timings": {
+      "cache_n": 387,
+      "prompt_n": 105,
+      "prompt_ms": 1654.287,
+      "prompt_per_token_ms": 15.755114285714287,
+      "prompt_per_second": 63.47145326052855,
+      "predicted_n": 49,
+      "predicted_ms": 1752.049,
+      "predicted_per_token_ms": 36.501020833333335,
+      "predicted_per_second": 27.396494047826287
+    },
+    "last_chunk_is_DONE": true
+  }
+}

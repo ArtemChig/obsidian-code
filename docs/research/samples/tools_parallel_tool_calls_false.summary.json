@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 8.956,
+    "ttfb_s": 7.411,
+    "ttft_s": 7.94,
+    "slot": 3
+  },
+  "summary": {
+    "n_chunks": 9,
+    "delta_keys_seen": [
+      "content",
+      "role",
+      "tool_calls"
+    ],
+    "reasoning": "",
+    "content": "",
+    "tool_calls": {
+      "0": {
+        "id": "7oYAjOcBopPxkuDfSJ0VIkvcb84ZM0q6",
+        "name": "get_weather",
+        "arguments": "{\"city\":\"Paris\"}",
+        "n_chunks": 5
+      }
+    },
+    "finish_reason": "tool_calls",
+    "usage": {
+      "completion_tokens": 27,
+      "prompt_tokens": 372,
+      "total_tokens": 399,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 372,
+      "prompt_ms": 7309.561,
+      "prompt_per_token_ms": 19.64935752688172,
+      "prompt_per_second": 50.89224920621088,
+      "predicted_n": 27,
+      "predicted_ms": 1545.402,
+      "predicted_per_token_ms": 59.438538461538464,
+      "predicted_per_second": 16.824101431213368
+    },
+    "last_chunk_is_DONE": true
+  }
+}

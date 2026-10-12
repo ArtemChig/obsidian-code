@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "headers": {
+    "Server": "llama.cpp",
+    "Access-Control-Allow-Origin": "",
+    "X-Accel-Buffering": "no",
+    "Content-Type": "text/event-stream",
+    "Transfer-Encoding": "chunked",
+    "Connection": "close"
+  },
+  "elapsed_s": 5.065,
+  "ttfb_s": 4.9,
+  "ttft_s": 4.9,
+  "slot": 2
+}

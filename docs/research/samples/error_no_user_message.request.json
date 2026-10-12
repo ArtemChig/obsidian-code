@@ -1,0 +1,11 @@
+{
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "messages": [
+    {
+      "role": "system",
+      "content": "s"
+    }
+  ],
+  "max_tokens": 5,
+  "id_slot": 3
+}

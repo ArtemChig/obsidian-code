@@ -1,0 +1,15 @@
+node_modules/
+out/
+dist/
+release/
+test-results/
+playwright-report/
+.vite/
+*.log
+tests/e2e/screenshots/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+.DS_Store
+Thumbs.db

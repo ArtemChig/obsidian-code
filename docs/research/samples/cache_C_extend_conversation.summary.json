@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 1.695,
+    "ttfb_s": 1.29,
+    "ttft_s": 1.29,
+    "slot": 1
+  },
+  "summary": {
+    "n_chunks": 12,
+    "delta_keys_seen": [
+      "content",
+      "role"
+    ],
+    "reasoning": "",
+    "content": "The Discrepancy in the Dark",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 9,
+      "prompt_tokens": 585,
+      "total_tokens": 594,
+      "prompt_tokens_details": {
+        "cached_tokens": 562
+      }
+    },
+    "timings": {
+      "cache_n": 562,
+      "prompt_n": 23,
+      "prompt_ms": 1262.435,
+      "prompt_per_token_ms": 54.88847826086956,
+      "prompt_per_second": 18.21875977773113,
+      "predicted_n": 9,
+      "predicted_ms": 404.92,
+      "predicted_per_token_ms": 50.615,
+      "predicted_per_second": 19.756989034871086
+    },
+    "last_chunk_is_DONE": true
+  }
+}

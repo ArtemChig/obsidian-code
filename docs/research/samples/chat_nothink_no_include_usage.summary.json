@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 0.896,
+    "ttfb_s": 0.644,
+    "ttft_s": 0.644,
+    "slot": 3
+  },
+  "summary": {
+    "n_chunks": 5,
+    "delta_keys_seen": [
+      "content",
+      "role"
+    ],
+    "reasoning": "",
+    "content": "Hi!",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": null,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 15,
+      "prompt_ms": 576.024,
+      "prompt_per_token_ms": 38.4016,
+      "prompt_per_second": 26.040581642431565,
+      "predicted_n": 3,
+      "predicted_ms": 252.323,
+      "predicted_per_token_ms": 126.1615,
+      "predicted_per_second": 7.926348370937251
+    },
+    "last_chunk_is_DONE": true
+  }
+}

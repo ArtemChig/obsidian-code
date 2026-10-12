@@ -1,0 +1,6 @@
+{
+  "tokenize_hello_world_x50": 101,
+  "apply_template": {
+    "prompt": "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+  }
+}

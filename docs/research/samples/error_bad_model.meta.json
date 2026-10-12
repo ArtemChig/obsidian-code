@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "headers": {
+    "Server": "llama.cpp",
+    "Access-Control-Allow-Origin": "",
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": "648",
+    "Connection": "close"
+  },
+  "elapsed_s": 1.285,
+  "ttfb_s": 1.285,
+  "ttft_s": null,
+  "slot": 2
+}

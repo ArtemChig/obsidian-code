@@ -1,0 +1,23 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a terse assistant."
+    },
+    {
+      "role": "user",
+      "content": "The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line.\n\nWrite a 120-word story about the archive."
+    }
+  ],
+  "max_tokens": 300,
+  "stream_options": {
+    "include_usage": true
+  },
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "timings_per_token": false,
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "stream": true,
+  "id_slot": 1
+}

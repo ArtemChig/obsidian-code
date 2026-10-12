@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 18.111,
+    "ttfb_s": 2.364,
+    "ttft_s": 2.364,
+    "slot": 3
+  },
+  "summary": {
+    "n_chunks": 294,
+    "delta_keys_seen": [
+      "content",
+      "reasoning_content",
+      "role"
+    ],
+    "reasoning": "Here's my thought process for answering the user's request:\n\n1.  **Analyze the Request:**\n    *   Question: \"What is 17*3?\"\n    *   Constraint: \"Answer with the number only.\"\n\n2.  **Perform the Calculation:**\n    *   $17 \\times 3$\n    *   $10 \\times 3 = 30$\n    *   $7 \\times 3 = 21$\n    *   $30 + 21 = 51$\n    *   Alternatively: $17 \\times 3 = (20 - 3) \\times 3 = 60 - 9 = 51$.\n    *   Result: 51.\n\n3.  **Apply Constraints:**\n    *   The user requested *only* the number.\n    *   No text, no punctuation (unless part of the number, which isn't the case here), no \"The answer is...\".\n\n4.  **Final Output Formulation:**\n    *   Output: 51\n\n5.  **Final Check:**\n    *   Does \"51\" represent $17 \\times 3$? Yes.\n    *   Is it just the number? Yes.\n\n6.  **Construct Response:** 51\n",
+    "content": "51",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 293,
+      "prompt_tokens": 35,
+      "total_tokens": 328,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 35,
+      "prompt_ms": 993.214,
+      "prompt_per_token_ms": 28.37754285714286,
+      "prompt_per_second": 35.239132754874575,
+      "predicted_n": 293,
+      "predicted_ms": 15747.072,
+      "predicted_per_token_ms": 53.92832876712329,
+      "predicted_per_second": 18.543129795812202
+    },
+    "last_chunk_is_DONE": true
+  }
+}

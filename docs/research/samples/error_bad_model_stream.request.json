@@ -1,0 +1,15 @@
+{
+  "model": "no-such-model",
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": "hi"
+    }
+  ],
+  "max_tokens": 5,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "id_slot": 3
+}

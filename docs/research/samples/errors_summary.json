@@ -1,0 +1,30 @@
+{
+  "bad_model": [
+    200,
+    "{\"choices\":[{\"finish_reason\":\"length\",\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Hello! How can I\"}}],\"created\":1791803914,\"model\":\"qwen3.6-35b-a3b-uncensored\",\"system_fingerprint\":\"b11517-8a1a9b512\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":5,\"prompt_tokens\":13,\"total_tokens\":18,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"id\":\"chatcmpl-4yWvmTufSVPu4WBkaeZjQrGlwpnGb0b4\",\"timings\":{\"cache_n\":0,\"prompt_n\":13,\"prompt_ms\":593.927,\"prompt_per_token_ms\":45.68669230769231,\"prompt_per_second\":21.88821185095138,\"predicted_n\":5,\"predicted_ms\":501.283,\"predicted_per_token_ms\":125."
+  ],
+  "bad_json": [
+    400,
+    "{\"error\":{\"code\":400,\"message\":\"[json.exception.parse_error.101] parse error at line 1, column 29: syntax error while parsing value - unexpected end of input; expected '[', '{', or a literal\",\"type\":\"invalid_request_error\"}}"
+  ],
+  "empty_messages": [
+    500,
+    "{\"error\":{\"code\":500,\"message\":\"\\n------------\\nWhile executing CallExpression at line 43, column 24 in source:\\n... not messages %}↵    {{- raise_exception('No messages provided.') }}↵{%- endif %...\\n                                           ^\\nError: Jinja Exception: No messages provided.\",\"type\":\"server_error\"}}"
+  ],
+  "system_not_first": [
+    500,
+    "{\"error\":{\"code\":500,\"message\":\"\\n------------\\nWhile executing CallExpression at line 85, column 32 in source:\\n...first %}↵            {{- raise_exception('System message must be at the beginnin...\\n                                           ^\\nError: Jinja Exception: System message must be at the beginning.\",\"type\":\"server_error\"}}"
+  ],
+  "no_user": [
+    500,
+    "{\"error\":{\"code\":500,\"message\":\"\\n------------\\nWhile executing CallExpression at line 79, column 24 in source:\\n...lti_step_tool %}↵    {{- raise_exception('No user query found in messages.') }}↵...\\n                                           ^\\nError: Jinja Exception: No user query found in messages.\",\"type\":\"server_error\"}}"
+  ],
+  "bad_model_stream": [
+    200,
+    "data: {\"choices\":[{\"finish_reason\":null,\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null}}],\"created\":1791803914,\"id\":\"chatcmpl-GD86KBU6T0tWF75gKKDct7YOM8EDl2vk\",\"model\":\"qwen3.6-35b-a3b-uncensored\",\"system_fingerprint\":\"b11517-8a1a9b512\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"finish_reason\":null,\"index\":0,\"delta\":{\"content\":\"Hello\"}}],\"created\":1791803914,\"id\":\"chatcmpl-GD86KBU6T0tWF75gKKDct7YOM8EDl2vk\",\"model\":\"qwen3.6-35b-a3b-uncensored\",\"system_fingerprint\":\"b11517-8a1a9b512\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"finish_reason\":null,\"index\":0,\"delta\":{\""
+  ],
+  "unknown_endpoint": [
+    404,
+    "{\"error\":{\"message\":\"File Not Found\",\"type\":\"not_found_error\",\"code\":404}}"
+  ]
+}

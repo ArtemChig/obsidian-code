@@ -1,0 +1,59 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello there!"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get the current weather for a city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string",
+              "description": "City name"
+            }
+          },
+          "required": [
+            "city"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_time",
+        "description": "Get the current local time in an IANA timezone.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": {
+              "type": "string",
+              "description": "IANA timezone, e.g. Europe/Paris"
+            }
+          },
+          "required": [
+            "timezone"
+          ]
+        }
+      }
+    }
+  ],
+  "tool_choice": "required",
+  "max_tokens": 80,
+  "stream_options": {
+    "include_usage": true
+  },
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "stream": true,
+  "id_slot": 2
+}

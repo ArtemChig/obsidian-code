@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 6.161,
+    "ttfb_s": 0.458,
+    "ttft_s": 0.458,
+    "slot": 2
+  },
+  "summary": {
+    "n_chunks": 113,
+    "delta_keys_seen": [
+      "content",
+      "reasoning_content",
+      "role"
+    ],
+    "reasoning": "Thinking Process:\n1.  **Analyze User Input:** The user asks \"What is 12+30?\" and specifies \"Answer with the number only.\"\n2.  **Calculate:** 12 + 30 = 42.\n3.  **Format Output:** The user requested only the number. So, output should be \"42\".\n4.  **Verify:** 12+30=42. Format matches constraint. No extra text. Ready.✅\n",
+    "content": "42",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 112,
+      "prompt_tokens": 25,
+      "total_tokens": 137,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 25,
+      "prompt_ms": 411.91,
+      "prompt_per_token_ms": 16.4764,
+      "prompt_per_second": 60.692869801655704,
+      "predicted_n": 112,
+      "predicted_ms": 5703.254,
+      "predicted_per_token_ms": 51.38066666666666,
+      "predicted_per_second": 19.462573471214853
+    },
+    "last_chunk_is_DONE": true
+  }
+}

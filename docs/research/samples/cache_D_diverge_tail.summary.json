@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 2.758,
+    "ttfb_s": 2.558,
+    "ttft_s": 2.558,
+    "slot": 1
+  },
+  "summary": {
+    "n_chunks": 9,
+    "delta_keys_seen": [
+      "content",
+      "role"
+    ],
+    "reasoning": "",
+    "content": "cargo, route, weather",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 6,
+      "prompt_tokens": 362,
+      "total_tokens": 368,
+      "prompt_tokens_details": {
+        "cached_tokens": 11
+      }
+    },
+    "timings": {
+      "cache_n": 11,
+      "prompt_n": 351,
+      "prompt_ms": 2550.423,
+      "prompt_per_token_ms": 7.266162393162393,
+      "prompt_per_second": 137.62422939253608,
+      "predicted_n": 6,
+      "predicted_ms": 200.396,
+      "predicted_per_token_ms": 40.0792,
+      "predicted_per_second": 24.95059781632368
+    },
+    "last_chunk_is_DONE": true
+  }
+}

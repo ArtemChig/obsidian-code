@@ -1,0 +1,20 @@
+/* PLACEHOLDER stylesheet created by the scaffold (owner: ui-foundation replaces it with design/tokens.css + Tailwind @theme). */
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+  --ob-bg: #0b1215;
+  --ob-text: #ecf0f1;
+  --ob-text-3: #7c8b96;
+  --ob-accent: #8fb8de;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--ob-bg);
+  color: var(--ob-text);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+}

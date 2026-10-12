@@ -1,0 +1,13 @@
+{
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "max_tokens": 30,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Say hi in two words."
+    }
+  ],
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  }
+}

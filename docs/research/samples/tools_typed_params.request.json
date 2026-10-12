@@ -1,0 +1,61 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Call read_file on C:\tmp\u0007 b.txt with offset 10, limit 20, verbose true, tags [\"x\",\"y\"], options {\"encoding\":\"utf-8\"}. Before calling, say 'Reading now.'"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file",
+        "description": "Read part of a text file.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer"
+            },
+            "limit": {
+              "type": "integer"
+            },
+            "verbose": {
+              "type": "boolean"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "encoding": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    }
+  ],
+  "max_tokens": 200,
+  "stream_options": {
+    "include_usage": true
+  },
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "stream": true,
+  "id_slot": 2
+}

@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 11.844,
+    "ttfb_s": 8.77,
+    "ttft_s": 9.514,
+    "slot": 2
+  },
+  "summary": {
+    "n_chunks": 17,
+    "delta_keys_seen": [
+      "content",
+      "role",
+      "tool_calls"
+    ],
+    "reasoning": "",
+    "content": "",
+    "tool_calls": {
+      "0": {
+        "id": "t3kBa1xWSIhz2S58UnDtgwUTgDG3i3OC",
+        "name": "get_weather",
+        "arguments": "{\"city\":\"Paris\"}",
+        "n_chunks": 5
+      },
+      "1": {
+        "id": "IosNpNEkL0A0BfwzrZnFqKIGXKCQaO2w",
+        "name": "get_time",
+        "arguments": "{\"timezone\":\"Asia/Tokyo\"}",
+        "n_chunks": 8
+      }
+    },
+    "finish_reason": "tool_calls",
+    "usage": {
+      "completion_tokens": 55,
+      "prompt_tokens": 393,
+      "total_tokens": 448,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 393,
+      "prompt_ms": 8631.357,
+      "prompt_per_token_ms": 21.96274045801527,
+      "prompt_per_second": 45.531658579294074,
+      "predicted_n": 55,
+      "predicted_ms": 3071.774,
+      "predicted_per_token_ms": 56.8847037037037,
+      "predicted_per_second": 17.57941827751651
+    },
+    "last_chunk_is_DONE": true
+  }
+}

@@ -1,0 +1,18 @@
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"role":"assistant","content":null}}],"created":1791803730,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"content":"cargo"}}],"created":1791803730,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"content":","}}],"created":1791803730,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"content":" route"}}],"created":1791803730,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"content":","}}],"created":1791803731,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"content":" weather"}}],"created":1791803731,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":"stop","index":0,"delta":{}}],"created":1791803731,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk"}
+
+data: {"choices":[],"created":1791803731,"id":"chatcmpl-oLA3sm9CV1wdTBY1dCLVbXnZSkwrrc9J","model":"qwen3.6-35b-a3b-uncensored","system_fingerprint":"b11517-8a1a9b512","object":"chat.completion.chunk","usage":{"completion_tokens":6,"prompt_tokens":362,"total_tokens":368,"prompt_tokens_details":{"cached_tokens":11}},"timings":{"cache_n":11,"prompt_n":351,"prompt_ms":2550.423,"prompt_per_token_ms":7.266162393162393,"prompt_per_second":137.62422939253608,"predicted_n":6,"predicted_ms":200.396,"predicted_per_token_ms":40.0792,"predicted_per_second":24.95059781632368}}
+
+data: [DONE]
+

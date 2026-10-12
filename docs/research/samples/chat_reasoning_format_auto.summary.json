@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 6.137,
+    "ttfb_s": 0.511,
+    "ttft_s": 0.511,
+    "slot": 3
+  },
+  "summary": {
+    "n_chunks": 110,
+    "delta_keys_seen": [
+      "content",
+      "reasoning_content",
+      "role"
+    ],
+    "reasoning": "Thinking Process:\n1.  **Identify the user's request:** The user wants the sum of 12 and 30.\n2.  **Constraint:** The answer must be \"the number only\".\n3.  **Calculate:** 12 + 30 = 42.\n4.  **Format output:** Just the number \"42\".\n5.  **Final Check:** Does it meet all constraints? Yes. Output is exactly \"42\".✅\n",
+    "content": "42",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 109,
+      "prompt_tokens": 25,
+      "total_tokens": 134,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 25,
+      "prompt_ms": 463.447,
+      "prompt_per_token_ms": 18.53788,
+      "prompt_per_second": 53.94360088640124,
+      "predicted_n": 109,
+      "predicted_ms": 5626.328,
+      "predicted_per_token_ms": 52.095629629629634,
+      "predicted_per_second": 19.195468163249636
+    },
+    "last_chunk_is_DONE": true
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hi"
+    },
+    {
+      "role": "system",
+      "content": "late system"
+    }
+  ],
+  "max_tokens": 5,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "id_slot": 3
+}

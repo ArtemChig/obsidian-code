@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You can call a function get_weather(city). To call it reply ONLY with:\n<tool_call>\n<function=get_weather>\n<parameter=city>\nCITY\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "role": "user",
+      "content": "Weather in Oslo?"
+    }
+  ],
+  "max_tokens": 120,
+  "stream_options": {
+    "include_usage": true
+  },
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "stream": true,
+  "id_slot": 3
+}

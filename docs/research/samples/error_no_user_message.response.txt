@@ -1,0 +1,1 @@
+{"error":{"code":500,"message":"\n------------\nWhile executing CallExpression at line 79, column 24 in source:\n...lti_step_tool %}↵    {{- raise_exception('No user query found in messages.') }}↵...\n                                           ^\nError: Jinja Exception: No user query found in messages.","type":"server_error"}}

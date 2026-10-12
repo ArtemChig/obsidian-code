@@ -1,0 +1,19 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a terse assistant."
+    },
+    {
+      "role": "user",
+      "content": "What is 17*3? Answer with the number only."
+    }
+  ],
+  "max_tokens": 400,
+  "stream_options": {
+    "include_usage": true
+  },
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "stream": true,
+  "id_slot": 3
+}

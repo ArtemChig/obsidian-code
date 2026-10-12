@@ -1,0 +1,1 @@
+{"error":{"code":500,"message":"Failed to parse tool call arguments as JSON: [json.exception.parse_error.101] parse error at line 1, column 13: syntax error while parsing value - invalid string: missing closing quote; last read: '\"Par'","type":"server_error"}}

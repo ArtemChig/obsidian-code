@@ -1,0 +1,1 @@
+{"id":"chatcmpl-cm8qJohFygprzBuINCmwcIrV0UMZtd0Y","type":"message","role":"assistant","content":[{"type":"text","text":"Hi there"}],"model":"qwen3.6-35b-a3b-uncensored","stop_reason":"end_turn","stop_sequence":null,"usage":{"cache_read_input_tokens":0,"input_tokens":18,"output_tokens":3}}

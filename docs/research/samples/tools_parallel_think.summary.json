@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 9.153,
+    "ttfb_s": 3.095,
+    "ttft_s": 3.095,
+    "slot": 3
+  },
+  "summary": {
+    "n_chunks": 100,
+    "delta_keys_seen": [
+      "content",
+      "reasoning_content",
+      "role",
+      "tool_calls"
+    ],
+    "reasoning": "The user is asking for two pieces of information:\n1. Weather in Paris\n2. Current time in Tokyo (timezone: Asia/Tokyo)\n\nI need to call two tools:\n1. `get_weather` with city \"Paris\"\n2. `get_time` with timezone \"Asia/Tokyo\"\n\nBoth tools have all required parameters provided. I will call them in parallel.\n",
+    "content": "",
+    "tool_calls": {
+      "0": {
+        "id": "MczdlZbyKcuNSpE4NAGlq7ydtA7isweu",
+        "name": "get_weather",
+        "arguments": "{\"city\":\"Paris\"}",
+        "n_chunks": 5
+      },
+      "1": {
+        "id": "WEHj79IUR2w0zAKSl0XYo1LlkLnCvaDL",
+        "name": "get_time",
+        "arguments": "{\"timezone\":\"Asia/Tokyo\"}",
+        "n_chunks": 8
+      }
+    },
+    "finish_reason": "tool_calls",
+    "usage": {
+      "completion_tokens": 140,
+      "prompt_tokens": 391,
+      "total_tokens": 531,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 391,
+      "prompt_ms": 2997.844,
+      "prompt_per_token_ms": 7.667120204603581,
+      "prompt_per_second": 130.42706691875895,
+      "predicted_n": 140,
+      "predicted_ms": 6057.84,
+      "predicted_per_token_ms": 43.58158273381295,
+      "predicted_per_second": 22.94547231356391
+    },
+    "last_chunk_is_DONE": true
+  }
+}

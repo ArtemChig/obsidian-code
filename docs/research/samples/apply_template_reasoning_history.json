@@ -1,0 +1,8 @@
+{
+ "default": "<|im_start|>user\nQ1<|im_end|>\n<|im_start|>assistant\n<think>\nR1-secret\n</think>\n\nA1<|im_end|>\n<|im_start|>user\nQ2<|im_end|>\n<|im_start|>assistant\n<think>\n",
+ "preserve_false": "<|im_start|>user\nQ1<|im_end|>\n<|im_start|>assistant\nA1<|im_end|>\n<|im_start|>user\nQ2<|im_end|>\n<|im_start|>assistant\n<think>\n",
+ "preserve_true": "<|im_start|>user\nQ1<|im_end|>\n<|im_start|>assistant\n<think>\nR1-secret\n</think>\n\nA1<|im_end|>\n<|im_start|>user\nQ2<|im_end|>\n<|im_start|>assistant\n<think>\n",
+ "thinking_off": "<|im_start|>user\nQ1<|im_end|>\n<|im_start|>assistant\n<think>\nR1-secret\n</think>\n\nA1<|im_end|>\n<|im_start|>user\nQ2<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+ "inline_think_in_content": "<|im_start|>user\nQ1<|im_end|>\n<|im_start|>assistant\n<think>\nR1-inline\n</think>\n\nA1<|im_end|>\n<|im_start|>user\nQ2<|im_end|>\n<|im_start|>assistant\n<think>\n",
+ "no_reasoning": "<|im_start|>user\nQ1<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nA1<|im_end|>\n<|im_start|>user\nQ2<|im_end|>\n<|im_start|>assistant\n<think>\n"
+}

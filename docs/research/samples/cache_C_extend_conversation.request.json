@@ -1,0 +1,30 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a terse assistant."
+    },
+    {
+      "role": "user",
+      "content": "The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line. The obsidian archive keeps a ledger of every expedition: the date it left, the crew, the cargo, the route, and the weather recorded at each waypoint. Archivists copy each entry twice and compare the copies line by line.\n\nWrite a 120-word story about the archive."
+    },
+    {
+      "role": "assistant",
+      "content": "The obsidian archive hummed with silent gravity. Within its blackened halls, scribes moved like shadows, copying the ledger of expeditions into twin stacks of parchment. Each entry, etched with the date, crew, cargo, route, and waypoint weather, was duplicated twice. The archivists compared the copies line by line, searching for the slightest divergence in ink or intent. Discrepancies were rare but devastating. A single misread character could unravel a voyage’s history, turning a triumph into a tragedy. Today, a junior archivist paused at a weather report from the Southern Reaches. The copies differed by one letter: \"Storm\" versus \"Calm.\" He traced the error, realizing the original stone tablet had cracked. The archive held truth, but only if preserved perfectly. If the copies diverged, the past became ambiguous. He adjusted his lens, ensuring the next copy matched the first. In the obsidian dark, accuracy was the only light."
+    },
+    {
+      "role": "user",
+      "content": "Now give it a title. Title only."
+    }
+  ],
+  "max_tokens": 30,
+  "stream_options": {
+    "include_usage": true
+  },
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "stream": true,
+  "id_slot": 1
+}

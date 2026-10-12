@@ -1,0 +1,309 @@
+# Obsidian Code — build spec
+
+A private, desktop "Claude Code" replica for Windows that runs **open-weight models** (uncensored by default,
+standard/censored on demand) on (a) the user's own PC (`llama-server` at http://127.0.0.1:8080), (b) a GPU rented
+**by the hour on Vast.ai** with one-button **Clock in / Clock out**, or (c) any OpenAI-compatible endpoint.
+
+Owner/user context: Windows 11, Ryzen 7 5800X, 32 GB RAM, RTX 3070 Ti 8 GB. Local server already running:
+`C:\llama.cpp\llama-server.exe` with Qwen3.6-35B-A3B uncensored on 127.0.0.1:8080 (OpenAI API + /v1/messages; 4 slots;
+~20 tok/s decode, ~480 tok/s prefill — **slow**: keep prompts small). Budget for Vast: $100–200/month, 2–3 h/day.
+
+The app must feel like the Claude Code desktop app: sessions sidebar, streaming transcript with thinking + tool
+cards, composer with slash commands/@mentions/images, permission prompts, plan mode, questions, subagents, todos,
+changes/diff panel, scheduled tasks, an activity/oversight view, and a GPU clock-in panel.
+
+---------------------------------------------------------------------------------------------------------------------
+
+## 1. Architecture
+
+```
+Electron main (src/main)  ──starts──►  Core (src/core, plain Node/TS, no Electron imports)
+   │  window, tray, notifications,            │  HTTP + WebSocket server on 127.0.0.1:<random port>, token auth
+   │  safeStorage, dialogs                    │  agent loop · tools · llm client · gpu/vast · scheduler · store · ext
+   ▼                                          ▼
+Preload (src/preload) ──contextBridge──► Renderer (src/renderer, React)  ◄──WebSocket JSON-RPC + events──►  Core
+```
+
+* **Core is UI-agnostic** and can run standalone: `npm run core` (tsx `src/core/standalone.ts`) prints
+  `OBSIDIAN_CORE_URL=ws://127.0.0.1:PORT/ws?token=…`. The renderer can then run in a normal browser via
+  `npm run dev:web` (Vite) with `?core=<url>` — this is how Playwright/browser tests drive the UI.
+* In Electron, main calls `createCore({ dataDir, native })` in-process, then loads the renderer with the core URL
+  exposed via preload `window.obsidian.coreUrl`.
+* Wire protocol: `src/shared/protocol.ts`. Domain types: `src/shared/types.ts`. Internal module contracts:
+  `src/core/contracts.ts`. **These three files are the contract. Do not change them casually.** If you truly need a
+  change, make the minimal additive change (new optional field / new method), and say so in your final report.
+* Data dir: `%APPDATA%/obsidian-code` (Electron `app.getPath('userData')`), overridable with env
+  `OBSIDIAN_CODE_DATA_DIR` (tests MUST use a temp dir). Layout: `settings.json`, `secrets.json` (encrypted values),
+  `sessions/<id>.json`, `checkpoints/<sessionId>/…`, `kv/<key>.json`, `logs/`, `ssh/` (ed25519 key).
+
+## 2. Directory ownership (parallel build — stay inside your area)
+
+| Area | Path | Owner agent |
+|---|---|---|
+| Contracts | `src/shared/*`, `src/core/contracts.ts` | lead (read-only for others) |
+| Composition root, server, event bus, activity | `src/core/index.ts`, `src/core/server/**`, `src/core/activity/**`, `src/core/standalone.ts` | platform |
+| Persistence | `src/core/store/**` | platform |
+| Scheduler | `src/core/scheduler/**` | platform |
+| Electron | `src/main/**`, `src/preload/**`, `electron-builder.yml`, `resources/icons/**` | platform |
+| LLM client, providers, model registry | `src/core/llm/**` | agent-core |
+| Agent loop, prompts, permissions, compaction, subagents, checkpoints | `src/core/agent/**` | agent-core |
+| Mock OpenAI server for tests | `tests/fixtures/mock-llm/**` | agent-core |
+| Tools | `src/core/tools/**` | tools |
+| Skills, custom agents, slash commands, memory files, MCP, hooks | `src/core/ext/**` | extensions |
+| Vast.ai, SSH tunnel, server bootstrap, catalog, cost/budget | `src/core/gpu/**`, `resources/server/**` | gpu |
+| UI foundation: tokens, Tailwind, primitives, layout shell, WS client, store | `src/renderer/src/{design,components/ui,lib,state,app}/**`, `src/renderer/index.html`, `src/renderer/src/main.tsx` | ui-foundation |
+| Chat UI: transcript, tool cards, composer, prompts, right panels | `src/renderer/src/features/chat/**` | ui-chat |
+| Other views: GPU, Activity, Schedules, Settings, Models | `src/renderer/src/features/{gpu,activity,schedules,settings}/**` | ui-views |
+| Tests | `tests/unit/<area>/**` per owner; `tests/e2e/**` integration | each owner / integration |
+
+### 2.1 Module entry points (exact exports — the composition root imports these)
+
+```ts
+// src/core/store/index.ts
+export function createStores(dataDir: string, native: NativeBridge): { sessions: SessionStore; settings: SettingsStore; secrets: SecretStore; kv: KvStore };
+// src/core/activity/index.ts
+export function createActivityRegistry(bus: EventBus): ActivityRegistry;
+// src/core/llm/index.ts
+export function createLlmClient(): LlmClient;
+export function createModelRegistry(ctx: CoreContext): ModelRegistry;   // registers 'local' + 'custom:*' providers itself; gpu registers 'vast' via ctx.models.register(ctx.gpu.provider())
+// src/core/tools/index.ts
+export function createShellRegistry(ctx: CoreContext): ShellRegistry;
+export function createToolRegistry(ctx: CoreContext): { all(): ToolDef[]; get(name: string): ToolDef | undefined }; // all() = builtins + ctx.ext.mcpTools()
+// src/core/ext/index.ts
+export function createExtensions(ctx: CoreContext): ExtensionsApi & { start(): Promise<void>; dispose(): Promise<void> };
+// src/core/agent/index.ts
+export function createAgentManager(ctx: CoreContext): AgentManager;
+// src/core/gpu/index.ts
+export function createGpuManager(ctx: CoreContext): GpuManager & { start(): Promise<void> };  // start() = reconcile instances, begin heartbeats
+// src/core/scheduler/index.ts
+export function createScheduler(ctx: CoreContext): SchedulerApi & { start(): void; stop(): void };
+// src/core/index.ts (platform)
+export async function createCore(opts: { dataDir: string; native: NativeBridge; port?: number }): Promise<{ url: string; token: string; port: number; ctx: CoreContext; close(): Promise<void> }>;
+```
+
+`CoreContext` is created as one mutable object and filled in order (stores → bus → activity → llm → ext → shells →
+tools → models → gpu → agent → scheduler); **factories must not call other modules during construction** — only
+store the `ctx` reference and use it lazily at call time. Startup side effects belong in `start()`.
+
+**Never edit `package.json`** (deps are pre-installed by the scaffold; if you need a package, use `npm i <pkg>` only if
+it is pure-JS and small, and list it in your final report). Never delete other areas' files.
+
+## 3. Tech stack (installed by scaffold)
+
+Electron 44 · electron-vite 5 · Vite · React 19 · TypeScript (strict, ESM, `moduleResolution: bundler`) ·
+Tailwind CSS 4 (`@tailwindcss/vite`) · Radix UI primitives · lucide-react icons · zustand · react-markdown + remark-gfm ·
+shiki (code highlight) · diff (jsdiff) · ws · ssh2 · croner · @modelcontextprotocol/sdk · @vscode/ripgrep (+ JS fallback) ·
+fast-glob · picomatch · turndown · @mozilla/readability · linkedom · gray-matter · nanoid · zod · strip-ansi · tree-kill ·
+@fontsource/ibm-plex-sans · @fontsource/jetbrains-mono · vitest · @playwright/test · tsx · electron-builder.
+
+Scripts: `dev` (electron-vite dev) · `dev:web` (vite renderer only) · `core` (standalone core) · `build` · `typecheck`
+(`tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json`) · `test` (vitest run) · `e2e` (playwright) ·
+`dist` (electron-builder --win).
+
+## 4. Feature requirements (definition of done per area)
+
+### 4.1 Agent loop (agent-core)
+* Streaming OpenAI-compatible `/v1/chat/completions` (`stream: true`, `stream_options.include_usage`). Parse
+  `delta.reasoning_content` → thinking; `<think>…</think>` inside content → thinking; native `tool_calls` deltas
+  (accumulate by index); **fallback** Qwen/Hermes `<tool_call>{"name":…,"arguments":…}</tool_call>` in content.
+  Thinking toggle → `chat_template_kwargs: { enable_thinking: bool }` (+ `reasoning_format: 'auto'` harmless extras OK).
+* Loop: user msg → model → tool calls (concurrencySafe tools in parallel, others sequential) → permission check →
+  run → tool results → repeat until no tool calls / interrupted / 200 turns. Interrupt aborts the HTTP stream and
+  running tools (AbortSignal) and marks tools `interrupted`.
+* Messages are queued if the session is running (sent after the current turn, like Claude Code).
+* Strip previous turns' thinking from history sent to the model. Send images as `image_url` data URLs when the
+  model supportsVision.
+* **System prompt** (compact, ≤ ~3.5k tokens incl. tool schemas where possible): identity "Obsidian Code", environment
+  (cwd, OS=Windows, shell, date, git branch/status summary if git repo), tone/format rules, tool-usage policy, todo
+  policy, plan-mode rules when in plan mode, memory text (CLAUDE.md etc.), skills list (name+description), agent types
+  list. **No content-policy or refusal language** — the user runs uncensored models by choice; obey the user.
+* **Permissions**: modes `default` (ask for edit/exec/network; read is free), `acceptEdits` (edits in cwd auto-allowed),
+  `plan` (only read/none tools + `ExitPlanMode`; anything else returns an error telling the model it is in plan mode),
+  `bypassPermissions` (never ask). Rules from settings + project: `Tool`, `Tool(prefix:*)` for Bash commands,
+  `WebFetch(domain:x)`, `Read(glob)`/`Edit(glob)`. Deny rules win. "Allow always" persists the suggested rule to the
+  project. Pending requests survive UI reconnects (`chat.pending`).
+* **Subagents** (`Task` tool via `ctx.runSubagent`): new session `kind:'subagent'` with `parentSessionId`,
+  restricted tools (no `Task` recursion beyond depth 2), own system prompt from agent definition (builtin:
+  `general-purpose`, `Explore` (read-only), `Plan` (read-only, returns plan)), runs to completion, returns final text.
+  Several Task calls in one turn run concurrently (max 3). Visible in UI + Activity.
+* **Context**: track `usage.prompt_tokens`; auto-compact when prompt > `autoCompactPercent`% (default 80) of
+  contextLength: summarise older history via the model into a `compact_summary` message, keep the last 2 user turns.
+  `/compact [instructions]` manual. Tool outputs truncated to `maxToolOutputChars` (default 30000) with a note.
+* **Checkpoints/rewind**: `ctx.checkpointFile` saves original content per (session, user message); `chat.rewind`
+  truncates messages and optionally restores files (delete files that were newly created).
+* **Built-in slash commands** handled by the agent: `/clear` (new conversation in same session: archive old messages),
+  `/compact`, `/model <id>`, `/plan` (toggle plan mode), `/init` (generate OBSIDIAN.md/CLAUDE.md via the model), `/help`,
+  `/cost` (usage), `/todos`, `/agents`, `/skills`, `/memory` (show memory files), `/thinking on|off`, `/rewind`.
+  Custom commands via `ext.expandCommand`. `#text` at message start appends to project memory file.
+* Hooks via `ext.runHooks` at UserPromptSubmit, PreToolUse (can block), PostToolUse, Stop, SessionStart.
+* Headless runs for the scheduler (`runHeadless`), permission mode from the task; in headless runs, permission
+  prompts in `default` mode are auto-denied with a message (no human), questions get "(no answer — running unattended)".
+* Session title: after the first assistant reply, generate a ≤6-word title with a cheap `complete()` call
+  (fallback: first 50 chars of the prompt).
+* Mock LLM server (`tests/fixtures/mock-llm/server.ts`): scripted SSE responses incl. reasoning_content, tool_calls
+  (native and `<tool_call>` text form), usage; used by unit tests for the loop.
+
+### 4.2 Tools (tools) — Claude Code parity, model-facing names exactly:
+`Read` (offset/limit, line numbers `cat -n` style, images → ToolResultPayload.images, PDFs → text if possible, notebooks),
+`Write`, `Edit` (old_string/new_string/replace_all, uniqueness check, read-before-edit), `MultiEdit`, `Glob`, `Grep`
+(ripgrep via @vscode/ripgrep with JS fallback; output_mode content/files_with_matches/count, -i, -n, -A/-B/-C, glob,
+type, head_limit, multiline), `LS`, `Bash` (Git Bash if found at `C:\Program Files\Git\bin\bash.exe` else PowerShell;
+`timeout` default 120s max 600s; `run_in_background`; streams progress; kills process tree on abort), `BashOutput`,
+`KillShell`, `PowerShell` (explicit PowerShell), `WebFetch` (fetch → Readability → Markdown via turndown; optional
+`prompt` → `ctx.complete` extraction when content is long; 15-min cache), `WebSearch` (DuckDuckGo HTML default, Brave /
+Tavily / SearXNG when configured; returns title/url/snippet list), `TodoWrite`, `AskUserQuestion`, `Task`
+(→ ctx.runSubagent), `ExitPlanMode`, `Skill` (→ ext.loadSkill, returns body + base dir), `NotebookEdit`,
+`ScheduleTask` / `ListScheduledTasks` / `DeleteScheduledTask` (→ ctx.scheduler). Each tool: concise description,
+JSON schema, `permission()`, `title()`, `ruleFor()`, rich `display`. Paths: accept absolute or cwd-relative; Windows
+path normalisation. Unit tests for each (temp dirs).
+
+### 4.3 Extensions (extensions)
+Memory files: `~/.obsidian-code/OBSIDIAN.md`, `~/.claude/CLAUDE.md` (if importClaudeConfig), and walking up from cwd:
+`OBSIDIAN.md`, `CLAUDE.md`, `AGENTS.md`, `.claude/CLAUDE.md`. Skills: `~/.obsidian-code/skills/*/SKILL.md`,
+`<cwd>/.obsidian-code/skills`, plus `~/.claude/skills` and `<cwd>/.claude/skills` when importClaudeConfig (frontmatter
+name/description). Agents: `.../agents/*.md` (frontmatter name, description, tools, model; body = system prompt) + builtins.
+Commands: `.../commands/*.md` (frontmatter description, argument-hint; `$ARGUMENTS`, `$1..$9`). MCP: connect servers from
+settings (`stdio` via @modelcontextprotocol/sdk StdioClientTransport, `http` via StreamableHTTPClientTransport), expose
+tools as `mcp__<server>__<tool>` ToolDefs (permission 'exec'), reconnect on settings change. Hooks: run shell command
+with JSON payload on stdin, timeout, exit code 2 = block with stderr as message; stdout JSON `{additionalContext}` optional.
+
+### 4.4 GPU / Vast.ai (gpu) — money-safety is the top priority
+* Vast REST API (base `https://console.vast.ai/api/v0`, header `Authorization: Bearer <key>`). **Research and verify the
+  exact endpoints from docs.vast.ai before coding**: search offers (bundles), create instance from offer (asks),
+  list/show instances, destroy, (stop/start), current user (credit), SSH key registration/attach. Unauthenticated offer
+  search works and MUST be exercised live in a test. Authenticated calls are unit-tested against a local mock server
+  (the user provides the key tomorrow; then we live-test).
+* Clock-in pipeline (state machine → `GpuStatus.steps`): budget check → search offers matching profile (gpu_name in list,
+  num_gpus, gpu_ram, cpu_ram, disk, inet_down, reliability, verified, rentable, optional datacenter; sort by price;
+  respect `maxPricePerHour`) → create instance (image from settings, disk, label `obsidian-code`, onstart = bootstrap
+  script with env: model URLs, llama args, API key, idle/heartbeat/max-hours) → poll until running → SSH (ssh2, app's
+  ed25519 key registered on the account) → poll `/root/oc/status.json` for download/load progress → open local port
+  forward `127.0.0.1:<localPort>` → remote `127.0.0.1:8080` → health check `/v1/models` with API key → `ready`.
+  On any failure: **destroy the instance** (retry with backoff, verify it is gone), surface the error.
+* Clock-out: destroy instance, verify gone, close tunnel, finalize ledger record. Per-second billing → cost =
+  price × elapsed. Ledger in kv `gpu-ledger`; month cost; monthly budget blocks clock-in (and auto clock-out at budget).
+* Watchdogs: **server-side** (in bootstrap script): destroy itself via Vast API using `$CONTAINER_API_KEY` /
+  `$CONTAINER_ID` (verify the variable names + endpoint in docs) when no inference for `idleMinutes`, or no app heartbeat
+  file touch for `heartbeatMinutes`, or `maxSessionHours` exceeded. **App-side**: heartbeat over SSH every 60 s; on
+  app quit with `clockOutOnQuit` → clock out (main process awaits it, max 20 s); on startup → list labelled instances,
+  adopt the tracked one if still running, else report orphans (`gpu.destroyOrphans`).
+* Bootstrap script (`resources/server/bootstrap.sh`, rendered with variables): verify the llama.cpp CUDA docker image tag
+  (`ghcr.io/ggml-org/llama.cpp:*` — pick one with CUDA ≥ 12.8 for Blackwell (RTX 5090 / RTX PRO 6000) and a shell +
+  python/pip or curl), download model files (prefer `hf download` with hf_xet via pip; fallback parallel curl), write
+  status JSON with progress, start `llama-server --host 127.0.0.1 --port 8080 --api-key $KEY -ngl 99 -c <ctx>
+  --jinja --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 <model llamaArgs>`, model-switch command
+  (`/root/oc/switch.sh <modelId>`), log to `/root/oc/server.log`.
+* Catalog (`src/core/gpu/catalog.ts`) with **verified** Hugging Face repos/files (query
+  `https://huggingface.co/api/models/<repo>/tree/main`; record `verifiedAt`). Profiles: `light` (1× RTX 5090 32 GB →
+  Qwen3.8-27B), `standard` (1× RTX PRO 6000 96 GB → Qwen3.8-Flash-Next if llama.cpp supports it, else Qwen3.8-27B Q8),
+  `max` (2× RTX PRO 6000 → GLM-5.3-Flash). Each family must have an **uncensored** and a **standard** variant (uncensored
+  preferred: heretic-org / HauhauCS / huihui-ai; standard: unsloth / official GGUF).
+* `VastProvider` (id `vast`): endpoint = tunnel URL + API key when ready; models = the loaded catalog model.
+* Also implement the **Local** provider detection is in llm/ (agent-core), not here.
+
+### 4.5 Platform (platform)
+Core composition (`createCore`), HTTP server (`/health`, `/ws`), token auth, JSON-RPC router mapping every method in
+`RpcMethods` to modules, event bus fan-out to all clients, activity registry. Stores: sessions (JSON per session, debounced
+atomic writes), settings (defaults + deep-merge + validation; default profiles; default model = local if online),
+secrets (Electron safeStorage via `native.encrypt/decrypt`; standalone fallback AES-256-GCM with a key file in dataDir),
+kv. Scheduler: croner-based, persisted, catch-up policy = run once if missed while app closed (configurable later),
+`allowAutoClockIn` path with budget guard, notifications on finish. Electron: single-instance lock, frameless-ish window
+with custom title bar (Windows controls overlay), tray icon (Clock in/out, Open, Quit), native notifications, launch
+at login setting, graceful quit (clock-out + flush), preload API: `coreUrl`, `pickFolder()`, `openPath()`,
+`showItemInFolder()`, `platform`, window controls. electron-builder config: NSIS + portable, `asarUnpack` for ripgrep
+binary and `resources/server/**`, app id `com.obsidian.code`, product name "Obsidian Code", icon generated (an obsidian
+shard glyph) as .ico/.png.
+
+### 4.6 UI (ui-foundation, ui-chat, ui-views) — design system "Obsidian"
+See §5. Layout like the Claude Code desktop app:
+* **Left sidebar** (240 px, collapsible): app mark + "New session" (Ctrl+N), search, sessions grouped Pinned / by
+  project folder (relative time, running spinner, unread dot), nav items: Scheduled, Activity, GPU, Settings; bottom:
+  **GPU widget** (status dot, model, $/h, session timer, Clock in/out button).
+* **Main**: header (session title editable, cwd chip with folder picker, git branch, model picker, context meter) →
+  transcript → composer.
+* **Transcript**: user bubbles (right-aligned subtle surface), assistant text (markdown, GFM tables, shiki code blocks
+  with copy), collapsible **Thinking** blocks (live timer while streaming, "Thought for 12s"), **tool cards** per tool
+  (header: icon + title + status; body: Read → file excerpt, Edit/Write → unified diff with +/- colours, Bash →
+  terminal-styled output with exit code, Grep/Glob → list, WebSearch → result links, WebFetch → url card, TodoWrite →
+  checklist, Task → subagent card with live nested transcript preview and "Open", AskUserQuestion → answered
+  questions), inline **permission prompt** (Allow once / Always allow `<rule>` / Deny + feedback) with keyboard
+  shortcuts (1/2/3, Esc), **question card** (options as selectable rows, multiSelect, "Other" free text, Submit),
+  **plan approval card** (rendered plan, Approve → choose mode (acceptEdits/default), Keep planning + feedback), compact
+  summary divider, error banners with Retry, "Rewind to here" on user messages (with "also restore files" toggle),
+  jump-to-bottom button, virtualised or efficiently rendered long transcripts.
+* **Composer**: auto-growing textarea, Enter send / Shift+Enter newline, `/` command palette (builtin + custom,
+  fuzzy), `@` file mention palette (files.search), paste/drag images (thumbnails), permission-mode selector (Shift+Tab
+  cycles: default → acceptEdits → plan → bypass), thinking toggle, model picker (grouped by provider, with
+  uncensored/standard badge, status dot), Stop button while running (Esc), queued-message chip.
+* **Right panel** (toggle, tabs): Changes (changed files list → diff viewer), Todos, Agents (subagents of this session
+  with status), Files (cwd tree, click to insert @mention).
+* **GPU view**: profile cards (Light / Standard / Max with live price range from `gpu.offers`), model picker with
+  **Uncensored ↔ Standard** toggle, big Clock in / Clock out button, step checklist with progress bar, session timer +
+  live cost, month spend vs budget bar, credit balance, history table, server log viewer, orphan-instance warning banner,
+  "API key missing" empty state linking to Settings.
+* **Activity view** ("oversee the work"): live list of running/recent sessions, subagents, background shells,
+  schedule runs, GPU; status, elapsed, Stop buttons, click to open.
+* **Scheduled view**: list (name, schedule in human words + next run, last status), create/edit dialog (name, prompt,
+  folder, schedule presets: hourly/daily at/weekdays at/custom cron/once at, model, permission mode, auto clock-in
+  toggle with cost warning), Run now, enable toggle.
+* **Settings view** (sections): Models & providers (local URL + test, custom endpoints CRUD + keys), Vast.ai (API key
+  input → `secrets.set('vast.apiKey')`, Test key, budget, idle/heartbeat/max hours, clock-out on quit, image, profiles
+  editor), Permissions (default mode, allow/deny rules), Web search provider + keys, MCP servers (JSON editor),
+  Hooks (JSON editor), Memory & Claude import toggle, Shell, Appearance (density), Notifications, Launch at login,
+  About (data dir, version).
+* Global: command palette (Ctrl+K) for navigation/actions, toasts for `notification` events, reconnecting banner when
+  the WebSocket drops (auto-reconnect with backoff, refetch state), keyboard focus rings, no emoji icons (lucide only).
+
+## 5. Design system — "Obsidian"
+
+Source: ui-ux-pro-max plugin → design skill palette **"Obsidian Dark"** (Premium; "mysterious, elegant, powerful,
+sophisticated"): Primary `#0B1215`, Secondary `#1C2833`, Accent `#566573`, Background `#212F3D`, Text `#ECF0F1`.
+Style from ui-ux-pro-max `--design-system` for "AI coding agent developer tool dark desktop" (density 8, motion 3,
+variance 3): **Minimalism & Swiss Style**, dense dashboard spacing, subtle motion, typography **IBM Plex Sans** (UI/body)
++ **JetBrains Mono** (code, metrics, labels). Dark-only (light mode is an anti-pattern for this product).
+
+Tokens (CSS variables in `src/renderer/src/design/tokens.css`, mapped into Tailwind v4 `@theme`):
+
+| Token | Value | Use |
+|---|---|---|
+| `--ob-bg` | `#0B1215` | app canvas (obsidian black) |
+| `--ob-surface-1` | `#101A1F` | sidebar, right panel |
+| `--ob-surface-2` | `#1C2833` | cards, inputs, user bubbles |
+| `--ob-surface-3` | `#212F3D` | popovers, menus, hover |
+| `--ob-border` | `#24323E` | hairlines |
+| `--ob-border-strong` | `#566573` | focus-adjacent, emphasized dividers |
+| `--ob-text` | `#ECF0F1` | primary text |
+| `--ob-text-2` | `#A9B6BF` | secondary text |
+| `--ob-text-3` | `#7C8B96` | muted/meta (≥4.5:1 on bg) |
+| `--ob-accent` | `#8FB8DE` | primary actions, links, focus ring ("obsidian glint" ice-blue) |
+| `--ob-accent-ink` | `#0B1215` | text on accent |
+| `--ob-accent-soft` | `rgba(143,184,222,0.12)` | selected rows, accent washes |
+| `--ob-violet` | `#B3A6E8` | thinking blocks, subagents (iridescent sheen) |
+| `--ob-success` | `#5FD39A` | done, additions, GPU ready |
+| `--ob-warning` | `#E8B85C` | waiting/permission, cost warnings |
+| `--ob-danger` | `#F07178` | errors, deletions, Clock out |
+| `--ob-code-bg` | `#0E171C` | code blocks / terminal |
+| `--ob-diff-add` | `rgba(95,211,154,0.13)` / `--ob-diff-del` `rgba(240,113,120,0.13)` | diff rows |
+
+Radius: 6 px controls, 10 px cards, 999 px pills. Shadows: none (popovers: `0 8px 24px rgba(0,0,0,.45)` + 1px border).
+Type scale: 11 (meta, mono uppercase tracking .06em for section labels), 12, 13 (UI default), 14.5 (chat prose,
+line-height 1.65), 16, 20 (view titles). Spacing: 4-pt grid, dense (8/12/16/24). Motion: 120–200 ms ease-out on
+hover/press/expand; respect `prefers-reduced-motion`. Focus: 2 px `--ob-accent` ring offset 1 px. Icons: lucide-react,
+16 px default, 1.75 stroke. Hit targets ≥ 28 px in dense desktop UI (≥ 44 px not required on desktop, but keep buttons
+≥ 32 px high for primary actions). Contrast ≥ 4.5:1 for text. Scrollbars thin and dark. Selection colour accent-soft.
+
+## 6. Quality bar & verification
+
+* `npm run typecheck`, `npm test`, `npm run build` must pass at the end of every phase.
+* Unit tests per area with temp data dirs; no network in unit tests except the explicitly-live Vast offer search
+  test and HF catalog verification (mark `.live`, skipped when `OFFLINE=1`).
+* Real-model E2E (integration phase): drive the core headlessly against the user's local llama-server
+  (127.0.0.1:8080, model id from `/v1/models`) — tasks: read a file, edit a file, run a command, glob/grep, todo list,
+  ask-question auto-answer, subagent, web search+fetch, plan mode, schedule creation. It is slow (~20 tok/s): use short
+  prompts and generous timeouts; don't run more than 2 concurrent requests (the user's Hearth app may also use it).
+* UI E2E: Playwright against `dev:web` + standalone core (and one Electron launch smoke test via `_electron`);
+  screenshots saved to `tests/e2e/screenshots/` for design review.
+* Windows specifics: paths with spaces (the project lives in `E:\programming projects\…`), CRLF, PowerShell quoting,
+  process-tree kill.
+* Security: core listens on 127.0.0.1 only, token required for WS/HTTP; secrets never sent to the renderer; renderer has
+  `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`; markdown rendering never executes raw HTML.

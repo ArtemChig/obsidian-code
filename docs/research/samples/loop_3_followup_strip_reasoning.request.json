@@ -1,0 +1,91 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant. Use tools when needed. Call independent tools in parallel in one turn."
+    },
+    {
+      "role": "user",
+      "content": "What's the weather in Paris and what time is it in Tokyo (Asia/Tokyo)?"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "SEYvHzkzwGcXKunlUoQhqO1wyUv1LaTq",
+          "type": "function",
+          "function": {
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Paris\"}"
+          }
+        },
+        {
+          "id": "9CUs1eAHqozkql1byB6X29N1UXGhzlR5",
+          "type": "function",
+          "function": {
+            "name": "get_time",
+            "arguments": "{\"timezone\":\"Asia/Tokyo\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "SEYvHzkzwGcXKunlUoQhqO1wyUv1LaTq",
+      "content": "18°C, light rain"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "9CUs1eAHqozkql1byB6X29N1UXGhzlR5",
+      "content": "2026-10-13 07:42 JST"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get the current weather for a city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string",
+              "description": "City name"
+            }
+          },
+          "required": [
+            "city"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_time",
+        "description": "Get the current local time in an IANA timezone.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": {
+              "type": "string",
+              "description": "IANA timezone, e.g. Europe/Paris"
+            }
+          },
+          "required": [
+            "timezone"
+          ]
+        }
+      }
+    }
+  ],
+  "max_tokens": 400,
+  "stream_options": {
+    "include_usage": true
+  },
+  "model": "qwen3.6-35b-a3b-uncensored",
+  "stream": true,
+  "id_slot": 1
+}

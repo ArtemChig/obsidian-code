@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 2.778,
+    "ttfb_s": 1.867,
+    "ttft_s": 1.867,
+    "slot": 2
+  },
+  "summary": {
+    "n_chunks": 25,
+    "delta_keys_seen": [
+      "content",
+      "role"
+    ],
+    "reasoning": "",
+    "content": "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"city\": \"Oslo\"}}\n</tool_call>",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 22,
+      "prompt_tokens": 59,
+      "total_tokens": 81,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 59,
+      "prompt_ms": 1755.33,
+      "prompt_per_token_ms": 29.75135593220339,
+      "prompt_per_second": 33.611913429383655,
+      "predicted_n": 22,
+      "predicted_ms": 910.383,
+      "predicted_per_token_ms": 43.35157142857143,
+      "predicted_per_second": 23.067214567934595
+    },
+    "last_chunk_is_DONE": true
+  }
+}

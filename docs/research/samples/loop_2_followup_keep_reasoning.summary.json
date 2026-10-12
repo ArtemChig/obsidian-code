@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "status": 200,
+    "headers": {
+      "Server": "llama.cpp",
+      "Access-Control-Allow-Origin": "",
+      "X-Accel-Buffering": "no",
+      "Content-Type": "text/event-stream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close"
+    },
+    "elapsed_s": 7.301,
+    "ttfb_s": 1.517,
+    "ttft_s": 1.517,
+    "slot": 1
+  },
+  "summary": {
+    "n_chunks": 123,
+    "delta_keys_seen": [
+      "content",
+      "reasoning_content",
+      "role"
+    ],
+    "reasoning": "I have received the results for both function calls:\n1. Weather in Paris: 18°C, light rain\n2. Time in Tokyo (Asia/Tokyo): 2026-10-13 07:42 JST\n\nNow I can combine this information into a clear and concise response for the user.\n",
+    "content": "The weather in Paris is currently 18°C with light rain. \n\nThe time in Tokyo (Asia/Tokyo) is 07:42 JST on October 13, 2026.",
+    "tool_calls": {},
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 122,
+      "prompt_tokens": 577,
+      "total_tokens": 699,
+      "prompt_tokens_details": {
+        "cached_tokens": 532
+      }
+    },
+    "timings": {
+      "cache_n": 532,
+      "prompt_n": 45,
+      "prompt_ms": 1504.017,
+      "prompt_per_token_ms": 33.4226,
+      "prompt_per_second": 29.91987457588578,
+      "predicted_n": 122,
+      "predicted_ms": 5784.167,
+      "predicted_per_token_ms": 47.803033057851245,
+      "predicted_per_second": 20.919174705709565
+    },
+    "last_chunk_is_DONE": true
+  }
+}

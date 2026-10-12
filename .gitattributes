@@ -1,0 +1,12 @@
+* text=auto
+# Shell scripts run on Linux GPU servers (Vast.ai) and in Git Bash: always LF.
+*.sh text eol=lf
+*.bash text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
