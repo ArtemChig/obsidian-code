@@ -1,0 +1,12 @@
+{
+  "512x512": {
+    "prompt_tokens": 278,
+    "prompt_ms": 5330.707,
+    "ttft_s": 5.42
+  },
+  "1024x768": {
+    "prompt_tokens": 790,
+    "prompt_ms": 4880.489,
+    "ttft_s": 5.002
+  }
+}

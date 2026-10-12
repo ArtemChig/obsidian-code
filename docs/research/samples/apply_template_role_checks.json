@@ -1,0 +1,44 @@
+{
+ "developer_first": [
+  200,
+  {
+   "prompt": "<|im_start|>system\nDEV<|im_end|>\n<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n<think>\n"
+  }
+ ],
+ "developer_after_user": [
+  500,
+  {
+   "error": {
+    "code": 500,
+    "message": "\n------------\nWhile executing CallExpression at line 85, column 32 in source:\n...first %}↵            {{- raise_exception('System message must be at the beginnin...\n                                           ^\nError: Jinja Exception: System message must be at the beginning.",
+    "type": "server_error"
+   }
+  }
+ ],
+ "robot_with_user": [
+  500,
+  {
+   "error": {
+    "code": 500,
+    "message": "\n------------\nWhile executing CallExpression at line 144, column 28 in source:\n... {%- else %}↵        {{- raise_exception('Unexpected message role.') }}↵    {%- ...\n                                           ^\nError: Jinja Exception: Unexpected message role.",
+    "type": "server_error"
+   }
+  }
+ ],
+ "two_system_first": [
+  500,
+  {
+   "error": {
+    "code": 500,
+    "message": "\n------------\nWhile executing CallExpression at line 85, column 32 in source:\n...first %}↵            {{- raise_exception('System message must be at the beginnin...\n                                           ^\nError: Jinja Exception: System message must be at the beginning.",
+    "type": "server_error"
+   }
+  }
+ ],
+ "assistant_last_prefill": [
+  200,
+  {
+   "prompt": "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nSure, "
+  }
+ ]
+}

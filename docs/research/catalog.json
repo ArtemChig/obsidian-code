@@ -1,0 +1,286 @@
+[
+  {
+    "id": "qwen38-27b-uncensored-hauhau-q5kp",
+    "label": "Qwen3.8 27B Uncensored - HauhauCS Aggressive Q5_K_P",
+    "family": "qwen3.8-27b",
+    "variant": "uncensored",
+    "repo": "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
+    "files": [
+      "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q5_K_P.gguf"
+    ],
+    "mmproj": "mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
+    "sizeGb": 21.15,
+    "minTotalVramGb": 32,
+    "contextLength": 131072,
+    "llamaArgs": [
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "2",
+      "--parallel",
+      "1"
+    ],
+    "profiles": [
+      "light"
+    ],
+    "notes": "Recommended default for 'light' (1x RTX 5090). arch qwen35; 64 layers + 1 embedded NextN/MTP layer (verified in the GGUF header). Upstream embedded MTP via --spec-type draft-mtp; the HauhauCS 'FastMTP' sidecar needs a patched llama.cpp build and is NOT used. Est. VRAM at 131072 ctx with q8_0 KV: about 26 GiB of 31.8 GiB. Vision via the BF16 mmproj.",
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "qwen38-27b-uncensored-heretic-ara-q5km",
+    "label": "Qwen3.8 27B Uncensored - heretic-ara Q5_K_M (mradermacher)",
+    "family": "qwen3.8-27b",
+    "variant": "uncensored",
+    "repo": "mradermacher/Qwen3.8-27B-heretic-ara-GGUF",
+    "files": [
+      "Qwen3.8-27B-heretic-ara.Q5_K_M.gguf"
+    ],
+    "mmproj": "Qwen3.8-27B-heretic-ara.mmproj-f16.gguf",
+    "sizeGb": 20.46,
+    "minTotalVramGb": 32,
+    "contextLength": 131072,
+    "llamaArgs": [
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "2",
+      "--parallel",
+      "1"
+    ],
+    "profiles": [
+      "light"
+    ],
+    "notes": "Static GGUF of heretic-org/Qwen3.8-27B-heretic-ara (heretic-org publishes safetensors only, no GGUF). Embedded NextN/MTP layer verified in the GGUF header.",
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "qwen38-27b-standard-unsloth-q5kxl",
+    "label": "Qwen3.8 27B - Unsloth UD-Q5_K_XL",
+    "family": "qwen3.8-27b",
+    "variant": "standard",
+    "repo": "unsloth/Qwen3.8-27B-GGUF",
+    "files": [
+      "Qwen3.8-27B-UD-Q5_K_XL.gguf"
+    ],
+    "mmproj": "mmproj-BF16.gguf",
+    "sizeGb": 21.81,
+    "minTotalVramGb": 32,
+    "contextLength": 131072,
+    "llamaArgs": [
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "2",
+      "--parallel",
+      "1"
+    ],
+    "profiles": [
+      "light"
+    ],
+    "notes": "Standard (vendor-aligned) weights. Embedded NextN/MTP layer verified in the GGUF header.",
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "qwen38-27b-uncensored-hauhau-q8kp",
+    "label": "Qwen3.8 27B Uncensored - HauhauCS Aggressive Q8_K_P",
+    "family": "qwen3.8-27b",
+    "variant": "uncensored",
+    "repo": "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
+    "files": [
+      "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf"
+    ],
+    "mmproj": "mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
+    "sizeGb": 32.39,
+    "minTotalVramGb": 48,
+    "contextLength": 262144,
+    "llamaArgs": [
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "2",
+      "--parallel",
+      "1"
+    ],
+    "profiles": [
+      "standard"
+    ],
+    "notes": "Reliable fallback for 'standard' (1x RTX PRO 6000) when Flash-Next fails to load. Est. VRAM at 262144 ctx with q8_0 KV: about 41 GiB.",
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "qwen38-27b-standard-unsloth-q8",
+    "label": "Qwen3.8 27B - Unsloth Q8_0",
+    "family": "qwen3.8-27b",
+    "variant": "standard",
+    "repo": "unsloth/Qwen3.8-27B-GGUF",
+    "files": [
+      "Qwen3.8-27B-Q8_0.gguf"
+    ],
+    "mmproj": "mmproj-BF16.gguf",
+    "sizeGb": 29.98,
+    "minTotalVramGb": 48,
+    "contextLength": 262144,
+    "llamaArgs": [
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "2",
+      "--parallel",
+      "1"
+    ],
+    "profiles": [
+      "standard"
+    ],
+    "notes": "Standard fallback for 'standard'. Embedded NextN/MTP layer verified in the GGUF header.",
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "qwen38-flash-next-uncensored-huihui-v2-q4kxl",
+    "label": "Qwen3.8 Flash-Next 125B-A6B Uncensored - huihui v2 UD-Q4_K_XL",
+    "family": "qwen3.8-flash-next",
+    "variant": "uncensored",
+    "repo": "huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF",
+    "files": [
+      "unsloth-UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf",
+      "unsloth-UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00002-of-00004.gguf",
+      "unsloth-UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00003-of-00004.gguf",
+      "unsloth-UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf"
+    ],
+    "sizeGb": 111.33,
+    "minTotalVramGb": 96,
+    "contextLength": 131072,
+    "llamaArgs": [
+      "--parallel",
+      "1"
+    ],
+    "profiles": [
+      "standard"
+    ],
+    "notes": "arch qwen4exp (upstream since PR #27742, 2026-08-27). The 28.84 GB per_layer_token_embd (n-gram PLE table) is read lazily from disk via mmap (--lazy-mode auto is the default), so only about 82.5 GB must be VRAM-resident. Do NOT pass --load-mode none (it would defeat mmap). No MTP: this repo ships no MTP head and Unsloth's Flash-Next MTP heads hit GGML_ASSERT at startup (llama.cpp #29811). No mmproj on purpose (QSA indexer OOM risk with images, #30032). v2 = experts not ablated (huihui: better for coding).",
+    "experimental": true,
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "qwen38-flash-next-standard-ggml-iq4nl",
+    "label": "Qwen3.8 Flash-Next 125B-A6B - ggml-org IQ4_NL + MTP",
+    "family": "qwen3.8-flash-next",
+    "variant": "standard",
+    "repo": "ggml-org/Qwen3.8-Flash-Next-GGUF",
+    "files": [
+      "Qwen3.8-Flash-Next-IQ4_NL-00001-of-00002.gguf",
+      "Qwen3.8-Flash-Next-IQ4_NL-00002-of-00002.gguf",
+      "mtp-Qwen3.8-Flash-Next-Q8_0.gguf"
+    ],
+    "sizeGb": 106.19,
+    "minTotalVramGb": 96,
+    "contextLength": 131072,
+    "llamaArgs": [
+      "-md",
+      "{modelDir}/mtp-Qwen3.8-Flash-Next-Q8_0.gguf",
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "3",
+      "--parallel",
+      "1"
+    ],
+    "profiles": [
+      "standard"
+    ],
+    "notes": "files[0..1] = split model (pass files[0] to -m); files[2] = separate MTP draft head (the ggml-org head is the combination reported working in llama.cpp #29811). The bootstrap must replace '{modelDir}' in llamaArgs with the local download dir. About 73.2 GB VRAM-resident + 4.1 GB MTP; the 28.82 GB PLE table is lazily mmapped. No mmproj: MTP + image input aborts the server (open issue #30307).",
+    "experimental": true,
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "glm53-flash-uncensored-huihui-iq4xs",
+    "label": "GLM-5.3 Flash 320B-A18B Uncensored - huihui UD-IQ4_XS",
+    "family": "glm-5.3-flash",
+    "variant": "uncensored",
+    "repo": "huihui-ai/Huihui-GLM-5.3-Flash-abliterated-GGUF",
+    "files": [
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00001-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00002-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00003-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00004-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00005-of-00005.gguf"
+    ],
+    "mmproj": "mmproj-model-bf16.gguf",
+    "sizeGb": 157.99,
+    "minTotalVramGb": 192,
+    "contextLength": 131072,
+    "llamaArgs": [],
+    "profiles": [
+      "max"
+    ],
+    "notes": "arch glm5-next (upstream PR #27773 merged 2026-09-30; MTP PR #29928 2026-10-07). The embedded NextN layer is present but MTP is NOT enabled: draft-mtp roughly halves prompt processing on multi-GPU layer split (#27428) and breaks image requests (#30204). Never set -ub 2048 (CUDA illegal memory access on sm_120, #28282). About 146 GiB of weights across 2 x 95.6 GiB; MLA KV cache is small.",
+    "experimental": true,
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "glm53-flash-standard-unsloth-iq4xs",
+    "label": "GLM-5.3 Flash 320B-A18B - Unsloth UD-IQ4_XS",
+    "family": "glm-5.3-flash",
+    "variant": "standard",
+    "repo": "unsloth/GLM-5.3-Flash-GGUF",
+    "files": [
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00001-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00002-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00003-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00004-of-00005.gguf",
+      "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00005-of-00005.gguf"
+    ],
+    "mmproj": "mmproj-BF16.gguf",
+    "sizeGb": 157.99,
+    "minTotalVramGb": 192,
+    "contextLength": 131072,
+    "llamaArgs": [],
+    "profiles": [
+      "max"
+    ],
+    "notes": "Same quant recipe and size as the huihui uncensored build (parts 2-5 differ by hash; part 1 is metadata only).",
+    "experimental": true,
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "test-qwen35-0.8b-q8",
+    "label": "TEST - Qwen3.5 0.8B Q8_0 (smoke test)",
+    "family": "test",
+    "variant": "standard",
+    "repo": "unsloth/Qwen3.5-0.8B-GGUF",
+    "files": [
+      "Qwen3.5-0.8B-Q8_0.gguf"
+    ],
+    "sizeGb": 0.81,
+    "minTotalVramGb": 4,
+    "contextLength": 32768,
+    "llamaArgs": [],
+    "profiles": [
+      "light",
+      "standard",
+      "max"
+    ],
+    "notes": "0.81 GB, arch qwen35 (same code path as Qwen3.8-27B, but no MTP layer). For cheap live clock-in pipeline tests.",
+    "verifiedAt": "2026-10-12"
+  },
+  {
+    "id": "test-qwen35-2b-uncensored-hauhau-q4km",
+    "label": "TEST - Qwen3.5 2B Uncensored HauhauCS Q4_K_M (smoke test)",
+    "family": "test",
+    "variant": "uncensored",
+    "repo": "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
+    "files": [
+      "Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf"
+    ],
+    "sizeGb": 1.27,
+    "minTotalVramGb": 4,
+    "contextLength": 32768,
+    "llamaArgs": [],
+    "profiles": [
+      "light",
+      "standard",
+      "max"
+    ],
+    "notes": "1.27 GB uncensored tiny model for smoke tests (arch qwen35, no MTP layer).",
+    "verifiedAt": "2026-10-12"
+  }
+]

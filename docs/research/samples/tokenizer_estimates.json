@@ -1,0 +1,35 @@
+{
+  "SPEC.md_chars": 26657,
+  "SPEC.md_tokens": 7482,
+  "contracts.ts_chars": 12910,
+  "contracts.ts_tokens": 3383,
+  "prompt_tokens_no_tools": 24,
+  "prompt_tokens_1_tool": 286,
+  "prompt_tokens_2_tools": 361,
+  "tool_preamble_overhead_tokens": 187,
+  "per_simple_tool_tokens": 75,
+  "chars_per_token_SPEC": 3.56,
+  "chars_per_token_ts": 3.82,
+  "special_token_pieces": [
+    {
+      "id": 248068,
+      "piece": "<think>"
+    },
+    {
+      "id": 248069,
+      "piece": "</think>"
+    },
+    {
+      "id": 248058,
+      "piece": "<tool_call>"
+    },
+    {
+      "id": 248059,
+      "piece": "</tool_call>"
+    },
+    {
+      "id": 248046,
+      "piece": "<|im_end|>"
+    }
+  ]
+}

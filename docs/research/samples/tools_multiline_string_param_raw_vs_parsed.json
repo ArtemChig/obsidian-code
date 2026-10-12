@@ -1,0 +1,17 @@
+{
+  "raw_generated": "",
+  "message": {
+    "role": "assistant",
+    "content": "",
+    "tool_calls": [
+      {
+        "type": "function",
+        "function": {
+          "name": "write_file",
+          "arguments": "{\"path\":\"hello.py\",\"content\":\"def greet(name):\\n    return f\\\"Hi {name}\\\"\\n\"}"
+        },
+        "id": "KKsUcfYkl4HqjOM0xfxZJPrRiryhm7RE"
+      }
+    ]
+  }
+}

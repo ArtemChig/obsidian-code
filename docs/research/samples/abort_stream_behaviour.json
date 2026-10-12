@@ -1,0 +1,12 @@
+{
+  "slot": 2,
+  "chunks_before_abort": 32,
+  "t+0.0s": {
+    "is_processing": true,
+    "n_decoded": 31
+  },
+  "t+0.5s": {
+    "is_processing": false,
+    "n_decoded": 0
+  }
+}

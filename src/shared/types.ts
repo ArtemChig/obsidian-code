@@ -261,6 +261,8 @@ export interface GpuStatus {
   lastError?: string;
   /** Instances found on the account labelled for this app but not tracked (e.g. after a crash). */
   orphanInstanceIds?: number[];
+  /** A stopped ("parked") instance that keeps the model on disk for a fast next clock-in. */
+  parked?: { instanceId: number; profileId: string; modelId: string; gpuName: string; storageCostPerHour: number; parkedAt: number };
   /** Ordered checklist for the UI. */
   steps: { id: GpuPhase; label: string; state: 'todo' | 'active' | 'done' | 'error' }[];
 }
@@ -362,6 +364,11 @@ export interface Settings {
     heartbeatMinutes: number; // server watchdog: destroy after N min without app heartbeat
     maxSessionHours: number;  // hard cap per clock-in
     clockOutOnQuit: boolean;
+    /** 'destroy' = delete the instance (no further cost, model re-downloads next time).
+     *  'park' = stop the instance and keep its disk (storage is billed, next clock-in on the same machine skips the download
+     *  if that GPU is still free; otherwise falls back to a fresh instance). Parked instances are destroyed after parkMaxDays. */
+    clockOutMode: 'destroy' | 'park';
+    parkMaxDays: number;
     image: string;            // docker image for the server
     localPort: number;        // tunnel port on this PC
     extraLlamaArgs: string[];
