@@ -7,7 +7,7 @@
 // Connect to ws://127.0.0.1:<port>/ws?token=<token>. The token is generated per core start.
 
 import type {
-  ActivityItem, AgentTypeInfo, Block, CatalogModel, ChangedFile, GpuOffer, GpuSessionRecord, GpuStatus,
+  ActivityItem, AgentTypeInfo, Block, EngineId, EngineInfo, CatalogModel, ChangedFile, GpuOffer, GpuSessionRecord, GpuStatus,
   ImageBlock, Message, ModelInfo, ModelRef, PermissionDecision, PermissionMode, PermissionRequest, PlanRequest,
   ProviderInfo, QuestionRequest, ScheduledTask, Session, SessionSummary, Settings, SkillInfo, SlashCommandInfo,
   Todo, ToolUseBlock,
@@ -20,7 +20,7 @@ export interface RpcMethods {
   // ── sessions
   'sessions.list': { params: { includeSubagents?: boolean }; result: SessionSummary[] };
   'sessions.get': { params: { id: string }; result: Session };
-  'sessions.create': { params: { cwd?: string; title?: string; model?: ModelRef | null; permissionMode?: PermissionMode }; result: SessionSummary };
+  'sessions.create': { params: { cwd?: string; title?: string; model?: ModelRef | null; permissionMode?: PermissionMode; engine?: EngineId }; result: SessionSummary };
   'sessions.rename': { params: { id: string; title: string }; result: SessionSummary };
   'sessions.delete': { params: { id: string }; result: { ok: true } };
   'sessions.fork': { params: { id: string; atMessageId?: string }; result: SessionSummary };
@@ -39,6 +39,8 @@ export interface RpcMethods {
   'chat.setPermissionMode': { params: { sessionId: string; mode: PermissionMode }; result: SessionSummary };
   'chat.setModel': { params: { sessionId: string; model: ModelRef }; result: SessionSummary };
   'chat.setThinking': { params: { sessionId: string; thinking: boolean }; result: SessionSummary };
+  /** Switch a session's agent harness. Only allowed while the session is idle; history is carried over. */
+  'chat.setEngine': { params: { sessionId: string; engine: EngineId }; result: SessionSummary };
   /** Rewind: drop messages from atMessageId (a user message) onward; optionally restore files to that point. */
   'chat.rewind': { params: { sessionId: string; atMessageId: string; restoreFiles: boolean }; result: { ok: true; restoredFiles: string[] } };
   'chat.pending': { params: { sessionId?: string }; result: { permissions: PermissionRequest[]; questions: QuestionRequest[]; plans: PlanRequest[] } };
@@ -55,6 +57,7 @@ export interface RpcMethods {
   // ── models
   'models.list': { params: {}; result: { providers: ProviderInfo[]; models: ModelInfo[] } };
   'models.refresh': { params: {}; result: { providers: ProviderInfo[]; models: ModelInfo[] } };
+  'engines.list': { params: {}; result: EngineInfo[] };
 
   // ── gpu (vast.ai)
   'gpu.status': { params: {}; result: GpuStatus };

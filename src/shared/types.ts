@@ -38,6 +38,18 @@ export interface ProviderInfo {
 // ───────────────────────────── Sessions & transcript ─────────────────────────────
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+
+/** Which agent harness runs a session: the app's own loop, or the real Claude Code harness (Claude Agent SDK)
+ *  pointed at the session's model endpoint (llama.cpp /v1/messages). */
+export type EngineId = 'builtin' | 'claude-code';
+
+export interface EngineInfo {
+  id: EngineId;
+  label: string;
+  available: boolean;
+  /** Why unavailable / version info, e.g. "Claude Code 2.1.252 via Agent SDK 0.3.296". */
+  detail: string;
+}
 export type SessionKind = 'chat' | 'subagent' | 'scheduled';
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'error';
 
@@ -64,6 +76,8 @@ export interface SessionSummary {
   model: ModelRef | null;
   permissionMode: PermissionMode;
   thinking: boolean;
+  /** Missing = 'builtin' (sessions created before engines existed). */
+  engine?: EngineId;
   pinned?: boolean;
   usage: UsageTotals;
 }
@@ -391,4 +405,19 @@ export interface Settings {
   autoCompactPercent: number; // compact when prompt tokens exceed this % of context
   notifications: boolean;
   launchAtLogin: boolean;
+  engine: {
+    /** Engine for new sessions. */
+    default: EngineId;
+    claudeCode: {
+      /** 'auto' = SDK-bundled Claude Code; or an absolute path to a claude executable. */
+      executable: string;
+      /** 'claude_code' = Claude Code's own full system prompt (exact harness behaviour, ~large);
+       *  'lean' = Claude Code tools/loop with the app's compact system prompt (much faster on the local GPU). */
+      systemPrompt: 'claude_code' | 'lean';
+      /** Copy skills/agents/commands/CLAUDE.md from ~/.claude into the engine's isolated config dir. */
+      importUserClaudeConfig: boolean;
+      /** Extra env vars for the Claude Code process (never shown back with secrets). */
+      extraEnv: Record<string, string>;
+    };
+  };
 }
