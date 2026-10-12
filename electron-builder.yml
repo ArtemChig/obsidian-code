@@ -1,0 +1,57 @@
+# electron-builder config (owner: platform). Build with: npm run dist  (electron-vite build && electron-builder --win)
+appId: com.obsidian.code
+productName: Obsidian Code
+copyright: Copyright © 2026 Obsidian Code
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - resources/**/*
+  - "!resources/icons/*.py"
+  - "!**/*.map"
+  - "!**/{.eslintrc*,.prettierrc*,tsconfig*.json,*.tsbuildinfo}"
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,README,changelog.md}"
+  - "!**/node_modules/*/{test,__tests__,tests,example,examples}/**"
+
+# Native binaries and files read via fs at runtime must live outside the asar archive:
+# ripgrep's rg.exe (spawned by the Grep tool) and resources/** (bootstrap script, icons; the main process points
+# OBSIDIAN_RESOURCES_DIR at app.asar.unpacked/resources when packaged).
+asarUnpack:
+  - node_modules/@vscode/ripgrep*/**
+  - resources/**
+
+extraResources:
+  - from: resources/server
+    to: server
+    filter:
+      - "**/*"
+
+win:
+  icon: resources/icons/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Obsidian Code
+  installerIcon: resources/icons/icon.ico
+  uninstallerIcon: resources/icons/icon.ico
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+npmRebuild: false

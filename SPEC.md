@@ -292,6 +292,33 @@ hover/press/expand; respect `prefers-reduced-motion`. Focus: 2 px `--ob-accent` 
 16 px default, 1.75 stroke. Hit targets ≥ 28 px in dense desktop UI (≥ 44 px not required on desktop, but keep buttons
 ≥ 32 px high for primary actions). Contrast ≥ 4.5:1 for text. Scrollbars thin and dark. Selection colour accent-soft.
 
+## 5b. Decisions from Phase 1 research (binding — read docs/research/*.md for details)
+
+* **Reasoning history (overrides §4.1 "strip thinking")**: for llama.cpp/vLLM dialect endpoints, KEEP `reasoning_content`
+  on past assistant messages until compaction (measured: better prompt-cache reuse and the model keeps thinking).
+  Strip only for generic endpoints. Keep the system prompt + tool list **byte-identical** across a session's turns
+  (plan mode rejects disallowed tools at execution time instead of filtering the schema list) so the server's prompt
+  cache keeps hitting. Detect server dialect (llamacpp / vllm / generic) via `/props` or `/version`; send llama.cpp-only
+  fields (`reasoning_format`, `return_progress`, `cache_prompt`, `top_k`) only to llamacpp/vllm.
+* **Fallback text tool-call parser** must handle Qwen XML (`<tool_call><function=NAME><parameter=P>v</parameter></function></tool_call>`),
+  Hermes JSON (`<tool_call>{"name":…,"arguments":…}</tool_call>`) and GLM `arg_key/arg_value` forms, coercing values by schema.
+  Never execute a tool call whose arguments are invalid JSON or whose stream ended with `finish_reason: "length"` — return an
+  error to the model instead. Tool-call arguments put back into history must be valid JSON (server 500s otherwise).
+* Only one system message, first. Use an idle timeout (no bytes for 120 s; use `return_progress:true` on llama.cpp for
+  liveness during long prefills) instead of a total timeout; no max_tokens on agent turns.
+* The user's local server is shared with another app (Hearth) — don't pin slots; ≤ 2 concurrent requests from us to `local`.
+* **Vast**: create = `PUT /asks/{offerId}/`; destroy = `DELETE /instances/{id}/`; runtype `"ssh_direc ssh_proxy"`;
+  prefer direct SSH (public_ipaddr + ports['22/tcp']) else proxy (ssh_host:ssh_port); env is a dict; onstart is a small
+  stub (< ~4000 chars) that FIRST arms the self-destroy watchdog, then decodes the full bootstrap shipped gzip+base64 in an
+  env var (fallback: upload over SSH). Offer filters always add `cuda_max_good >= 12.8`, `inet_down_cost <= 0.01`,
+  `direct_port_count >= 4`, `duration >= 1 day`, `allocated_storage = disk`. gpu_name values use spaces (e.g. "RTX 5090").
+* **Image**: `ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561` (pinned; CUDA 12.8; has bash/curl/python3/pip).
+* **Catalog** (`docs/research/catalog.json`, 11 verified entries): `files[0]` is passed to `-m`; extra non-split files
+  (e.g. an MTP head) may follow the split parts; `llamaArgs` may contain a `{modelDir}` placeholder the bootstrap must
+  substitute. Flash-Next & GLM-5.3-Flash are `experimental`. Big models download for 15–22 min per clock-in (billed) →
+  `clockOutMode: 'park'` (stop instance, keep disk) is offered; default stays `destroy` (no idle storage cost).
+* Image download sizes: mention expected warm-up time per model in the GPU UI (sizeGb / ~150 MB/s heuristic).
+
 ## 6. Quality bar & verification
 
 * `npm run typecheck`, `npm test`, `npm run build` must pass at the end of every phase.

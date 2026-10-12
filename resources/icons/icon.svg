@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Obsidian Code</title>
+  <defs>
+    <clipPath id="shard"><polygon points="372.2,20 387.4,216.1 313.9,427.9 204.9,492 132.9,419.9 124.6,267.9 184.9,213.7 232.2,95.8"/></clipPath>
+    <linearGradient id="f0" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="286.2"><stop offset="0" stop-color="#46647F"/><stop offset="1" stop-color="#2C4357"/></linearGradient>
+    <linearGradient id="f1" gradientUnits="userSpaceOnUse" x1="0" y1="216.1" x2="0" y2="427.9"><stop offset="0" stop-color="#30475A"/><stop offset="1" stop-color="#1D2C38"/></linearGradient>
+    <linearGradient id="f2" gradientUnits="userSpaceOnUse" x1="0" y1="286.2" x2="0" y2="492"><stop offset="0" stop-color="#1D2B36"/><stop offset="1" stop-color="#111B22"/></linearGradient>
+    <linearGradient id="f3" gradientUnits="userSpaceOnUse" x1="0" y1="286.2" x2="0" y2="492"><stop offset="0" stop-color="#10191F"/><stop offset="1" stop-color="#0A1115"/></linearGradient>
+    <linearGradient id="f4" gradientUnits="userSpaceOnUse" x1="0" y1="267.9" x2="0" y2="419.9"><stop offset="0" stop-color="#0C1418"/><stop offset="1" stop-color="#080D10"/></linearGradient>
+    <linearGradient id="f5" gradientUnits="userSpaceOnUse" x1="0" y1="213.7" x2="0" y2="286.2"><stop offset="0" stop-color="#131C22"/><stop offset="1" stop-color="#0D151A"/></linearGradient>
+    <linearGradient id="f6" gradientUnits="userSpaceOnUse" x1="0" y1="95.8" x2="0" y2="286.2"><stop offset="0" stop-color="#19242D"/><stop offset="1" stop-color="#121C23"/></linearGradient>
+    <linearGradient id="f7" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="286.2"><stop offset="0" stop-color="#27394B"/><stop offset="1" stop-color="#1B2836"/></linearGradient>
+  </defs>
+  <g clip-path="url(#shard)">
+  <polygon points="372.2,20 387.4,216.1 258.8,286.2" fill="url(#f0)"/>
+  <polygon points="387.4,216.1 313.9,427.9 258.8,286.2" fill="url(#f1)"/>
+  <polygon points="313.9,427.9 204.9,492 258.8,286.2" fill="url(#f2)"/>
+  <polygon points="204.9,492 132.9,419.9 258.8,286.2" fill="url(#f3)"/>
+  <polygon points="132.9,419.9 124.6,267.9 258.8,286.2" fill="url(#f4)"/>
+  <polygon points="124.6,267.9 184.9,213.7 258.8,286.2" fill="url(#f5)"/>
+  <polygon points="184.9,213.7 232.2,95.8 258.8,286.2" fill="url(#f6)"/>
+  <polygon points="232.2,95.8 372.2,20 258.8,286.2" fill="url(#f7)"/>
+  <line x1="372.2" y1="20" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+  <line x1="387.4" y1="216.1" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+  <line x1="313.9" y1="427.9" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+  <line x1="204.9" y1="492" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+  <line x1="132.9" y1="419.9" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+  <line x1="124.6" y1="267.9" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+  <line x1="184.9" y1="213.7" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+  <line x1="232.2" y1="95.8" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.18" stroke-width="2.5"/>
+    <line x1="372.2" y1="20" x2="258.8" y2="286.2" stroke="#8FB8DE" stroke-opacity="0.37" stroke-width="4"/>
+    <polyline points="232.2,95.8 372.2,20" fill="none" stroke="#8FB8DE" stroke-opacity="0.47" stroke-width="5"/>
+    <polyline points="387.4,216.1 313.9,427.9" fill="none" stroke="#8FB8DE" stroke-opacity="0.43" stroke-width="5"/>
+    <polyline points="372.2,20 387.4,216.1" fill="none" stroke="#8FB8DE" stroke-width="12" stroke-linecap="round"/>
+  </g>
+  <polygon points="372.2,20 387.4,216.1 313.9,427.9 204.9,492 132.9,419.9 124.6,267.9 184.9,213.7 232.2,95.8" fill="none" stroke="#566573" stroke-opacity="0.75" stroke-width="5" stroke-linejoin="round"/>
+</svg>

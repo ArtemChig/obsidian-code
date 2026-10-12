@@ -119,6 +119,10 @@ export interface ToolContext {
   signal: AbortSignal;
   permissionMode: PermissionMode;
   settings: Settings;
+  /** Read a secret (e.g. 'search.braveKey'). Never put secret values in tool output. */
+  secret(name: string): string | null;
+  /** Data dir for tool caches (e.g. WebFetch cache). */
+  dataDir: string;
   /** Stream progress text to the UI (e.g. tail of bash output). */
   progress(text: string): void;
   /** Files read in this session (path → mtimeMs at read time). Edit/Write require prior Read for existing files. */
