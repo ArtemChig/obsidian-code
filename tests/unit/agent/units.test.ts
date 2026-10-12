@@ -6,7 +6,7 @@ import type { PermissionKind, ToolDef } from '@core/contracts';
 import type { Message } from '@shared/types';
 import { decidePermission, parseRule, splitShellCommand } from '@core/agent/permissions';
 import { buildSystemPrompt, gitSummary } from '@core/agent/prompt';
-import { buildHistory } from '@core/agent/history';
+import { buildHistory, INTERRUPTED_NOTE } from '@core/agent/history';
 import { CheckpointStore } from '@core/agent/checkpoints';
 import { planCompaction } from '@core/agent/compaction';
 import { subagentToolNames } from '@core/agent/subagents';
@@ -135,13 +135,34 @@ describe('history builder', () => {
   ];
   it('starts at the last summary, skips commands, merges user-side messages, keeps reasoning + tool order', () => {
     const h = buildHistory(msgs, { system: 'SYS', supportsVision: true });
-    expect(h.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'tool', 'tool']);
+    expect(h.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'tool', 'tool', 'user']);
+    expect(h[5]!.content).toBe(INTERRUPTED_NOTE); // a2 was interrupted before its first token
     expect(h[1]!.content).toBe('SUMMARY\n\ndo it\n\n<system-reminder>\nnote\n</system-reminder>');
     expect(h[2]).toMatchObject({ content: 'Reading.', reasoning_content: 'hmm', tool_calls: [{ id: 't1' }, { id: 't2' }] });
     expect(h[3]).toMatchObject({ tool_call_id: 't1', content: [{ type: 'text', text: 'AAA' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,xx' } }] });
     expect(h[4]).toMatchObject({ tool_call_id: 't2', content: expect.stringMatching(/Interrupted/) });
     const nv = buildHistory(msgs, { system: 'SYS', supportsVision: false });
     expect(nv[3]!.content).toMatch(/image omitted/);
+  });
+  it('marks interrupted replies so the next message is not read as a continuation of the old request', () => {
+    const story: Message[] = [
+      { id: 'u1', role: 'user', createdAt: 0, blocks: [{ type: 'text', text: 'Write a long story.' }] },
+      // interrupted while only thinking had streamed (real Qwen3.6 run: it then wrote the whole story again)
+      { id: 'a1', role: 'assistant', createdAt: 0, blocks: [{ type: 'thinking', text: 'Plot: a lighthouse…' }], meta: { interrupted: true } },
+      { id: 'u2', role: 'user', createdAt: 0, blocks: [{ type: 'text', text: 'Stop. Reply with DONE.' }] },
+    ];
+    const h1 = buildHistory(story, { system: 'SYS', supportsVision: false });
+    expect(h1.map((m) => m.role)).toEqual(['system', 'user']);
+    expect(h1[1]!.content).toBe(`Write a long story.\n\n${INTERRUPTED_NOTE}\n\nStop. Reply with DONE.`);
+    // partial text kept verbatim (prompt-cache friendly), note after it
+    story[1] = { ...story[1]!, blocks: [{ type: 'thinking', text: 'Plot' }, { type: 'text', text: 'Once upon' }] };
+    const h2 = buildHistory(story, { system: 'SYS', supportsVision: false });
+    expect(h2.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(h2[2]).toMatchObject({ content: 'Once upon', reasoning_content: 'Plot' });
+    expect(h2[3]!.content).toBe(`${INTERRUPTED_NOTE}\n\nStop. Reply with DONE.`);
+    // not interrupted → no note
+    story[1] = { ...story[1]!, meta: {} };
+    expect(JSON.stringify(buildHistory(story, { system: 'SYS', supportsVision: false }))).not.toContain(INTERRUPTED_NOTE);
   });
 });
 

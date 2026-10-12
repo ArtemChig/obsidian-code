@@ -109,7 +109,7 @@ describe('SettingsStore', () => {
     expect(s).toEqual(defaultSettings());
     expect(s.local).toEqual({ enabled: true, baseUrl: 'http://127.0.0.1:8080' });
     expect(s.vast.profiles.map((p) => p.id)).toEqual(['light', 'standard', 'max']);
-    expect(s.vast.profiles.map((p) => p.maxPricePerHour)).toEqual([1.2, 2.5, 4.5]);
+    expect(s.vast.profiles.map((p) => p.maxPricePerHour)).toEqual([1.0, 2.2, 4.0]);
     expect(s.vast.profiles.find((p) => p.id === 'standard')?.defaultModelId).toBe('qwen38-flash-next-uncensored-huihui-v2-q4kxl');
     expect(s.vast.image).toBe('ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561');
     expect(s.vast.clockOutMode).toBe('destroy');

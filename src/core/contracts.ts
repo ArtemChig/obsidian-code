@@ -74,6 +74,8 @@ export interface ChatRequest {
   /** Ask the server to think (Qwen: chat_template_kwargs.enable_thinking). */
   thinking?: boolean;
   signal?: AbortSignal;
+  /** Per-request prefill progress (llama.cpp `prompt_progress`; `processed` includes `cache`). Optional. */
+  onProgress?: (p: { total: number; cache: number; processed: number; timeMs: number }) => void;
 }
 
 export type LlmEvent =

@@ -14,6 +14,16 @@ export interface TranscriptEntry {
   blockStarts: Record<string, number>;
   /** Epoch ms when each streamed block ended (next block started or message completed). */
   blockEnds: Record<string, number>;
+  /** Prompt-processing progress of the pending assistant message (llama.cpp prefill); cleared on its first token. */
+  prefill: PrefillState | null;
+}
+
+export interface PrefillState {
+  messageId: string;
+  /** 0..1 of the uncached prompt. */
+  progress: number;
+  processed?: number;
+  total?: number;
 }
 
 export function blockKey(messageId: string, blockIndex: number): string {
@@ -21,7 +31,7 @@ export function blockKey(messageId: string, blockIndex: number): string {
 }
 
 export function createEntry(session: Session): TranscriptEntry {
-  return { session, stale: false, streamingMessageId: null, blockStarts: {}, blockEnds: {} };
+  return { session, stale: false, streamingMessageId: null, blockStarts: {}, blockEnds: {}, prefill: null };
 }
 
 function updateMessage(session: Session, messageId: string, fn: (m: Message) => Message): Session {
@@ -125,6 +135,10 @@ export function applySummary(session: Session, s: SessionSummary): Session {
   return { ...session, ...s, messages: session.messages, todos: session.todos, changedFiles: session.changedFiles };
 }
 
+function clearPrefill(prefill: PrefillState | null, messageId: string): PrefillState | null {
+  return prefill && prefill.messageId === messageId ? null : prefill;
+}
+
 /** Bookkeeping for streaming timers. Returns a new entry. */
 export function reduceEntry<E extends keyof CoreEvents>(entry: TranscriptEntry, event: E, data: CoreEvents[E], now: number = Date.now()): TranscriptEntry {
   switch (event) {
@@ -146,7 +160,14 @@ export function reduceEntry<E extends keyof CoreEvents>(entry: TranscriptEntry, 
           if (blockStarts[prevKey] !== undefined && blockEnds[prevKey] === undefined) blockEnds = { ...blockEnds, [prevKey]: now };
         }
       }
-      return { ...entry, session: applyDelta(entry.session, ev), blockStarts, blockEnds, streamingMessageId: entry.streamingMessageId ?? ev.messageId };
+      return {
+        ...entry,
+        session: applyDelta(entry.session, ev),
+        blockStarts,
+        blockEnds,
+        streamingMessageId: entry.streamingMessageId ?? ev.messageId,
+        prefill: clearPrefill(entry.prefill, ev.messageId),
+      };
     }
     case 'message.block': {
       const ev = data as CoreEvents['message.block'];
@@ -155,7 +176,7 @@ export function reduceEntry<E extends keyof CoreEvents>(entry: TranscriptEntry, 
         const prevKey = blockKey(ev.messageId, ev.blockIndex - 1);
         if (entry.blockStarts[prevKey] !== undefined && blockEnds[prevKey] === undefined) blockEnds = { ...blockEnds, [prevKey]: now };
       }
-      return { ...entry, session: applyBlock(entry.session, ev), blockEnds };
+      return { ...entry, session: applyBlock(entry.session, ev), blockEnds, prefill: clearPrefill(entry.prefill, ev.messageId) };
     }
     case 'message.completed': {
       const ev = data as CoreEvents['message.completed'];
@@ -169,7 +190,16 @@ export function reduceEntry<E extends keyof CoreEvents>(entry: TranscriptEntry, 
         session: applyCompleted(entry.session, ev),
         blockEnds,
         streamingMessageId: entry.streamingMessageId === ev.messageId ? null : entry.streamingMessageId,
+        prefill: clearPrefill(entry.prefill, ev.messageId),
       };
+    }
+    case 'message.progress': {
+      const ev = data as CoreEvents['message.progress'];
+      const msg = entry.session.messages.findLast((m) => m.id === ev.messageId);
+      // Progress only matters before the first token: ignore it once the message has content.
+      if (msg && msg.blocks.length > 0) return entry.prefill ? { ...entry, prefill: null } : entry;
+      const progress = Math.min(1, Math.max(0, Number(ev.progress) || 0));
+      return { ...entry, prefill: { messageId: ev.messageId, progress, processed: ev.processed, total: ev.total } };
     }
     case 'tool.updated':
       return { ...entry, session: applyToolUpdate(entry.session, data as CoreEvents['tool.updated']) };
@@ -182,10 +212,10 @@ export function reduceEntry<E extends keyof CoreEvents>(entry: TranscriptEntry, 
       const session = applySummary(entry.session, s);
       // A session that stopped running has no streaming message any more.
       const streamingMessageId = s.status === 'running' ? entry.streamingMessageId : null;
-      return { ...entry, session, streamingMessageId };
+      return { ...entry, session, streamingMessageId, prefill: s.status === 'running' ? entry.prefill : null };
     }
     case 'session.reset':
-      return { ...entry, stale: true, streamingMessageId: null };
+      return { ...entry, stale: true, streamingMessageId: null, prefill: null };
     default:
       return entry;
   }
@@ -197,6 +227,7 @@ export const TRANSCRIPT_EVENTS = [
   'message.delta',
   'message.block',
   'message.completed',
+  'message.progress',
   'tool.updated',
   'todos.updated',
   'changes.updated',

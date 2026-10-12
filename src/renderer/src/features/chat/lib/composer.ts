@@ -74,6 +74,23 @@ export function parseDataUrl(url: string): { mediaType: string; data: string } |
   return { mediaType: m[1], data: m[2] };
 }
 
+/** Longest side (px) images are downscaled to before they are attached to a message. */
+export const MAX_IMAGE_SIDE = 1024;
+
+/** Target size that fits `w`×`h` within `max` px on the long side, keeping the aspect ratio (never upscales). */
+export function fitWithin(w: number, h: number, max = MAX_IMAGE_SIDE): { width: number; height: number; scaled: boolean } {
+  if (!(w > 0) || !(h > 0)) return { width: Math.max(0, Math.round(w) || 0), height: Math.max(0, Math.round(h) || 0), scaled: false };
+  const long = Math.max(w, h);
+  if (long <= max) return { width: Math.round(w), height: Math.round(h), scaled: false };
+  const k = max / long;
+  return { width: Math.max(1, Math.round(w * k)), height: Math.max(1, Math.round(h * k)), scaled: true };
+}
+
+/** Output format for a re-encoded image: PNG keeps transparency (png/gif/webp/bmp sources), JPEG for photos. */
+export function reencodeType(sourceType: string): 'image/png' | 'image/jpeg' {
+  return /^image\/jpe?g$/i.test(sourceType) ? 'image/jpeg' : 'image/png';
+}
+
 /** Approximate decoded size of a base64 payload. */
 export function base64Bytes(data: string): number {
   const pad = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;

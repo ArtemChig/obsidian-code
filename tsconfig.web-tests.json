@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo/web-tests.tsbuildinfo",
+    "outDir": "./node_modules/.cache/tsc-web-tests",
+    "types": ["vite/client"]
+  },
+  "include": ["tests/unit/ui-*/**/*.ts", "src/renderer/src/**/*", "src/shared/**/*"]
+}

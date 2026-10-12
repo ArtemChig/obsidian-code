@@ -15,6 +15,7 @@ import { Group, NumberField, Row, SecretField, Section, TextField, patchVast } f
 import { joinArgs, splitArgs } from '../validate';
 import { ProfilesEditor } from './ProfilesEditor';
 
+// Verified 2026-10-12: docs.vast.ai/api-reference/introduction links API-key creation to this page.
 const VAST_KEYS_URL = 'https://cloud.vast.ai/manage-keys/';
 
 export function VastSection() {
@@ -120,16 +121,24 @@ function BudgetAndSafety() {
       <Row label="Monthly budget" htmlFor="vast-budget" description="Clock-in is blocked once this month's spend reaches it, and a running GPU is clocked out automatically.">
         <NumberField id="vast-budget" testId="vast-budget" value={v.monthlyBudget} min={1} max={100000} prefix="$" unit="/mo" onCommit={(n) => patchVast({ monthlyBudget: n }, 'Budget saved')} />
       </Row>
-      <Row label="Idle timeout" htmlFor="vast-idle" description="Destroy the instance after this long without a request to the model.">
+      <Row label="Idle timeout" htmlFor="vast-idle" description="Enforced by a watchdog on the rented machine: it destroys itself after this many minutes without a request to the model.">
         <NumberField id="vast-idle" testId="vast-idle" value={v.idleMinutes} min={1} max={1440} integer unit="min" onCommit={(n) => patchVast({ idleMinutes: n })} />
       </Row>
-      <Row label="App heartbeat" htmlFor="vast-heartbeat" description="Destroy the instance if this app has not been heard from for this long (crash, sleep, power loss).">
+      <Row label="App heartbeat" htmlFor="vast-heartbeat" description="While clocked in, this app pings the server every 60 s. The server-side watchdog destroys the instance when no ping has arrived for this many minutes (app closed, crash, sleep, lost network).">
         <NumberField id="vast-heartbeat" testId="vast-heartbeat" value={v.heartbeatMinutes} min={1} max={240} integer unit="min" onCommit={(n) => patchVast({ heartbeatMinutes: n })} />
       </Row>
       <Row label="Maximum session length" htmlFor="vast-maxhours" description="Hard cap per clock-in, however busy the GPU is.">
         <NumberField id="vast-maxhours" testId="vast-maxhours" value={v.maxSessionHours} min={0.5} max={72} unit="hours" onCommit={(n) => patchVast({ maxSessionHours: n })} />
       </Row>
-      <Row label="Clock out when the app quits" description="Closing Obsidian Code ends the rental. Turn off only if you want the GPU to outlive the app (the idle and heartbeat timeouts still apply).">
+      <Row
+        label="Clock out when the app quits"
+        description={
+          v.clockOutOnQuit
+            ? 'On: quitting Obsidian Code destroys the instance (waits up to 20 s). Turn off only if you want the GPU to outlive the app.'
+            : `Off: the GPU keeps running and billing after you quit, until the server-side watchdog destroys it — up to ${v.heartbeatMinutes} min (the heartbeat timeout), sooner if the ${v.idleMinutes}-min idle timeout is reached first.`
+        }
+        testId="vast-quit-row"
+      >
         <Switch aria-label="Clock out when the app quits" checked={v.clockOutOnQuit} onCheckedChange={(c) => void patchVast({ clockOutOnQuit: c })} />
       </Row>
       <Row stacked label="When clocking out" description="Destroying is free after it ends but the model downloads again next time. Parking keeps the disk (billed as storage) so the next clock-in on the same machine starts fast.">

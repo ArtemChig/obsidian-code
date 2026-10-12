@@ -7,7 +7,7 @@ export const taskTool = defineTool<TaskInput>(
     name: 'Task',
     description:
       'Run a subagent for a self-contained job and get its final report. subagent_type: general-purpose (default), Explore (read-only search), Plan (read-only planning), or a custom type from the system prompt. ' +
-      'It cannot see this conversation: write a complete prompt and say what to report back. Several Task calls in one message run in parallel. Not for simple lookups.',
+      'It cannot see this conversation: write a complete prompt and say what to report back. Several Task calls in one message run in parallel. For a single simple lookup, Grep/Read directly is faster — unless the user asks for a subagent.',
     inputSchema: {
       type: 'object',
       properties: {

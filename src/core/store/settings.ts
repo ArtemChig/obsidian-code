@@ -6,61 +6,15 @@ import { join } from 'node:path';
 import type { GpuProfile, HookConfig, PermissionMode, Settings } from '../../shared/types';
 import type { SettingsStore } from '../contracts';
 import { isPlainObject, readJsonSync, writeFileAtomicSync } from './fsutil';
+import { defaultProfiles } from '../gpu/profiles';
 
 type HookEvent = keyof Settings['hooks'];
 const HOOK_EVENTS: HookEvent[] = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SessionStart'];
 const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 
-/** Default GPU profiles (docs/research/vast-api.md §9 + catalog.md §6). gpu_name values use spaces. */
+/** Default GPU profiles: single source of truth is src/core/gpu/profiles.ts (DEFAULT_GPU_PROFILES). */
 export function defaultGpuProfiles(): GpuProfile[] {
-  const pro6000 = ['RTX PRO 6000 WS', 'RTX PRO 6000 S', 'RTX PRO 6000 Max-Q'];
-  return [
-    {
-      id: 'light',
-      label: 'Light',
-      description: '1× RTX 5090 (32 GB) — Qwen3.8-27B, 128k context',
-      gpuNames: ['RTX 5090'],
-      numGpus: 1,
-      minGpuRamGb: 30,
-      minCpuRamGb: 32,
-      minDiskGb: 80,
-      minInetDownMbps: 500,
-      minReliability: 0.98,
-      maxPricePerHour: 1.2,
-      datacenterOnly: false,
-      defaultModelId: 'qwen38-27b-uncensored-hauhau-q5kp',
-    },
-    {
-      id: 'standard',
-      label: 'Standard',
-      description: '1× RTX PRO 6000 (96 GB) — Qwen3.8-Flash-Next (fallback Qwen3.8-27B Q8)',
-      gpuNames: [...pro6000],
-      numGpus: 1,
-      minGpuRamGb: 90,
-      minCpuRamGb: 64,
-      minDiskGb: 200,
-      minInetDownMbps: 1000,
-      minReliability: 0.98,
-      maxPricePerHour: 2.5,
-      datacenterOnly: false,
-      defaultModelId: 'qwen38-flash-next-uncensored-huihui-v2-q4kxl',
-    },
-    {
-      id: 'max',
-      label: 'Max',
-      description: '2× RTX PRO 6000 (192 GB) — GLM-5.3-Flash',
-      gpuNames: [...pro6000],
-      numGpus: 2,
-      minGpuRamGb: 90,
-      minCpuRamGb: 128,
-      minDiskGb: 250,
-      minInetDownMbps: 1000,
-      minReliability: 0.97,
-      maxPricePerHour: 4.5,
-      datacenterOnly: false,
-      defaultModelId: 'glm53-flash-uncensored-huihui-iq4xs',
-    },
-  ];
+  return defaultProfiles();
 }
 
 export function defaultSettings(): Settings {

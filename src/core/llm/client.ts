@@ -144,7 +144,13 @@ export function createLlmClient(options: LlmClientOptions = {}): ExtendedLlmClie
         thinkingRequested: req.thinking ?? true,
         thinkStartsOpen: st.thinkStartsOpen,
         onThinkStartsOpen: () => { st.thinkStartsOpen = true; },
-        onProgress: options.onProgress ? (p) => options.onProgress!(root, p) : undefined,
+        onProgress:
+          options.onProgress || req.onProgress
+            ? (p) => {
+                options.onProgress?.(root, p);
+                try { req.onProgress?.(p); } catch { /* listener errors never break the stream */ }
+              }
+            : undefined,
       });
       if (!res.ok || !/text\/event-stream/i.test(ctype)) {
         let text = '';

@@ -45,15 +45,20 @@ export interface RelativeTimeProps {
   prefix?: string;
   /** Compact form ("1d", "5w") for dense lists. */
   short?: boolean;
+  /** Append " ago" ("5m ago"; "just now" for the first seconds). */
+  ago?: boolean;
 }
 
 /** "now", "5m", "3h", "yesterday"… with the full date in the tooltip. Updates every 30 s. */
-export function RelativeTime({ ts, className, prefix, short }: RelativeTimeProps) {
+export function RelativeTime({ ts, className, prefix, short, ago }: RelativeTimeProps) {
   const now = useNow(30_000);
+  // Past timestamps only: a value written a moment ago (or by a clock a few ms ahead) reads "now", never "in <1m".
+  const ref = Math.max(now, Date.now());
+  const rel = relativeTime(Math.min(ts, ref), ref, { short });
   return (
     <time dateTime={new Date(ts).toISOString()} title={formatDateTime(ts)} className={cn('ob-tabular whitespace-nowrap', className)}>
       {prefix ? `${prefix} ` : ''}
-      {relativeTime(ts, Math.max(now, Date.now() - 1000), { short })}
+      {ago ? (rel === 'now' ? 'just now' : /^\d/.test(rel) ? `${rel} ago` : rel) : rel}
     </time>
   );
 }

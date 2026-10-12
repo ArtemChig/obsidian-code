@@ -8,9 +8,9 @@ import { IconButton } from '@renderer/components/ui/button';
 import { Markdown } from '@renderer/components/ui/markdown';
 import { RelativeTime } from '@renderer/components/ui/time';
 import { formatDuration, formatTokens, shortModelName } from '@renderer/lib/format';
-import { blockKey } from '@renderer/state/transcript';
+import { blockKey, type PrefillState } from '@renderer/state/transcript';
 import { ToolCard } from '../tools/ToolCard';
-import { ImageThumb } from '../ui';
+import { Clamp, ImageThumb } from '../ui';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingBlock } from './ThinkingBlock';
 
@@ -20,6 +20,15 @@ export function messageText(m: Message): string {
     .map((b) => b.text)
     .join('\n\n')
     .trim();
+}
+
+/** Pasted logs / long prompts collapse to a few lines in the user bubble (Show more expands). */
+function isLongText(text: string): boolean {
+  return text.length > 1200 || lineCount(text) > 14;
+}
+
+function lineCount(text: string): number {
+  return text.split(/\r?\n/).length;
 }
 
 export function messageImages(m: Message): ImageBlock[] {
@@ -96,7 +105,13 @@ export const UserMessage = memo(function UserMessage({ message, onRewind, onOpen
               Scheduled
             </Badge>
           ) : null}
-          {text}
+          {isLongText(text) ? (
+            <Clamp maxHeight={280} fadeFrom="var(--ob-surface-2)" moreLabel={lineCount(text) > 14 ? `${lineCount(text)} lines` : `${text.length.toLocaleString('en-US')} chars`}>
+              {text}
+            </Clamp>
+          ) : (
+            text
+          )}
         </div>
       ) : null}
       <div className="-mb-2.5 flex h-6 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover/user:opacity-100 focus-within:opacity-100">
@@ -131,7 +146,33 @@ export interface AssistantMessageProps {
   streaming: boolean;
   /** Block start/end times (only for the streaming message — keeps memo stable for the rest). */
   timing?: BlockTiming;
+  /** Prompt-processing progress while the model has not produced its first token yet (streaming message only). */
+  prefill?: PrefillState | null;
   onOpenImage?: (img: ImageBlock) => void;
+}
+
+/** "Reading context… 42%" with a thin progress bar — shown in the pending assistant message during a slow prefill. */
+export function PrefillProgress({ prefill }: { prefill: PrefillState }) {
+  const pct = Math.round(Math.min(1, Math.max(0, prefill.progress)) * 100);
+  const tokens = prefill.total ? `${formatTokens(prefill.processed ?? 0)} / ${formatTokens(prefill.total)} tokens` : undefined;
+  return (
+    <div className="flex max-w-[360px] flex-col gap-1.5 py-0.5" data-testid="prefill-progress" title={tokens}>
+      <div className="flex items-baseline gap-2 text-small text-ob-text-3">
+        <span>Reading context…</span>
+        <span className="ob-tabular font-mono text-[11px] text-ob-text-2">{pct}%</span>
+      </div>
+      <div
+        className="h-[2px] w-full overflow-hidden rounded-full bg-ob-surface-3"
+        role="progressbar"
+        aria-label="Reading context"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+      >
+        <div className="h-full rounded-full bg-ob-accent transition-[width] duration-200 ease-out" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
 }
 
 type Segment = { kind: 'block'; index: number; block: Block } | { kind: 'tools'; index: number; tools: ToolUseBlock[] };
@@ -150,7 +191,7 @@ function segments(blocks: Block[]): Segment[] {
   return out;
 }
 
-export const AssistantMessage = memo(function AssistantMessage({ message, cwd, streaming, timing, onOpenImage }: AssistantMessageProps) {
+export const AssistantMessage = memo(function AssistantMessage({ message, cwd, streaming, timing, prefill, onOpenImage }: AssistantMessageProps) {
   const segs = useMemo(() => segments(message.blocks), [message.blocks]);
   const lastIndex = message.blocks.length - 1;
   const text = messageText(message);
@@ -169,6 +210,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, cwd, s
 
   return (
     <div className="group/assistant flex min-w-0 flex-col gap-3" data-testid="msg-assistant" data-message-id={message.id}>
+      {streaming && prefill && message.blocks.length === 0 ? <PrefillProgress prefill={prefill} /> : null}
       {segs.map((seg) => {
         if (seg.kind === 'tools') {
           return (

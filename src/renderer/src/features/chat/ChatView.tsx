@@ -98,6 +98,7 @@ function RunningStatus({ session, entry, waiting }: { session: SessionSummary; e
     } else if (running.length > 1) label = `Running ${running.length} tools`;
     else if (tail?.type === 'thinking' && entry.streamingMessageId === last.id) label = 'Thinking';
     else if (tail?.type === 'text' && entry.streamingMessageId === last.id) label = 'Writing';
+    else if (!tail && entry.prefill?.messageId === last.id) label = 'Reading context';
   }
   const isWaiting = waiting || session.status === 'waiting';
   return (
@@ -247,7 +248,16 @@ function Transcript({
           );
         } else if (m.role === 'assistant') {
           const streaming = m.id === streamingId;
-          node = <AssistantMessage message={m} cwd={session.cwd} streaming={streaming} timing={streaming ? timing : undefined} onOpenImage={onOpenImage} />;
+          node = (
+            <AssistantMessage
+              message={m}
+              cwd={session.cwd}
+              streaming={streaming}
+              timing={streaming ? timing : undefined}
+              prefill={streaming && entry.prefill?.messageId === m.id ? entry.prefill : undefined}
+              onOpenImage={onOpenImage}
+            />
+          );
         } else if (m.tag === 'compact_summary') {
           node = <CompactDivider message={m} />;
         } else {

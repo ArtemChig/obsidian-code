@@ -320,7 +320,7 @@ function Row({ item, parent, sessionTitle, onStop }: { item: ActivityItem; paren
             <LiveDuration since={item.startedAt} format="compact" />
           ) : item.endedAt ? (
             <span title="Total run time">
-              {formatDuration(item.endedAt - item.startedAt)} · <RelativeTime ts={item.endedAt} /> ago
+              {formatDuration(item.endedAt - item.startedAt)} · <RelativeTime ts={item.endedAt} ago />
             </span>
           ) : (
             <RelativeTime ts={item.startedAt} />

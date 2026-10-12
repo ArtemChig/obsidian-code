@@ -355,7 +355,7 @@ test.describe('ui-views (demo mode)', () => {
 
     // Open jumps to the session; the pending Review link does too
     await page.getByTestId('activity-pending-row').filter({ hasText: 'rm -rf out release' }).getByTestId('activity-pending-open').click();
-    await expect(page.getByTestId('view-title')).toContainText('Clean up stale build artifacts');
+    await expect(page.getByTestId('chat-title')).toContainText('Clean up stale build artifacts');
     expect(errors).toEqual([]);
   });
 

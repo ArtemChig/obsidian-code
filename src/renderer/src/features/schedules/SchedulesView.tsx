@@ -214,7 +214,7 @@ function TaskRow({ task: t, running, onEdit, onDelete, onRun }: { task: Schedule
           {t.lastRunAt ? (
             <>
               <span>
-                Last run <RelativeTime ts={t.lastRunAt} className="text-ob-text-2" /> ago
+                Last run <RelativeTime ts={t.lastRunAt} className="text-ob-text-2" ago />
               </span>
               {t.lastRunMessage ? (
                 <>

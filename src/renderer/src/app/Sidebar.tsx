@@ -417,6 +417,7 @@ function SidebarFull() {
           <button
             type="button"
             onClick={goHome}
+            data-testid="nav-home"
             aria-current={route === 'session' && !activeId ? 'page' : undefined}
             className={cn(
               'ob-transition group flex h-8 w-full items-center gap-2.5 rounded-[6px] px-2 text-ui',

@@ -44,7 +44,10 @@ describe('subagents', () => {
     expect(names).not.toContain('ExitPlanMode');
     expect(systemOf(childReq)).toContain('read-only');
     expect(h.activity.get(child.id)).toMatchObject({ kind: 'subagent', status: 'done' });
-    // child sessions don't get generated titles
+    // child sessions don't get generated titles (the parent's title request is fire-and-forget after the turn, so it can
+    // reach the mock a moment after the session went idle — wait for it instead of racing it under parallel test load)
+    await h.until(() => h.mock.requests.filter(isTitle).length >= 1, 8000, 'title request');
+    await new Promise((r) => setTimeout(r, 50));
     expect(h.mock.requests.filter(isTitle).length).toBe(1);
   });
 

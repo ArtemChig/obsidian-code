@@ -33,7 +33,7 @@ export const DEFAULT_GPU_PROFILES: readonly GpuProfile[] = [
     minDiskGb: 200,
     minInetDownMbps: 1000,
     minReliability: 0.98,
-    maxPricePerHour: 2.5,
+    maxPricePerHour: 2.2,
     datacenterOnly: false,
     defaultModelId: 'qwen38-flash-next-uncensored-huihui-v2-q4kxl',
   },

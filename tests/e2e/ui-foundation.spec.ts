@@ -84,7 +84,7 @@ test.describe('ui-foundation (demo mode)', () => {
 
     await page.keyboard.press('Control+n');
     await expect(page.getByTestId('session-row')).toHaveCount(before + 1);
-    await expect(page.getByTestId('view-title')).toContainText('New session');
+    await expect(page.getByTestId('chat-title')).toContainText('New session');
 
     // Right panel toggles with Ctrl+\ when a session is open
     await page.keyboard.press('Control+Backslash');
@@ -100,7 +100,7 @@ test.describe('ui-foundation (demo mode)', () => {
 
     // Open an existing session from the sidebar
     await page.getByTestId('session-row').filter({ hasText: 'Fix GLM tool-call parsing' }).click();
-    await expect(page.getByTestId('view-title')).toContainText('Fix GLM tool-call parsing');
+    await expect(page.getByTestId('chat-title')).toContainText('Fix GLM tool-call parsing');
 
     expect(errors, errors.join('\n')).toEqual([]);
   });

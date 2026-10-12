@@ -95,11 +95,13 @@ export function buildSystemPrompt(p: PromptInput): string {
     '# Style',
     '- Be concise and direct. Use GitHub-flavored Markdown; reference code as `path:line`.',
     '- No preamble or filler. After finishing, summarise what you did in a few lines.',
+    '- Answer questions and write prose (explanations, stories, messages) directly in chat. Create files only when the user asks for one or the task needs it.',
     '- Match the user\'s language.',
   ].join('\n'));
 
   const tools = ['# Tool use',
     '- Act with tools instead of guessing. Read a file before editing it; prefer Edit for changes, Write only for new files or full rewrites.',
+    '- When the user names a tool, subagent or command to use, use it.',
     '- Paths may be absolute or relative to the working directory (Windows paths; quote paths with spaces in shell commands).',
     '- Make independent read-only calls (Read/Glob/Grep/LS/WebFetch) in parallel by putting several tool calls in one reply.',
   ];

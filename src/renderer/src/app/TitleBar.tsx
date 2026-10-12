@@ -1,39 +1,41 @@
-// Custom title bar (40 px, draggable). Left block continues the sidebar column; right block shows the current view
-// title, palette trigger and panel toggles. ~140 px reserved for the Windows titleBarOverlay controls in Electron.
-// Owner: ui-foundation.
-import { ChevronRight, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search } from 'lucide-react';
+// Custom title bar (40 px, draggable). Left block continues the sidebar column (app mark); right block shows only the
+// current view, or the current project (cwd folder) for a session — the session title and the right-panel toggle live
+// in the ChatHeader. ~140 px reserved for the Windows titleBarOverlay controls in Electron. Owner: ui-foundation.
+import { Folder, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
 import { IconButton } from '@renderer/components/ui/button';
 import { AppMark } from '@renderer/components/ui/app-mark';
 import { Shortcut } from '@renderer/components/ui/kbd';
 import { isElectron } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { basename } from '@renderer/lib/format';
-import { openPalette, toggleRightPanel, toggleSidebar } from '@renderer/state/actions';
+import { openPalette, toggleSidebar } from '@renderer/state/actions';
 import { useActiveSession } from '@renderer/state/selectors';
 import { ROUTE_TITLES, useUi } from '@renderer/state/ui';
 import { SHORTCUTS } from './shortcuts';
 
-function useViewTitle(): { title: string; context: string | null } {
+/** The view name, or for an open session its project folder (full path in `path`). */
+function useViewTitle(): { title: string; path: string | null } {
   const route = useUi((s) => s.route);
   const active = useActiveSession();
   if (route === 'session') {
-    if (!active) return { title: 'Home', context: null };
-    return { title: active.title || 'Untitled session', context: basename(active.cwd) };
+    if (!active) return { title: 'Home', path: null };
+    return { title: basename(active.cwd) || active.cwd, path: active.cwd };
   }
-  return { title: ROUTE_TITLES[route], context: null };
+  return { title: ROUTE_TITLES[route], path: null };
 }
 
 export function TitleBar() {
   const collapsed = useUi((s) => s.sidebarCollapsed);
-  const rightOpen = useUi((s) => s.rightPanelOpen);
-  const route = useUi((s) => s.route);
-  const active = useActiveSession();
-  const { title, context } = useViewTitle();
+  const { title, path } = useViewTitle();
   const electron = isElectron();
-  const canShowRight = route === 'session' && !!active;
 
   return (
-    <header className="ob-drag flex h-[var(--ob-titlebar-h)] shrink-0 select-none items-stretch" data-testid="titlebar">
+    // In Electron the native controls overlay is exactly --ob-titlebar-h (40 px) tall and paints over everything under
+    // it, so the bar is 1 px taller there: its bottom hairline then runs unbroken beneath the window controls.
+    <header
+      className={cn('ob-drag flex shrink-0 select-none items-stretch', electron ? 'h-[calc(var(--ob-titlebar-h)+1px)]' : 'h-[var(--ob-titlebar-h)]')}
+      data-testid="titlebar"
+    >
       {/* Left: continues the sidebar column */}
       <div
         className={cn(
@@ -79,14 +81,9 @@ export function TitleBar() {
             onClick={() => toggleSidebar(true)}
           />
         ) : null}
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-ui" data-testid="view-title">
-          {context ? (
-            <>
-              <span className="shrink-0 truncate text-ob-text-3">{context}</span>
-              <ChevronRight size={13} aria-hidden className="shrink-0 text-ob-text-3/70" />
-            </>
-          ) : null}
-          <span className="truncate font-medium text-ob-text">{title}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-ui" data-testid="view-title" title={path ?? undefined}>
+          {path ? <Folder size={13} aria-hidden className="shrink-0 text-ob-text-3" /> : null}
+          <span className={cn('truncate', path ? 'text-ob-text-2' : 'font-medium text-ob-text')}>{title}</span>
         </div>
 
         <button
@@ -99,18 +96,6 @@ export function TitleBar() {
           <span className="flex-1 truncate text-left">Search or run a command</span>
           <Shortcut keys={SHORTCUTS.palette} />
         </button>
-
-        <IconButton
-          className="ob-no-drag"
-          label={rightOpen ? 'Hide side panel' : 'Show side panel'}
-          shortcut={SHORTCUTS.rightPanel}
-          icon={rightOpen && canShowRight ? PanelRightClose : PanelRightOpen}
-          active={rightOpen && canShowRight}
-          disabled={!canShowRight}
-          size="md"
-          tooltipSide="bottom"
-          onClick={() => toggleRightPanel()}
-        />
       </div>
     </header>
   );

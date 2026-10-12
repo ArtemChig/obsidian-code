@@ -49,7 +49,7 @@ export const scheduleTaskTool = defineTool<ScheduleInput>(
   {
     name: 'ScheduleTask',
     description:
-      'Schedule a prompt to run later, unattended, in a new session. schedule: 5-field cron for recurring (e.g. "0 9 * * 1-5"; min interval 5 min) or a local ISO date-time for one run (e.g. "2026-11-01T09:00:00"). ' +
+      'Schedule a prompt to run later, unattended, in a new session; the final reply of each run is shown to the user as a notification (for a plain reminder, the prompt can simply ask to reply with the reminder text). schedule: 5-field cron for recurring (e.g. "0 9 * * 1-5"; min interval 5 min) or a local ISO date-time for one run (e.g. "2026-11-01T09:00:00"). ' +
       'The prompt must be self-contained; the run cannot ask questions and permission prompts are denied unless permission_mode allows the action.',
     inputSchema: {
       type: 'object',

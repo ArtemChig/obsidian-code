@@ -47,7 +47,7 @@ describe('VastClient vs mock Vast API', () => {
       cuda_max_good: { gte: 12.8 },
       inet_down_cost: { lte: 0.01 },
       duration: { gte: 86400 },
-      dph_total: { lte: 2.5 },
+      dph_total: { lte: 2.2 },
       order: [['dph_total', 'asc']],
       type: 'on-demand',
       limit: 7,

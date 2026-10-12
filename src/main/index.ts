@@ -23,6 +23,8 @@ import {
   type OpenDialogOptions,
 } from 'electron';
 import { createCore, type CoreHandle } from '@core/index';
+import { loadServerScripts, resolveResourcesDir } from '@core/gpu/server-scripts';
+import { getRipgrepPath } from '@core/tools/lib/ripgrep';
 import type { NativeBridge } from '@core/contracts';
 import type { GpuStatus, Settings } from '@shared/types';
 
@@ -411,6 +413,22 @@ if (!gotLock) {
     core = await startCore();
     showWindow();
     createTray();
+    // Read-only introspection for the Playwright _electron tests (main-process global; unreachable from the renderer).
+    (globalThis as Record<string, unknown>).__obsidianDebug = {
+      trayAlive: (): boolean => Boolean(tray && !tray.isDestroyed()),
+      coreUp: (): boolean => Boolean(core),
+      resourcesDir: (): string => resolveResourcesDir(),
+      /** The ripgrep binary the Grep tool will spawn (null → JS fallback). */
+      ripgrepPath: (): Promise<string | null> => getRipgrepPath(),
+      /** Whether the GPU bootstrap scripts load from OBSIDIAN_RESOURCES_DIR. */
+      serverScripts: (): { ok: boolean; bootstrapChars?: number; error?: string } => {
+        try {
+          return { ok: true, bootstrapChars: loadServerScripts().bootstrap.length };
+        } catch (err) {
+          return { ok: false, error: errMessage(err) };
+        }
+      },
+    };
 
     if (core) {
       const c = core;

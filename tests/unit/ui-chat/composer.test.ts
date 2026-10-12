@@ -5,9 +5,11 @@ import {
   applyCompletion,
   base64Bytes,
   detectTrigger,
+  fitWithin,
   mentionFor,
   nextPermissionMode,
   parseDataUrl,
+  reencodeType,
 } from '@renderer/features/chat/lib/composer';
 import { fuzzyRank, fuzzyScore } from '@renderer/features/chat/lib/fuzzy';
 
@@ -66,6 +68,18 @@ describe('mentions, modes, images', () => {
     expect(parseDataUrl('https://x/y.png')).toBeNull();
     expect(base64Bytes('AAAA')).toBe(3);
     expect(base64Bytes('AA==')).toBe(1);
+  });
+
+  it('downscales images to 1024 px on the long side, keeping the aspect ratio', () => {
+    expect(fitWithin(3840, 2160)).toEqual({ width: 1024, height: 576, scaled: true });
+    expect(fitWithin(1000, 4000)).toEqual({ width: 256, height: 1024, scaled: true });
+    expect(fitWithin(800, 600)).toEqual({ width: 800, height: 600, scaled: false });
+    expect(fitWithin(1024, 1024)).toEqual({ width: 1024, height: 1024, scaled: false });
+    expect(fitWithin(5000, 3)).toEqual({ width: 1024, height: 1, scaled: true });
+    expect(fitWithin(0, 0).scaled).toBe(false);
+    expect(reencodeType('image/jpeg')).toBe('image/jpeg');
+    expect(reencodeType('image/png')).toBe('image/png');
+    expect(reencodeType('image/webp')).toBe('image/png');
   });
 });
 

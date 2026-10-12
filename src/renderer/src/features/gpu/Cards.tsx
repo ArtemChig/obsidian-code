@@ -123,7 +123,7 @@ export function ParkedCard({
         {parked.gpuName} <span className="text-ob-text-3">·</span> {name}
       </p>
       <p className="mt-1 text-small text-ob-text-3">
-        Stopped <RelativeTime ts={parked.parkedAt} className="text-ob-text-2" /> ago. The model stays on its disk, so the next clock-in skips the download. Storage is billed at{' '}
+        Stopped <RelativeTime ts={parked.parkedAt} className="text-ob-text-2" ago />. The model stays on its disk, so the next clock-in skips the download. Storage is billed at{' '}
         <span className="ob-tabular font-mono text-ob-text-2">{formatMoney(parked.storageCostPerHour, { precise: true })}/h</span>
         {parkMaxDays ? `; it is destroyed automatically after ${pluralize(parkMaxDays, 'day')}.` : '.'}
       </p>

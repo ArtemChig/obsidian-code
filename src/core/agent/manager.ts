@@ -667,8 +667,21 @@ export class AgentManagerImpl implements AgentManager {
       });
       if (block) this.emit('message.block', { sessionId: rt.id, messageId: msg.id, blockIndex: idx, block });
     };
+    // Prefill progress → 'message.progress' (throttled ~4/s), only until the first streamed event.
+    let firstEvent = false;
+    let lastProgressAt = 0;
+    const onProgress: ChatRequest['onProgress'] = (p) => {
+      if (firstEvent) return;
+      const work = p.total - p.cache;
+      const progress = work > 0 ? Math.min(1, Math.max(0, (p.processed - p.cache) / work)) : p.processed >= p.total ? 1 : 0;
+      const now = Date.now();
+      if (now - lastProgressAt < 250 && progress < 1) return;
+      lastProgressAt = now;
+      this.emit('message.progress', { sessionId: rt.id, messageId: msg.id, phase: 'prefill', progress, processed: p.processed, total: p.total });
+    };
     try {
-      for await (const ev of this.ctx.llm.stream(endpoint, req)) {
+      for await (const ev of this.ctx.llm.stream(endpoint, { ...req, onProgress })) {
+        firstEvent = true;
         if (ev.type === 'thinking') {
           const idx = this.appendDelta(rt.id, msg.id, 'thinking', ev.delta);
           if (idx !== thinkingIdx) { closeThinking(); thinkingIdx = idx; thinkingStart = Date.now(); }

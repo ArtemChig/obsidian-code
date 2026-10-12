@@ -22,6 +22,7 @@ const EVENT_NAME_MAP: Record<CoreEventName, true> = {
   'message.delta': true,
   'message.block': true,
   'message.completed': true,
+  'message.progress': true,
   'session.reset': true,
   'tool.updated': true,
   'todos.updated': true,

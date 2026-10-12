@@ -13,6 +13,9 @@ export interface HistoryOptions {
   supportsVision: boolean;
 }
 
+/** User-side note that follows an interrupted assistant reply in the model's history (Claude Code wording). */
+export const INTERRUPTED_NOTE = '[Request interrupted by user]';
+
 export function isUserSide(m: Message): boolean {
   return m.role === 'user' || (m.role === 'system' && m.tag === 'compact_summary');
 }
@@ -80,7 +83,10 @@ export function buildHistory(messages: Message[], opts: HistoryOptions): ChatMes
     const text = m.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('');
     const reasoning = m.blocks.filter((b) => b.type === 'thinking').map((b) => (b as { text: string }).text).join('');
     const tools = m.blocks.filter((b): b is ToolUseBlock => b.type === 'tool_use');
-    if (!text && !tools.length) continue; // empty (e.g. interrupted before the first token)
+    // An interrupted reply is followed by a note, otherwise the model can't tell that the user cut it off and tends to
+    // redo the old request instead of following the next message (seen with Qwen3.6 when only thinking had streamed).
+    const interruptedNote = () => { if (m.meta?.interrupted) pendingUser.push({ type: 'text', text: INTERRUPTED_NOTE }); };
+    if (!text && !tools.length) { interruptedNote(); continue; } // empty / thinking only (interrupted early)
     flushUser();
     const calls: ChatToolCall[] = tools.map((t) => ({ id: t.id, type: 'function', function: { name: t.name, arguments: safeArgs(t.input) } }));
     const a: Extract<ChatMessage, { role: 'assistant' }> = { role: 'assistant', content: text || (calls.length ? null : '') };
@@ -99,6 +105,7 @@ export function buildHistory(messages: Message[], opts: HistoryOptions): ChatMes
         out.push({ role: 'tool', tool_call_id: t.id, content: !opts.supportsVision && t.result?.images?.length ? `${content}\n[image omitted — the current model cannot see images]` : content });
       }
     }
+    interruptedNote();
   }
   flushUser();
   // The template needs at least one real user message.

@@ -35,6 +35,7 @@ export function loadTranscript(sessionId: string, opts: { force?: boolean } = {}
           next.blockStarts = prev.blockStarts;
           next.blockEnds = prev.blockEnds;
           next.streamingMessageId = session.status === 'running' ? prev.streamingMessageId : null;
+          next.prefill = session.status === 'running' ? prev.prefill : null;
         }
         const loadErrors = { ...s.loadErrors };
         delete loadErrors[sessionId];

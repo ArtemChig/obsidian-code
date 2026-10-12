@@ -31,6 +31,27 @@ const tool = (status: ToolUseBlock['status'], extra: Partial<ToolUseBlock> = {})
 });
 
 describe('transcript reducer', () => {
+  it('tracks prefill progress for the pending assistant message and clears it on the first token', () => {
+    let e = createEntry(session());
+    e = reduceEntry(e, 'message.added', { sessionId: 's1', message: { id: 'a1', role: 'assistant', createdAt: 2, blocks: [] } });
+    expect(e.prefill).toBeNull();
+    e = reduceEntry(e, 'message.progress', { sessionId: 's1', messageId: 'a1', phase: 'prefill', progress: 0.42, processed: 2048, total: 4906 });
+    expect(e.prefill).toEqual({ messageId: 'a1', progress: 0.42, processed: 2048, total: 4906 });
+    e = reduceEntry(e, 'message.progress', { sessionId: 's1', messageId: 'a1', phase: 'prefill', progress: 7 });
+    expect(e.prefill?.progress).toBe(1);
+    e = reduceEntry(e, 'message.delta', { sessionId: 's1', messageId: 'a1', blockIndex: 0, blockType: 'thinking', delta: 'Hm' }, 10);
+    expect(e.prefill).toBeNull();
+    // late progress after content is ignored
+    e = reduceEntry(e, 'message.progress', { sessionId: 's1', messageId: 'a1', phase: 'prefill', progress: 1 });
+    expect(e.prefill).toBeNull();
+    // a stopped session drops any progress
+    e = reduceEntry(e, 'message.added', { sessionId: 's1', message: { id: 'a2', role: 'assistant', createdAt: 3, blocks: [] } });
+    e = reduceEntry(e, 'message.progress', { sessionId: 's1', messageId: 'a2', phase: 'prefill', progress: 0.1 });
+    expect(e.prefill?.messageId).toBe('a2');
+    e = reduceEntry(e, 'session.reset', { sessionId: 's1' });
+    expect(e.prefill).toBeNull();
+  });
+
   it('adds messages and replaces duplicates by id', () => {
     let e = createEntry(session());
     e = reduceEntry(e, 'message.added', { sessionId: 's1', message: { id: 'a1', role: 'assistant', createdAt: 2, blocks: [] } });

@@ -105,6 +105,9 @@ export interface CoreEvents {
   /** Replace a whole block (used for tool_use blocks and final block states). */
   'message.block': { sessionId: string; messageId: string; blockIndex: number; block: Block };
   'message.completed': { sessionId: string; messageId: string; meta: Message['meta'] };
+  /** Prompt-processing progress of a pending assistant message (llama.cpp prefill), throttled; stops at the first token.
+   *  progress = 0..1 of the uncached prompt; processed/total = prompt tokens (incl. cache) when known. */
+  'message.progress': { sessionId: string; messageId: string; phase: 'prefill'; progress: number; processed?: number; total?: number };
   /** Messages were removed (rewind / compaction). The client should refetch via sessions.get. */
   'session.reset': { sessionId: string };
   'tool.updated': { sessionId: string; messageId: string; tool: ToolUseBlock };
