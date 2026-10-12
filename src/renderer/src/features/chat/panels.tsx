@@ -24,9 +24,9 @@ import { FileActions } from './tools/FileActions';
 
 function PanelLoading() {
   return (
-    <div className="flex flex-col gap-2.5 p-3" aria-hidden>
+    <div className="flex flex-col gap-2 px-4 py-3" aria-hidden>
       {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="ob-skeleton h-7 w-full" />
+        <div key={i} className="ob-skeleton h-5 w-full" />
       ))}
     </div>
   );
@@ -50,9 +50,9 @@ function DiffPane({ sessionId, file, cwd, onBack }: { sessionId: string; file: C
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="changes-diff">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-ob-border px-2">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-rule pl-2 pr-4">
         <IconButton label="Back to changed files" icon={ArrowLeft} size="sm" onClick={onBack} />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ob-text" title={file.path}>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] tracking-[-0.02em] text-t1" title={file.path}>
           {displayPath(file.path, cwd)}
         </span>
         <DiffStat additions={file.additions} deletions={file.deletions} className="shrink-0 pr-1" />
@@ -85,9 +85,11 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
   const add = files.reduce((n, f) => n + f.additions, 0);
   const del = files.reduce((n, f) => n + f.deletions, 0);
   return (
-    <div className="flex flex-col p-2" data-testid="changes-panel">
-      <div className="flex items-center justify-between px-1.5 pb-1.5 pt-1">
-        <span className="text-small text-ob-text-3">{pluralize(files.length, 'file')} changed</span>
+    <div className="flex flex-col" data-testid="changes-panel">
+      <div className="flex h-9 items-center justify-between border-b border-rule px-4">
+        <span className="ob-cap">
+          {pluralize(files.length, 'file')} changed
+        </span>
         <DiffStat additions={add} deletions={del} />
       </div>
       <ul className="flex flex-col">
@@ -95,23 +97,23 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
           const rel = displayPath(f.path, cwd);
           const dir = dirname(rel.replace(/\\/g, '/'));
           return (
-            <li key={f.path} className="group/row flex items-center rounded-ctl hover:bg-ob-hover">
+            <li key={f.path} className="ob-transition group/row flex items-center border-b border-rule2 pr-2 hover:bg-hov">
               <button
                 type="button"
                 onClick={() => setSelected(f.path)}
                 data-testid="changed-file"
-                className="ob-transition group flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-ctl px-2 text-left"
+                className="group flex h-8 min-w-0 flex-1 items-center gap-2.5 pl-4 text-left"
                 title={f.path}
               >
-                {f.isNew ? <FilePlus size={14} aria-label="New file" className="shrink-0 text-ob-success" /> : <FileDiff size={14} aria-hidden className="shrink-0 text-ob-text-3" />}
-                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                  <span className="shrink-0 truncate text-ui text-ob-text">{basename(rel)}</span>
-                  {dir && dir !== rel ? <span className="min-w-0 truncate font-mono text-[10.5px] text-ob-text-3">{dir}</span> : null}
+                {f.isNew ? <FilePlus size={13} aria-label="New file" className="shrink-0 text-ok" /> : <FileDiff size={13} aria-hidden className="shrink-0 text-t3" />}
+                <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                  <span className="shrink-0 truncate text-[12px] tracking-[-0.012em] text-t1">{basename(rel)}</span>
+                  {dir && dir !== rel ? <span className="min-w-0 truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{dir}</span> : null}
                 </span>
                 <DiffStat additions={f.additions} deletions={f.deletions} className="shrink-0" />
-                <ChevronRight size={13} aria-hidden className="shrink-0 text-ob-text-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                <ChevronRight size={12} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
               </button>
-              <FileActions path={f.path} cwd={cwd} className="pr-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100" />
+              <FileActions path={f.path} cwd={cwd} className="pl-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100" />
             </li>
           );
         })}
@@ -132,17 +134,25 @@ export function TodosPanel({ sessionId }: { sessionId: string }) {
   const done = todos.filter((t) => t.status === 'completed').length;
   const current = todos.find((t) => t.status === 'in_progress');
   return (
-    <div className="flex flex-col gap-3 p-3.5" data-testid="todos-panel">
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between text-small">
-          <span className="text-ob-text-2">{current ? (current.activeForm ?? current.content) : done === todos.length ? 'All done' : 'Up next'}</span>
-          <span className="ob-tabular font-mono text-[11px] text-ob-text-3">
-            {done}/{todos.length}
+    <div className="flex flex-col" data-testid="todos-panel">
+      <div className="flex flex-col gap-2.5 border-b border-rule px-4 pb-3.5 pt-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="ob-cap">{current ? 'In progress' : done === todos.length ? 'All done' : 'Up next'}</span>
+          <span className="ob-tabular font-mono text-[10.5px] tracking-[-0.02em] text-t1">
+            {done}
+            <span className="text-t3"> / {todos.length}</span>
           </span>
         </div>
-        <ProgressBar value={todos.length ? done / todos.length : 0} tone={done === todos.length ? 'success' : 'accent'} label="Todo progress" />
+        {current ? <span className="text-[12.5px] font-medium tracking-[-0.012em] text-t1">{current.activeForm ?? current.content}</span> : null}
+        <ProgressBar
+          variant="segments"
+          segments={Math.min(24, Math.max(todos.length, 1))}
+          value={todos.length ? done / todos.length : 0}
+          tone={done === todos.length ? 'success' : 'neutral'}
+          label="Todo progress"
+        />
       </div>
-      <TodoChecklist todos={todos} />
+      <TodoChecklist todos={todos} className="px-4" />
     </div>
   );
 }
@@ -172,12 +182,12 @@ export function AgentsPanel({ sessionId }: { sessionId: string }) {
   }
   const running = subagents.filter((s) => s.status === 'running' || s.status === 'waiting').length;
   return (
-    <div className="flex flex-col p-2" data-testid="agents-panel">
-      <div className="px-1.5 pb-1.5 pt-1 text-small text-ob-text-3">
-        {pluralize(subagents.length, 'agent')}
-        {running ? ` · ${running} running` : ''}
+    <div className="flex flex-col" data-testid="agents-panel">
+      <div className="flex h-9 items-center justify-between border-b border-rule px-4">
+        <span className="ob-cap">{pluralize(subagents.length, 'agent')}</span>
+        {running ? <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-live">{running} running</span> : null}
       </div>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col">
         {[...subagents].reverse().map((s) => {
           const type = types[s.id] ?? (s.parentToolUseId ? types[s.parentToolUseId] : undefined);
           const live = s.status === 'running' || s.status === 'waiting';
@@ -187,25 +197,26 @@ export function AgentsPanel({ sessionId }: { sessionId: string }) {
                 type="button"
                 onClick={() => openSession(s.id)}
                 data-testid="agent-row"
-                className="ob-transition group flex w-full items-start gap-2.5 rounded-[8px] px-2 py-2 text-left hover:bg-ob-hover"
+                className="ob-transition group flex w-full items-start gap-3 border-b border-rule2 px-4 py-2.5 text-left hover:bg-hov"
               >
-                <span className="mt-[3px] flex size-4 shrink-0 items-center justify-center">
-                  {live ? <Spinner size={13} className="text-ob-violet" /> : <StatusDot status={s.status === 'error' ? 'error' : 'done'} size={7} />}
+                <span className="flex h-[18px] shrink-0 items-center">
+                  <StatusDot
+                    tone={s.status === 'waiting' ? 'warning' : live ? 'violet' : s.status === 'error' ? 'danger' : 'success'}
+                    pulse={live}
+                    size={6}
+                    label={s.status === 'waiting' ? 'Needs you' : live ? 'Running' : s.status === 'error' ? 'Failed' : 'Done'}
+                  />
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate text-ui text-ob-text">{s.title}</span>
-                  <span className="flex items-center gap-1.5 text-small text-ob-text-3">
-                    {type ? <span className="font-mono text-[11px] text-ob-violet">{type}</span> : null}
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="truncate text-[12.5px] tracking-[-0.012em] text-t1">{s.title}</span>
+                  <span className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.01em] text-t3">
+                    {type ? <span className="uppercase tracking-[0.14em] text-t2">{type}</span> : null}
                     {type ? <span aria-hidden>·</span> : null}
-                    {live ? (
-                      <Elapsed since={s.createdAt} className="font-mono text-[11px]" />
-                    ) : (
-                      <RelativeTime ts={s.updatedAt} className="font-mono text-[11px]" />
-                    )}
-                    {s.status === 'waiting' ? <span className="text-ob-warning">needs you</span> : null}
+                    {live ? <Elapsed since={s.createdAt} className="text-live" /> : <RelativeTime ts={s.updatedAt} />}
+                    {s.status === 'waiting' ? <span className="uppercase tracking-[0.14em] text-warn">needs you</span> : null}
                   </span>
                 </span>
-                <ArrowUpRight size={14} aria-hidden className="mt-[3px] shrink-0 text-ob-text-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                <ArrowUpRight size={13} aria-hidden className="mt-[2px] shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
               </button>
             </li>
           );
@@ -242,17 +253,17 @@ function Dir({ sessionId, cwd, dir, depth }: { sessionId: string; cwd: string; d
     };
   }, [cwd, dir]);
 
-  if (error) return <div className="py-1 text-small text-ob-danger" style={{ paddingLeft: 12 + depth * 14 }}>{error}</div>;
+  if (error) return <div className="py-1 text-[11.5px] text-err" style={{ paddingLeft: 16 + depth * 14 }}>{error}</div>;
   if (!entries) {
     return (
-      <div className="flex items-center gap-2 py-1 text-small text-ob-text-3" style={{ paddingLeft: 12 + depth * 14 }}>
+      <div className="flex h-7 items-center gap-2 font-mono text-[9px] uppercase tracking-[0.14em] text-t3" style={{ paddingLeft: 16 + depth * 14 }}>
         <Spinner size={11} /> Loading…
       </div>
     );
   }
   const hidden = entries.filter((e) => e.isDir && HIDDEN.has(e.name));
   const shown = showHidden ? entries : entries.filter((e) => !(e.isDir && HIDDEN.has(e.name)));
-  if (!entries.length) return <div className="py-1 text-small text-ob-text-3" style={{ paddingLeft: 12 + depth * 14 }}>Empty</div>;
+  if (!entries.length) return <div className="flex h-7 items-center font-mono text-[9px] uppercase tracking-[0.14em] text-t3" style={{ paddingLeft: 30 + depth * 14 }}>Empty</div>;
   return (
     <ul role={depth === 0 ? 'tree' : 'group'} aria-label={depth === 0 ? 'Project files' : undefined}>
       {shown.map((e) => {
@@ -267,25 +278,25 @@ function Dir({ sessionId, cwd, dir, depth }: { sessionId: string; cwd: string; d
                   if (e.isDir) setOpen((o) => ({ ...o, [e.path]: !isOpen }));
                   else insertIntoComposer(sessionId, mentionFor(displayPath(e.path, cwd)));
                 }}
-                className="ob-transition group flex h-7 w-full items-center gap-1.5 rounded-[5px] pr-2 text-left text-ui text-ob-text-2 hover:bg-ob-hover hover:text-ob-text"
-                style={{ paddingLeft: 8 + depth * 14 }}
+                className="ob-transition group flex h-7 w-full items-center gap-2 pr-4 text-left text-[12px] tracking-[-0.012em] text-t2 hover:bg-hov hover:text-t1"
+                style={{ paddingLeft: 12 + depth * 14 }}
               >
                 {e.isDir ? (
-                  <ChevronRight size={12} aria-hidden className={cn('shrink-0 text-ob-text-3 transition-transform duration-150', isOpen && 'rotate-90')} />
+                  <ChevronRight size={11} aria-hidden className={cn('shrink-0 text-t3 transition-transform duration-150', isOpen && 'rotate-90')} />
                 ) : (
-                  <span className="w-3 shrink-0" />
+                  <span className="w-[11px] shrink-0" />
                 )}
                 {e.isDir ? (
                   isOpen ? (
-                    <FolderOpen size={14} aria-hidden className="shrink-0 text-ob-accent" />
+                    <FolderOpen size={13} aria-hidden className="shrink-0 text-t2" />
                   ) : (
-                    <Folder size={14} aria-hidden className="shrink-0 text-ob-text-3" />
+                    <Folder size={13} aria-hidden className="shrink-0 text-t3" />
                   )
                 ) : (
-                  <File size={14} aria-hidden className="shrink-0 text-ob-text-3" />
+                  <File size={13} aria-hidden className="shrink-0 text-t3" />
                 )}
                 <span className="min-w-0 flex-1 truncate">{e.name}</span>
-                {!e.isDir ? <AtSign size={12} aria-hidden className="shrink-0 text-ob-text-3 opacity-0 transition-opacity group-hover:opacity-100" /> : null}
+                {!e.isDir ? <AtSign size={11} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" /> : null}
               </button>
             </Tooltip>
             {e.isDir && isOpen ? <Dir sessionId={sessionId} cwd={cwd} dir={e.path} depth={depth + 1} /> : null}
@@ -297,8 +308,8 @@ function Dir({ sessionId, cwd, dir, depth }: { sessionId: string; cwd: string; d
           <button
             type="button"
             onClick={() => setShowHidden(true)}
-            className="h-6 text-left text-meta text-ob-text-3 hover:text-ob-text-2"
-            style={{ paddingLeft: 26 + depth * 14 }}
+            className="ob-transition h-6 text-left font-mono text-[9.5px] tracking-[0.01em] text-t3 hover:text-t1"
+            style={{ paddingLeft: 31 + depth * 14 }}
           >
             {pluralize(hidden.length, 'hidden folder')} ({hidden.map((h) => h.name).join(', ')})
           </button>
@@ -325,9 +336,9 @@ function FileSearch({ sessionId, cwd, query }: { sessionId: string; cwd: string;
     };
   }, [cwd, query]);
   if (!files) return <PanelLoading />;
-  if (!files.length) return <div className="px-3 py-4 text-center text-small text-ob-text-3">No files match “{query}”</div>;
+  if (!files.length) return <div className="px-4 py-4 text-center text-[11.5px] text-t3">No files match “{query}”</div>;
   return (
-    <ul className="flex flex-col p-1">
+    <ul className="flex flex-col">
       {files.map((f) => {
         const norm = f.replace(/\\/g, '/');
         return (
@@ -336,12 +347,12 @@ function FileSearch({ sessionId, cwd, query }: { sessionId: string; cwd: string;
               type="button"
               data-testid="file-entry"
               onClick={() => insertIntoComposer(sessionId, mentionFor(norm))}
-              className="ob-transition group flex h-8 w-full items-center gap-2 rounded-[5px] px-2 text-left hover:bg-ob-hover"
+              className="ob-transition group flex h-7 w-full items-center gap-2.5 border-b border-rule2 px-4 text-left hover:bg-hov"
             >
-              <File size={14} aria-hidden className="shrink-0 text-ob-text-3" />
-              <span className="shrink-0 text-ui text-ob-text">{basename(norm)}</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-ob-text-3">{dirname(norm) !== norm ? dirname(norm) : ''}</span>
-              <AtSign size={12} aria-hidden className="shrink-0 text-ob-text-3 opacity-0 transition-opacity group-hover:opacity-100" />
+              <File size={13} aria-hidden className="shrink-0 text-t3" />
+              <span className="shrink-0 text-[12px] tracking-[-0.012em] text-t1">{basename(norm)}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{dirname(norm) !== norm ? dirname(norm) : ''}</span>
+              <AtSign size={11} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           </li>
         );
@@ -357,16 +368,16 @@ export function FilesPanel({ sessionId }: { sessionId: string }) {
   const cwd = summary.cwd;
   return (
     <div className="flex flex-col" data-testid="files-panel">
-      <div className="flex flex-col gap-2 p-2.5 pb-1.5">
+      <div className="flex flex-col gap-2.5 border-b border-rule px-4 pb-3 pt-3">
         <SectionLabel
           action={
-            <span className="max-w-[180px] truncate font-mono text-[10.5px] text-ob-text-3" title={cwd}>
+            <span className="max-w-[180px] truncate font-mono text-[9.5px] normal-case tracking-[0.01em] text-t2" title={cwd}>
               {basename(cwd)}
             </span>
           }
         >
           <span className="flex items-center gap-1.5">
-            <FolderTree size={12} aria-hidden /> Files
+            <FolderTree size={11} aria-hidden /> Files
           </span>
         </SectionLabel>
         <Input
@@ -379,8 +390,9 @@ export function FilesPanel({ sessionId }: { sessionId: string }) {
           trailing={query ? <IconButton label="Clear search" icon={X} size="xs" onClick={() => setQuery('')} /> : undefined}
         />
       </div>
-      <div className="px-1 pb-3">{query.trim() ? <FileSearch sessionId={sessionId} cwd={cwd} query={query.trim()} /> : <Dir sessionId={sessionId} cwd={cwd} dir={cwd} depth={0} />}</div>
-      <div className="mx-2.5 mb-3 rounded-[8px] border border-dashed border-ob-border px-3 py-2 text-small text-ob-text-3">
+      <div className="py-1.5">{query.trim() ? <FileSearch sessionId={sessionId} cwd={cwd} query={query.trim()} /> : <Dir sessionId={sessionId} cwd={cwd} dir={cwd} depth={0} />}</div>
+      <div className="flex items-center gap-2 border-t border-rule2 px-4 py-3 font-mono text-[9.5px] tracking-[0.01em] text-t3">
+        <AtSign size={11} aria-hidden className="shrink-0" />
         Click a file to mention it in your message.
       </div>
     </div>

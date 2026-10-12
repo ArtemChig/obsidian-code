@@ -20,6 +20,7 @@ import { refreshModels } from '@renderer/state/actions';
 import { useGpu } from '@renderer/state/gpu';
 import { useModels } from '@renderer/state/models';
 import { findModel, useModelGroups } from '@renderer/state/selectors';
+import { ToolbarValue } from '../ui';
 
 export interface ModelPickerProps {
   value: ModelRef | null;
@@ -48,25 +49,25 @@ export function ModelPicker({ value, onChange, className }: ModelPickerProps) {
             type="button"
             data-testid="model-picker"
             className={cn(
-              'ob-transition flex h-7 min-w-0 max-w-[240px] items-center whitespace-nowrap @max-[600px]:max-w-[170px] gap-1.5 rounded-[6px] px-2 text-small text-ob-text-2 hover:bg-ob-hover hover:text-ob-text data-[state=open]:bg-ob-hover',
+              'ob-transition flex h-6 min-w-0 max-w-[260px] items-center gap-2 whitespace-nowrap rounded-[2px] px-2 text-t1 hover:bg-hov data-[state=open]:bg-s3 @max-[600px]:max-w-[170px]',
               className,
             )}
           >
-            {info ? <StatusDot status={info.status} size={6} /> : <Box size={13} aria-hidden className="text-ob-text-3" />}
-            <span className="truncate">{label}</span>
-            <ChevronDown size={12} aria-hidden className="shrink-0 text-ob-text-3" />
+            {info ? <StatusDot status={info.status} size={6} /> : <Box size={12} aria-hidden className="shrink-0 text-t3" />}
+            <ToolbarValue label="Model">{label}</ToolbarValue>
+            <ChevronDown size={11} aria-hidden className="shrink-0 text-t3" />
           </button>
         </DropdownMenuTrigger>
       </Tooltip>
       <DropdownMenuContent className="w-[380px]" align="end" side="top" data-testid="model-menu">
-        {groups.length === 0 ? <div className="px-2 py-3 text-small text-ob-text-3">No models available — check Settings → Models.</div> : null}
+        {groups.length === 0 ? <div className="px-2.5 py-3 text-[11.5px] text-t3">No models available — check Settings → Models.</div> : null}
         {groups.map((g, gi) => (
           <div key={g.provider.id}>
             {gi > 0 ? <DropdownMenuSeparator /> : null}
             <DropdownMenuLabel className="flex items-center gap-2">
               <StatusDot status={g.provider.status} size={6} />
               <span className="flex-1">{g.provider.label}</span>
-              {g.provider.detail ? <span className="truncate font-sans text-[11px] normal-case tracking-normal text-ob-text-3">{g.provider.detail}</span> : null}
+              {g.provider.detail ? <span className="truncate font-mono text-[9.5px] normal-case tracking-[0.01em] text-t3">{g.provider.detail}</span> : null}
             </DropdownMenuLabel>
             {g.models.map((m) => (
               <DropdownMenuItem
@@ -78,11 +79,11 @@ export function ModelPicker({ value, onChange, className }: ModelPickerProps) {
                 trailing={
                   <>
                     {m.variant ? (
-                      <Badge tone={m.variant === 'uncensored' ? 'violet' : 'neutral'} mono>
+                      <Badge tone="neutral" variant="outline" className={m.variant === 'uncensored' ? 'text-t1' : 'text-t3'}>
                         {m.variant === 'uncensored' ? 'Uncensored' : 'Standard'}
                       </Badge>
                     ) : null}
-                    {sameModel(m.ref, value) ? <Check size={14} aria-label="Selected" className="text-ob-accent" /> : <span className="w-3.5" />}
+                    {sameModel(m.ref, value) ? <Check size={13} aria-label="Selected" className="text-acc" /> : <span className="w-3.5" />}
                   </>
                 }
                 data-testid="model-option"

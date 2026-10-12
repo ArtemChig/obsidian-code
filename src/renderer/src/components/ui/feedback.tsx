@@ -1,8 +1,9 @@
-// Spinner, ProgressBar, Skeleton, EmptyState, StatusDot. Owner: ui-foundation.
+// Spinner, ProgressBar (flat bar + segmented "disk meter"), Skeleton, EmptyState, StatusDot. Owner: ui-foundation.
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@renderer/lib/cn';
 
+/** Minimal spinner: a faint ring with one rotating quarter arc. Inherits currentColor. */
 export function Spinner({ size = 14, className, label }: { size?: number; className?: string; label?: string }) {
   return (
     <svg
@@ -13,23 +14,27 @@ export function Spinner({ size = 14, className, label }: { size?: number; classN
       role={label ? 'status' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      className={cn('shrink-0 animate-[ob-spin_0.8s_linear_infinite]', className)}
+      className={cn('shrink-0 animate-[ob-spin_0.9s_linear_infinite]', className)}
     >
-      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeOpacity="0.22" strokeWidth="1.75" />
-      <path d="M14.25 8A6.25 6.25 0 0 0 8 1.75" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeOpacity="0.18" strokeWidth="1.5" />
+      <path d="M14.5 8A6.5 6.5 0 0 0 8 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="butt" />
     </svg>
   );
 }
 
+/**
+ * Tones. Colour only means status: accent = cold white (the live edge / selection), success = --ok,
+ * warning = --warn (waiting for you), danger = --err, violet = --live (running / streaming), neutral = grey.
+ */
 export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'violet';
 
 const BAR_TONES: Record<Tone, string> = {
-  neutral: 'bg-ob-text-3',
-  accent: 'bg-ob-accent',
-  success: 'bg-ob-success',
-  warning: 'bg-ob-warning',
-  danger: 'bg-ob-danger',
-  violet: 'bg-ob-violet',
+  neutral: 'bg-t2',
+  accent: 'bg-acc',
+  success: 'bg-ok',
+  warning: 'bg-warn',
+  danger: 'bg-err',
+  violet: 'bg-live',
 };
 
 export interface ProgressBarProps {
@@ -39,28 +44,46 @@ export interface ProgressBarProps {
   size?: 'xs' | 'sm' | 'md';
   className?: string;
   label?: string;
+  /** 'bar' = flat 2–4 px track · 'segments' = the reference "disk meter" (discrete cells). */
+  variant?: 'bar' | 'segments';
+  /** Cell count for variant="segments" (default 20). */
+  segments?: number;
 }
 
-export function ProgressBar({ value, tone = 'accent', size = 'sm', className, label }: ProgressBarProps) {
+export function ProgressBar({ value, tone = 'accent', size = 'sm', className, label, variant = 'bar', segments = 20 }: ProgressBarProps) {
   const indeterminate = value == null || !Number.isFinite(value);
-  const pct = indeterminate ? 0 : Math.max(0, Math.min(1, value as number)) * 100;
+  const ratio = indeterminate ? 0 : Math.max(0, Math.min(1, value as number));
+  const pct = ratio * 100;
+  const aria = {
+    role: 'progressbar' as const,
+    'aria-label': label,
+    'aria-valuemin': 0,
+    'aria-valuemax': 100,
+    'aria-valuenow': indeterminate ? undefined : Math.round(pct),
+  };
+
+  if (variant === 'segments' && !indeterminate) {
+    const filled = Math.round(ratio * segments);
+    // Filled cells are grey (t2) unless the tone carries a status (warning / danger…), like the reference capbar.
+    const on = tone === 'accent' || tone === 'neutral' ? 'bg-t2' : BAR_TONES[tone];
+    return (
+      <div {...aria} className={cn('flex w-full gap-[2px]', size === 'xs' ? 'h-1' : size === 'sm' ? 'h-1.5' : 'h-2', className)}>
+        {Array.from({ length: segments }, (_, i) => (
+          <i key={i} className={cn('block flex-1', i < filled ? on : 'bg-s4')} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
-      role="progressbar"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={indeterminate ? undefined : Math.round(pct)}
-      className={cn(
-        'relative w-full overflow-hidden rounded-pill bg-[rgba(236,240,241,0.07)]',
-        size === 'xs' ? 'h-[3px]' : size === 'sm' ? 'h-1' : 'h-1.5',
-        className,
-      )}
+      {...aria}
+      className={cn('relative w-full overflow-hidden bg-s4', size === 'xs' ? 'h-[2px]' : size === 'sm' ? 'h-[3px]' : 'h-1', className)}
     >
       {indeterminate ? (
-        <div className={cn('absolute inset-y-0 left-0 w-2/5 rounded-pill animate-[ob-indeterminate_1.3s_ease-in-out_infinite]', BAR_TONES[tone])} />
+        <div className={cn('absolute inset-y-0 left-0 w-2/5 animate-[ob-indeterminate_1.3s_ease-in-out_infinite]', BAR_TONES[tone])} />
       ) : (
-        <div className={cn('h-full rounded-pill transition-[width] duration-300 ease-out', BAR_TONES[tone])} style={{ width: `${pct}%` }} />
+        <div className={cn('h-full transition-[width] duration-300 ease-out', BAR_TONES[tone])} style={{ width: `${pct}%` }} />
       )}
     </div>
   );
@@ -79,22 +102,14 @@ export interface EmptyStateProps {
   size?: 'sm' | 'md';
 }
 
+/** No tile, no frame: a quiet glyph, a title and one line of help, floating in space. */
 export function EmptyState({ icon: Icon, title, description, action, className, size = 'md' }: EmptyStateProps) {
   return (
     <div className={cn('flex flex-col items-center justify-center text-center', size === 'md' ? 'gap-3 px-6 py-12' : 'gap-2 px-4 py-8', className)}>
-      {Icon ? (
-        <div
-          className={cn(
-            'flex items-center justify-center rounded-[10px] border border-ob-border bg-ob-surface-2 text-ob-text-2',
-            size === 'md' ? 'size-10' : 'size-8',
-          )}
-        >
-          <Icon size={size === 'md' ? 18 : 16} aria-hidden />
-        </div>
-      ) : null}
+      {Icon ? <Icon size={size === 'md' ? 18 : 16} aria-hidden className="text-t3" /> : null}
       <div className="flex max-w-[360px] flex-col gap-1">
-        <div className={cn('font-medium text-ob-text', size === 'md' ? 'text-[14px]' : 'text-ui')}>{title}</div>
-        {description ? <div className="text-ui text-ob-text-3">{description}</div> : null}
+        <div className={cn('font-semibold text-t1', size === 'md' ? 'text-[13.5px] tracking-[-0.022em]' : 'text-[12.5px] tracking-[-0.016em]')}>{title}</div>
+        {description ? <div className="text-[11.5px] leading-[1.5] text-t3">{description}</div> : null}
       </div>
       {action ? <div className="mt-1 flex items-center gap-2">{action}</div> : null}
     </div>
@@ -104,24 +119,25 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
 // ───────────────────────────── StatusDot ─────────────────────────────
 
 const DOT_TONES: Record<Tone, string> = {
-  neutral: 'bg-ob-text-3',
-  accent: 'bg-ob-accent',
-  success: 'bg-ob-success',
-  warning: 'bg-ob-warning',
-  danger: 'bg-ob-danger',
-  violet: 'bg-ob-violet',
+  neutral: 'bg-line',
+  accent: 'bg-acc',
+  success: 'bg-ok',
+  warning: 'bg-warn',
+  danger: 'bg-err',
+  violet: 'bg-live',
 };
 
-const DOT_GLOW: Record<Tone, string> = {
+// A flat 3 px halo at 18 % (reference .recdot) — not a glow.
+const DOT_HALO: Record<Tone, string> = {
   neutral: '',
-  accent: 'shadow-[0_0_0_3px_rgba(143,184,222,0.16)]',
-  success: 'shadow-[0_0_0_3px_rgba(95,211,154,0.16)]',
-  warning: 'shadow-[0_0_0_3px_rgba(232,184,92,0.16)]',
-  danger: 'shadow-[0_0_0_3px_rgba(240,113,120,0.16)]',
-  violet: 'shadow-[0_0_0_3px_rgba(179,166,232,0.16)]',
+  accent: 'shadow-[0_0_0_3px_rgba(230,238,255,0.16)]',
+  success: 'shadow-[0_0_0_3px_rgba(59,224,122,0.18)]',
+  warning: 'shadow-[0_0_0_3px_rgba(255,212,38,0.18)]',
+  danger: 'shadow-[0_0_0_3px_rgba(255,111,98,0.18)]',
+  violet: 'shadow-[0_0_0_3px_rgba(191,107,255,0.2)]',
 };
 
-/** Map common status strings to tones. */
+/** Map common status strings to tones: running/in-flight → violet (--live), waiting → warning, done → success. */
 export function statusTone(status: string | null | undefined): Tone {
   switch (status) {
     case 'online':
@@ -140,7 +156,7 @@ export function statusTone(status: string | null | undefined): Tone {
     case 'downloading':
     case 'loading':
     case 'switching':
-      return 'accent';
+      return 'violet';
     case 'waiting':
     case 'awaiting_permission':
     case 'pending':
@@ -162,20 +178,21 @@ export interface StatusDotProps {
   /** Alternative to tone: a status string mapped with statusTone(). */
   status?: string | null;
   pulse?: boolean;
+  /** Flat halo ring (live/recording emphasis). */
   glow?: boolean;
-  size?: 6 | 7 | 8;
+  size?: 5 | 6 | 7 | 8;
   className?: string;
   label?: string;
 }
 
-export function StatusDot({ tone, status, pulse, glow, size = 7, className, label }: StatusDotProps) {
+export function StatusDot({ tone, status, pulse, glow, size = 6, className, label }: StatusDotProps) {
   const t = tone ?? statusTone(status);
   return (
     <span
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      className={cn('relative inline-flex shrink-0 rounded-full', DOT_TONES[t], glow && DOT_GLOW[t], pulse && 'animate-ob-pulse', className)}
+      className={cn('relative inline-flex shrink-0 rounded-full', DOT_TONES[t], glow && DOT_HALO[t], pulse && 'animate-ob-pulse', className)}
       style={{ width: size, height: size }}
     />
   );

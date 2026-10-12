@@ -1,5 +1,5 @@
 // Scheduled view: list of scheduled tasks with enable switch, Run now, edit, delete, and the create/edit dialog. Owner: ui-views.
-import { Box, CalendarClock, Cpu, Folder, Pencil, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { CalendarClock, Cpu, Folder, Pencil, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ScheduledTask } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -18,6 +18,7 @@ import { findModel } from '@renderer/state/selectors';
 import { useSessions } from '@renderer/state/sessions';
 import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from '../settings/core-missing';
 import { permissionModeLabel } from '../settings/permission-modes';
+import { MetaLine, ViewHeader } from '../settings/view-kit';
 import { deleteSchedule, runScheduleNow, setScheduleEnabled } from './actions';
 import { describeSchedule, isDescribed, isIsoTimestamp } from './cron';
 import { ScheduleDialog } from './ScheduleDialog';
@@ -58,35 +59,57 @@ export function SchedulesView() {
     }
   };
 
+  const enabledCount = tasks.filter((t) => t.enabled).length;
+
   return (
-    <div className="h-full overflow-y-auto" data-testid="schedules-view">
-      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-8 pb-12 pt-7">
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-title font-semibold leading-7 text-ob-text">Scheduled</h1>
-            <p className="max-w-[640px] text-ui text-ob-text-3">Run a prompt on a schedule, in its own session. Missed runs happen once when the app opens again.</p>
-          </div>
+    <div className="@container flex h-full flex-col overflow-y-auto" data-testid="schedules-view">
+      <ViewHeader
+        title="Scheduled"
+        description="Run a prompt on a schedule, in its own session. Missed runs happen once when the app opens again."
+        actions={
           <Button variant="primary" icon={Plus} data-testid="schedule-new" onClick={openNew}>
             New schedule
           </Button>
-        </header>
+        }
+      >
+        {loaded && tasks.length ? (
+          <MetaLine
+            className="ml-2"
+            items={[
+              <>
+                <b>{tasks.length}</b> {tasks.length === 1 ? 'schedule' : 'schedules'}
+              </>,
+              <>
+                <b>{enabledCount}</b> enabled
+              </>,
+            ]}
+          />
+        ) : null}
+      </ViewHeader>
 
+      <div className="flex flex-col px-6 pb-12 pt-5">
         {!loaded && coreMissing ? (
-          <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
+          <div className="h-[320px]">
             <CoreMissing what="Scheduled tasks" />
           </div>
         ) : !loaded && syncError ? (
-          <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
+          <div className="h-[320px]">
             <SyncFailed what="scheduled tasks" error={syncError} />
           </div>
         ) : !loaded ? (
-          <div className="flex flex-col gap-3" aria-hidden>
+          <div className="flex flex-col" aria-hidden>
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-[92px] w-full rounded-card" />
+              <div key={i} className="flex h-14 items-center gap-4 border-b border-rule2">
+                <Skeleton className="h-[18px] w-[34px]" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-3 w-1/3" />
+                  <Skeleton className="h-2.5 w-1/4" />
+                </div>
+              </div>
             ))}
           </div>
         ) : sorted.length === 0 ? (
-          <div className="rounded-card border border-ob-border bg-ob-surface-1" data-testid="schedules-empty">
+          <div data-testid="schedules-empty">
             <EmptyState
               icon={CalendarClock}
               title="No scheduled tasks yet"
@@ -99,11 +122,22 @@ export function SchedulesView() {
             />
           </div>
         ) : (
-          <ul className="flex flex-col gap-3" data-testid="schedules-list" aria-label="Scheduled tasks">
-            {sorted.map((t) => (
-              <TaskRow key={t.id} task={t} running={!!running[t.id]} onEdit={() => openEdit(t)} onDelete={() => setDeleting(t)} onRun={() => void runNow(t)} />
-            ))}
-          </ul>
+          <>
+            <div className={cn(COLS, 'ob-label h-7 border-b border-rule')} aria-hidden>
+              <span>On</span>
+              <span>Name</span>
+              <span>Schedule</span>
+              <span className="@min-[900px]:hidden">Next · last run</span>
+              <span className="hidden @min-[900px]:block">Next run</span>
+              <span className="hidden @min-[900px]:block">Last run</span>
+              <span />
+            </div>
+            <ul className="flex flex-col" data-testid="schedules-list" aria-label="Scheduled tasks">
+              {sorted.map((t) => (
+                <TaskRow key={t.id} task={t} running={!!running[t.id]} onEdit={() => openEdit(t)} onDelete={() => setDeleting(t)} onRun={() => void runNow(t)} />
+              ))}
+            </ul>
+          </>
         )}
       </div>
 
@@ -125,6 +159,10 @@ export function SchedulesView() {
 
 // ───────────────────────────── Row ─────────────────────────────
 
+/** Shared grid of the column header and the rows: switch · name · schedule · next run · last run · actions. */
+const COLS =
+  'grid grid-cols-[34px_minmax(0,1.3fr)_minmax(0,1fr)_minmax(132px,0.9fr)_92px] items-center gap-x-3 @min-[900px]:grid-cols-[34px_minmax(0,1.4fr)_minmax(0,1fr)_112px_minmax(120px,0.8fr)_92px]';
+
 const STATUS_TONE = { ok: 'success', error: 'danger', skipped: 'warning' } as const;
 const STATUS_LABEL = { ok: 'Succeeded', error: 'Failed', skipped: 'Skipped' } as const;
 
@@ -140,73 +178,22 @@ function TaskRow({ task: t, running, onEdit, onDelete, onRun }: { task: Schedule
   const oneShotDone = t.oneShot && !t.enabled && t.lastRunAt;
 
   return (
-    <li
-      data-testid="schedule-row"
-      data-enabled={t.enabled}
-      data-name={t.name}
-      className={cn('ob-transition flex gap-4 rounded-card border border-ob-border bg-ob-surface-1 p-4 hover:border-[#30414f]', !t.enabled && 'bg-[rgba(16,26,31,0.6)]')}
-    >
-      <div className="pt-0.5">
+    <li data-testid="schedule-row" data-enabled={t.enabled} data-name={t.name} className={cn(COLS, 'ob-transition min-h-[52px] border-b border-rule2 py-2 hover:bg-hov')}>
+      <div className="flex items-center">
         <Switch aria-label={`${t.enabled ? 'Disable' : 'Enable'} ${t.name}`} checked={t.enabled} onCheckedChange={(v) => void setScheduleEnabled(t.id, v)} />
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-          <span className={cn('truncate text-[14px] font-medium', t.enabled ? 'text-ob-text' : 'text-ob-text-2')} title={t.name}>
+      {/* name + where / what / how */}
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className={cn('max-w-full truncate text-[12.5px] font-medium tracking-[-0.016em]', t.enabled ? 'text-t1' : 'text-t2')} title={t.name}>
             {t.name}
           </span>
-          {t.lastRunStatus ? (
-            <Tooltip content={t.lastRunMessage ?? undefined} disabled={!t.lastRunMessage}>
-              <span>
-                <Badge tone={STATUS_TONE[t.lastRunStatus]} data-testid="schedule-status">
-                  {STATUS_LABEL[t.lastRunStatus]}
-                </Badge>
-              </span>
-            </Tooltip>
-          ) : (
-            <Badge tone="neutral" data-testid="schedule-status">
-              Never run
-            </Badge>
-          )}
-          {!t.enabled ? <Badge tone="neutral" mono>{oneShotDone ? 'done' : 'paused'}</Badge> : null}
-          {t.oneShot && t.enabled ? <Badge tone="accent" mono>once</Badge> : null}
-        </div>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-ui">
-          <span className="text-ob-text-2" data-testid="schedule-words">
-            {words}
-          </span>
-          {showCron ? <code className="rounded bg-[rgba(236,240,241,0.06)] px-1.5 font-mono text-[11px] text-ob-text-3">{t.schedule}</code> : null}
-          <span aria-hidden className="text-ob-text-3">
-            ·
-          </span>
-          {next ? (
-            <span className="text-ob-text-2" data-testid="schedule-next" title={formatDateTime(next)}>
-              next run <span className="text-ob-accent">{relativeFuture(next - now)}</span>
-            </span>
-          ) : (
-            <span className="text-ob-text-3" data-testid="schedule-next">
-              {t.enabled ? 'no upcoming run' : 'not scheduled'}
-            </span>
-          )}
-        </div>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1 text-small text-ob-text-3">
-          <span className="flex min-w-0 items-center gap-1.5" title={t.cwd}>
-            <Folder size={12} aria-hidden />
-            <span className="truncate">{basename(t.cwd)}</span>
-          </span>
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Box size={12} aria-hidden />
-            <span className="max-w-[240px] truncate">{modelLabel}</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <ShieldCheck size={12} aria-hidden />
-            {permissionModeLabel(t.permissionMode)}
-          </span>
+          {!t.enabled ? <Badge tone="neutral">{oneShotDone ? 'done' : 'paused'}</Badge> : null}
+          {t.oneShot && t.enabled ? <Badge tone="accent">once</Badge> : null}
           {t.allowAutoClockIn ? (
             <Tooltip content="Rents the GPU automatically when it is off">
-              <span>
+              <span className="flex">
                 <Badge tone="warning" icon={Cpu}>
                   auto clock-in
                 </Badge>
@@ -214,39 +201,85 @@ function TaskRow({ task: t, running, onEdit, onDelete, onRun }: { task: Schedule
             </Tooltip>
           ) : null}
         </div>
+        <MetaLine
+          className="flex-nowrap overflow-hidden whitespace-nowrap [&>span]:truncate"
+          items={[
+            <span key="cwd" className="flex min-w-0 items-center gap-1" title={t.cwd}>
+              <Folder size={10} aria-hidden className="shrink-0" />
+              <b className="truncate">{basename(t.cwd)}</b>
+            </span>,
+            <span key="model" className="truncate" title={modelLabel}>
+              {modelLabel}
+            </span>,
+            <span key="mode" className="flex min-w-0 items-center gap-1" title={permissionModeLabel(t.permissionMode)}>
+              <ShieldCheck size={10} aria-hidden className="shrink-0" />
+              <span className="truncate">{permissionModeLabel(t.permissionMode)}</span>
+            </span>,
+          ]}
+        />
+      </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 text-small text-ob-text-3">
-          {t.lastRunAt ? (
-            <>
-              <span>
-                Last run <RelativeTime ts={t.lastRunAt} className="text-ob-text-2" ago />
-              </span>
+      {/* schedule in words (+ the raw cron when the words cannot say it all) */}
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className={cn('truncate text-[12px] tracking-[-0.012em]', t.enabled ? 'text-t1' : 'text-t2')} data-testid="schedule-words" title={words}>
+          {words}
+        </span>
+        {showCron ? <code className="ob-mn truncate text-t3">{t.schedule}</code> : null}
+      </div>
+
+      {/* next run (mono) and last run: two columns when wide, stacked in one when narrow */}
+      <div className="flex min-w-0 flex-col items-start gap-1.5 @min-[900px]:contents">
+        {next ? (
+          <span className="ob-tabular max-w-full truncate font-mono text-[10.5px] tracking-[-0.02em] text-t1" data-testid="schedule-next" title={formatDateTime(next)}>
+            <span className="sr-only">next run </span>
+            {relativeFuture(next - now)}
+          </span>
+        ) : (
+          <span className="max-w-full truncate font-mono text-[10.5px] tracking-[-0.02em] text-t3" data-testid="schedule-next">
+            {t.enabled ? 'no upcoming run' : 'not scheduled'}
+          </span>
+        )}
+
+        {/* last run: status tag + when, then its message */}
+        <div className="flex min-w-0 max-w-full flex-col items-start gap-1">
+          <div className="flex min-w-0 max-w-full items-center gap-2">
+            {t.lastRunStatus ? (
+              <Tooltip content={t.lastRunMessage ?? undefined} disabled={!t.lastRunMessage}>
+                <span className="flex">
+                  <Badge tone={STATUS_TONE[t.lastRunStatus]} data-testid="schedule-status">
+                    {STATUS_LABEL[t.lastRunStatus]}
+                  </Badge>
+                </span>
+              </Tooltip>
+            ) : (
+              <Badge tone="neutral" data-testid="schedule-status">
+                Never run
+              </Badge>
+            )}
+            {t.lastRunAt ? <RelativeTime ts={t.lastRunAt} ago className="ob-tabular truncate font-mono text-[9.5px] text-t3" /> : null}
+          </div>
+          {t.lastRunAt && (t.lastRunMessage || (hasLastSession && t.lastRunSessionId)) ? (
+            <div className="flex min-w-0 max-w-full items-center gap-1.5 font-mono text-[9.5px] tracking-[0.01em]">
               {t.lastRunMessage ? (
-                <>
-                  <span aria-hidden>·</span>
-                  <span className={cn('truncate', t.lastRunStatus === 'error' ? 'text-ob-danger' : t.lastRunStatus === 'skipped' ? 'text-ob-warning' : '')} title={t.lastRunMessage}>
-                    {t.lastRunMessage}
-                  </span>
-                </>
+                <span className={cn('min-w-0 truncate', t.lastRunStatus === 'error' ? 'text-err' : t.lastRunStatus === 'skipped' ? 'text-warn' : 'text-t3')} title={t.lastRunMessage}>
+                  {t.lastRunMessage}
+                </span>
               ) : null}
               {hasLastSession && t.lastRunSessionId ? (
-                <button type="button" className="ml-1 shrink-0 text-ob-accent hover:underline" onClick={() => openSession(t.lastRunSessionId as string)}>
+                <button type="button" className="shrink-0 font-sans text-[11px] text-acc hover:underline" onClick={() => openSession(t.lastRunSessionId as string)}>
                   Open session
                 </button>
               ) : null}
-            </>
-          ) : (
-            <span>Has not run yet.</span>
-          )}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div className="flex shrink-0 items-start gap-0.5">
-        <IconButton label="Run now" icon={Play} size="lg" loading={running} data-testid="schedule-run" onClick={onRun} />
-        <IconButton label="Edit" icon={Pencil} size="lg" data-testid="schedule-edit" onClick={onEdit} />
-        <IconButton label="Delete" icon={Trash2} size="lg" variant="danger" data-testid="schedule-delete" onClick={onDelete} />
+      <div className="flex shrink-0 items-center justify-end gap-0.5">
+        <IconButton label="Run now" icon={Play} size="md" loading={running} data-testid="schedule-run" onClick={onRun} />
+        <IconButton label="Edit" icon={Pencil} size="md" data-testid="schedule-edit" onClick={onEdit} />
+        <IconButton label="Delete" icon={Trash2} size="md" variant="danger" data-testid="schedule-delete" onClick={onDelete} />
       </div>
     </li>
   );
 }
-

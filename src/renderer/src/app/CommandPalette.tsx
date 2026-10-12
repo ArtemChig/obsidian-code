@@ -100,9 +100,9 @@ export function CommandPalette() {
               type="button"
               aria-label="Back"
               onClick={() => go('root')}
-              className="ob-transition -ml-1 flex size-6 items-center justify-center rounded-[5px] text-ob-text-3 hover:bg-ob-hover hover:text-ob-text"
+              className="ob-transition -ml-1 flex size-6 items-center justify-center rounded-[2px] text-t3 hover:bg-hov hover:text-t1"
             >
-              <ArrowLeft size={15} aria-hidden />
+              <ArrowLeft size={14} aria-hidden />
             </button>
           ) : undefined
         }
@@ -218,7 +218,7 @@ function SessionsPage({ limit, heading = 'Sessions' }: { limit: number; heading?
           keywords={[basename(s.cwd)]}
           icon={MessageSquare}
           hint={basename(s.cwd)}
-          trailing={<RelativeTime ts={s.updatedAt} className="w-14 text-right font-mono text-[10.5px] text-ob-text-3" />}
+          trailing={<RelativeTime ts={s.updatedAt} className="w-14 text-right font-mono text-[9.5px] tracking-[0.02em] text-t3" />}
           onSelect={() => openSession(s.id)}
         >
           {s.title || 'Untitled'}
@@ -235,7 +235,7 @@ function ModelsPage() {
   const defaultModel = useSettings((s) => s.settings?.defaultModel ?? null);
   const current = route === 'session' && active ? active.model : defaultModel;
   if (!groups.length) {
-    return <div className="px-3 py-8 text-center text-ui text-ob-text-3">No models available — check Settings → Models.</div>;
+    return <div className="px-4 py-8 text-center text-[12px] text-t3">No models available — check Settings → Models.</div>;
   }
   return (
     <>
@@ -246,16 +246,12 @@ function ModelsPage() {
               key={`${m.ref.provider}::${m.ref.model}`}
               value={`model ${m.ref.provider} ${m.ref.model} ${m.label}`}
               disabled={m.status === 'offline'}
-              leading={<StatusDot status={m.status} />}
+              leading={<StatusDot status={m.status} className="mx-[3px]" />}
               hint={m.ref.model !== m.label ? m.ref.model : undefined}
               trailing={
                 <span className="flex items-center gap-1.5">
-                  {m.variant ? (
-                    <Badge tone={m.variant === 'uncensored' ? 'violet' : 'neutral'} mono>
-                      {m.variant}
-                    </Badge>
-                  ) : null}
-                  {sameModel(current, m.ref) ? <Check size={14} aria-label="Current" className="text-ob-accent" /> : <span className="w-3.5" />}
+                  {m.variant ? <Badge tone={m.variant === 'uncensored' ? 'violet' : 'neutral'}>{m.variant}</Badge> : null}
+                  {sameModel(current, m.ref) ? <Check size={13} aria-label="Current" className="text-t1" /> : <span className="w-[13px]" />}
                 </span>
               }
               onSelect={() => {

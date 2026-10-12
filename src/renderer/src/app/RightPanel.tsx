@@ -1,4 +1,5 @@
 // Right panel container: tabs Changes / Todos / Agents / Files (contents from features/chat/panels.tsx). Owner: ui-foundation.
+// M13: no fill — the #000 ground with a --rule hairline on the left; underline tabs (reference .phd).
 import { X } from 'lucide-react';
 import { useCallback, useRef, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
 import { AgentsPanel, ChangesPanel, FilesPanel, TodosPanel } from '@renderer/features/chat/panels';
@@ -53,7 +54,7 @@ function ResizeHandle({ width, max }: { width: number; max: number }) {
       onDoubleClick={() => useUi.setState({ rightPanelWidth: RIGHT_PANEL_DEFAULT_W })}
       className="group absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize"
     >
-      <div className="mx-auto h-full w-px bg-transparent transition-colors group-hover:bg-ob-accent/50" />
+      <div className="mx-auto h-full w-px bg-transparent transition-colors group-hover:bg-line group-active:bg-acc" />
     </div>
   );
 }
@@ -76,13 +77,13 @@ export function RightPanel({ sessionId }: { sessionId: string }) {
     <aside
       data-testid="right-panel"
       aria-label="Session panel"
-      className="relative flex h-full shrink-0 flex-col border-l border-ob-border bg-ob-surface-1 animate-ob-fade-in"
+      className="relative flex h-full shrink-0 flex-col border-l border-rule bg-s0 animate-ob-fade-in"
       style={{ width }}
     >
       <ResizeHandle width={width} max={maxW} />
       <Tabs value={tab} onValueChange={(v) => useUi.setState({ rightPanelTab: v as RightPanelTab })} className="h-full">
-        <div className="flex items-stretch border-b border-ob-border pr-1.5">
-          <TabsList className="flex-1 border-b-0">
+        <div className="flex h-[var(--ob-pane-head-h)] shrink-0 items-stretch border-b border-rule pr-1.5">
+          <TabsList className="h-full flex-1 border-b-0">
             <TabsTrigger value="changes" count={changes || undefined}>
               Changes
             </TabsTrigger>
@@ -95,7 +96,7 @@ export function RightPanel({ sessionId }: { sessionId: string }) {
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
           <div className="flex items-center">
-            <IconButton label="Close panel" shortcut={SHORTCUTS.rightPanel} icon={X} size="sm" onClick={() => toggleRightPanel(false)} />
+            <IconButton label="Close panel" shortcut={SHORTCUTS.rightPanel} icon={X} size="sm" tooltipSide="bottom" onClick={() => toggleRightPanel(false)} />
           </div>
         </div>
         <ErrorBoundary area="Side panel" resetKey={`${sessionId}:${tab}`}>

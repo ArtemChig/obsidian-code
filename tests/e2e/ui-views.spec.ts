@@ -1,7 +1,7 @@
 // ui-views E2E (owner: ui-views). Drives GPU, Activity, Scheduled and Settings in DEMO MODE against the Vite dev server:
 //   npx vite --config vite.web.config.ts --port 5173 --strictPort     (or 5174/5175, or set OBSIDIAN_WEB_URL)
 //   npx playwright test tests/e2e/ui-views.spec.ts
-// Saves design-review screenshots to tests/e2e/screenshots/views-*.png.
+// Saves design-review screenshots (M13 re-skin) to tests/e2e/screenshots/m13-views-*.png.
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -124,7 +124,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.getByTestId('gpu-history-row')).toHaveCount(8);
 
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-gpu-ready.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-gpu-ready.png') });
     expect(errors).toEqual([]);
   });
 
@@ -138,7 +138,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.getByTestId('gpu-summary')).toContainText('Light');
 
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-gpu-off.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-gpu-off.png') });
 
     // pick the Standard profile: its default model is the experimental Flash-Next
     await page.getByTestId('gpu-profile-standard').click();
@@ -185,7 +185,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.getByTestId('gpu-message')).toContainText('Downloading model');
     await expect(page.getByTestId('gpu-main-button')).toHaveText('Cancel clock-in');
     await settle(page, 200);
-    await page.screenshot({ path: join(SHOTS, 'views-gpu-downloading.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-gpu-downloading.png') });
 
     await expect(page.getByTestId('gpu-panel')).toHaveAttribute('data-phase', 'ready', { timeout: 20_000 });
     await expect(page.getByTestId('gpu-main-button')).toHaveText('Clock out');
@@ -238,7 +238,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.getByTestId('gpu-orphan-banner')).toContainText('2 untracked instances');
     await expect(page.getByTestId('gpu-parked')).toContainText('#26418220');
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-gpu-orphans.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-gpu-orphans.png') });
 
     await page.getByTestId('gpu-orphan-destroy').click();
     // destroying untracked instances asks first (they may belong to another copy of the app)
@@ -280,7 +280,7 @@ test.describe('ui-views (demo mode)', () => {
     });
     expect(overflow).toBeLessThanOrEqual(1);
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-gpu-1024.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-gpu-1024.png') });
   });
 
   test('every view fits a 1024px window without horizontal overflow', async ({ page }) => {
@@ -345,7 +345,7 @@ test.describe('ui-views (demo mode)', () => {
     // pending permission across sessions with a jump link
     await expect(page.getByTestId('activity-pending')).toContainText('Run: rm -rf out release');
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-activity.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-activity.png') });
 
     // filter by kind
     await page.getByRole('tab', { name: /Shells/ }).click();
@@ -387,7 +387,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.locator('[data-testid=schedule-row][data-name="Weekly benchmark on Vast"]').getByTestId('schedule-status')).toHaveText('Failed');
     await expect(page.locator('[data-testid=schedule-row][data-name="Weekly benchmark on Vast"]')).toContainText('auto clock-in');
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-schedules.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-schedules.png') });
 
     // enable switch
     await audit.getByRole('switch').click();
@@ -475,7 +475,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.getByTestId('schedule-mode-note')).toContainText('without asking');
 
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-schedule-dialog.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-schedule-dialog.png') });
 
     await page.getByTestId('schedule-save').click();
     await expect(dialog).toBeHidden();
@@ -523,7 +523,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.getByTestId('settings-section-models')).toBeVisible();
     await expect(page.getByTestId('endpoint-row')).toHaveCount(2);
     await settle(page);
-    await page.screenshot({ path: join(SHOTS, 'views-settings-models.png') });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-settings-models.png') });
 
     // local server: URL is validated, saved on blur, and Test refreshes the status
     const url = page.getByTestId('local-url');
@@ -637,7 +637,7 @@ test.describe('ui-views (demo mode)', () => {
     await expect(page.getByTestId('vast-parkdays')).toBeDisabled();
 
     // the settings page is what gets reviewed
-    await page.screenshot({ path: join(SHOTS, 'views-settings-vast.png'), fullPage: false });
+    await page.screenshot({ path: join(SHOTS, 'm13-views-settings-vast.png'), fullPage: false });
 
     // profiles: table, add (validated), JSON
     await expect(page.getByTestId('profile-row')).toHaveCount(3);

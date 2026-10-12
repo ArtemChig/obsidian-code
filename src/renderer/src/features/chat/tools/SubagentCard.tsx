@@ -1,5 +1,5 @@
-// Task (subagent) card: live status + a nested mini transcript of the child session + Open. Owner: ui-chat.
-import { ArrowUpRight, Bot, ChevronDown, ChevronRight } from 'lucide-react';
+// Task (subagent) block: live status + the child session's steps on a hairline + Open. Owner: ui-chat.
+import { ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { SessionSummary, ToolUseBlock } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -27,11 +27,11 @@ function useChildSession(tool: ToolUseBlock): SessionSummary | undefined {
 function ToolLine({ tool, cwd }: { tool: ToolUseBlock; cwd: string }) {
   const s = toolSummary(tool, cwd);
   return (
-    <li className="flex min-w-0 items-center gap-2 text-small">
-      <ToolStatusIcon status={tool.status} size={12} className="shrink-0" />
-      <span className="shrink-0 font-medium text-ob-text-2">{s.verb}</span>
-      <span className="min-w-0 truncate font-mono text-[11.5px] text-ob-text-3">{s.target}</span>
-      {s.meta ? <span className="shrink-0 font-mono text-[11px] text-ob-text-3">{s.meta}</span> : null}
+    <li className="flex h-6 min-w-0 items-center gap-2.5">
+      <ToolStatusIcon status={tool.status} size={10} className="shrink-0" />
+      <span className="min-w-[56px] shrink-0 font-mono text-[8.5px] font-medium uppercase tracking-[0.16em] text-t3">{s.verb}</span>
+      <span className="min-w-0 truncate font-mono text-[11px] tracking-[-0.02em] text-t2">{s.target}</span>
+      {s.meta ? <span className="shrink-0 font-mono text-[9.5px] text-t3">{s.meta}</span> : null}
     </li>
   );
 }
@@ -41,19 +41,18 @@ function MiniTranscript({ childId, cwd }: { childId: string; cwd: string }) {
   const items = useMemo(() => (entry ? previewItems(entry.session.messages) : []), [entry]);
   if (!entry) {
     return (
-      <div className="flex flex-col gap-1.5 px-3.5 py-2.5" aria-hidden>
+      <div className="flex flex-col gap-1.5 py-2 pl-4" aria-hidden>
         <div className="ob-skeleton h-3 w-3/5" />
         <div className="ob-skeleton h-3 w-2/5" />
       </div>
     );
   }
-  if (!items.length) return <div className="px-3.5 py-2.5 text-small text-ob-text-3">Starting…</div>;
+  if (!items.length) return <div className="py-1.5 pl-4 font-mono text-[9px] uppercase tracking-[0.16em] text-t3">Starting…</div>;
   return (
-    <ol className="relative flex flex-col gap-1 py-2 pl-[30px] pr-3.5" data-testid="subagent-preview">
-      <span aria-hidden className="absolute bottom-3 left-[19px] top-3 w-px bg-[rgba(179,166,232,0.22)]" />
+    <ol className="flex flex-col gap-0.5 py-1 pl-4" data-testid="subagent-preview">
       {items.map((it) =>
         it.kind === 'text' ? (
-          <li key={it.key} className="line-clamp-2 text-small text-ob-text-2">
+          <li key={it.key} className="line-clamp-2 py-0.5 text-[11.5px] tracking-[-0.008em] text-t2">
             {it.text}
           </li>
         ) : (
@@ -80,73 +79,54 @@ export function SubagentCard({ tool, className }: { tool: ToolUseBlock; classNam
   const live = running || waiting || !finished;
   const [showSteps, setShowSteps] = useState(false);
 
+  // M13: subagents are not coloured. A hairline-separated block: a row like a tool row, then the child's steps and
+  // result hanging off one --rule left hairline. A running child gets the --live dot.
   return (
-    <div
-      data-testid="subagent-card"
-      data-status={tool.status}
-      className={cn(
-        'overflow-hidden rounded-[9px] border bg-ob-surface-1',
-        running ? 'border-[rgba(179,166,232,0.34)]' : 'border-ob-border',
-        className,
-      )}
-    >
-      <div className="flex h-10 items-center gap-2.5 pl-3 pr-2">
-        <span className={cn('flex size-[22px] shrink-0 items-center justify-center rounded-[6px] bg-ob-violet-soft text-ob-violet', running && 'animate-ob-pulse')}>
-          <Bot size={13} aria-hidden />
-        </span>
-        <Badge tone="violet" mono>
+    <div data-testid="subagent-card" data-status={tool.status} className={cn('min-w-0 border-b border-rule2 pb-2', className)}>
+      <div className="flex h-8 min-w-0 items-center gap-2.5">
+        <ToolStatusIcon status={waiting ? 'awaiting_permission' : running ? 'running' : tool.status} size={10} className="shrink-0" />
+        <span className="min-w-[64px] shrink-0 font-mono text-[9px] font-medium uppercase leading-none tracking-[0.16em] text-t3">Agent</span>
+        <Badge variant="outline" className="text-t2">
           {agentType}
         </Badge>
-        <span className="min-w-0 flex-1 truncate text-ui text-ob-text" title={prompt}>
+        <span className="min-w-0 flex-1 truncate text-[12.5px] tracking-[-0.012em] text-t1" title={prompt}>
           {description}
         </span>
-        {waiting ? <span className="shrink-0 text-small text-ob-warning">Needs you</span> : null}
-        {running && tool.startedAt ? <Elapsed since={tool.startedAt} className="shrink-0 font-mono text-[11px] text-ob-text-3" /> : null}
-        {!running && ms !== null ? <span className="shrink-0 font-mono text-[11px] text-ob-text-3">{formatDuration(ms)}</span> : null}
-        <ToolStatusIcon status={running ? 'running' : tool.status} size={13} className="shrink-0" />
+        {waiting ? <span className="shrink-0 font-mono text-[8.5px] font-medium uppercase tracking-[0.14em] text-warn">Needs you</span> : null}
+        {running && tool.startedAt ? <Elapsed since={tool.startedAt} className="shrink-0 font-mono text-[10px] text-live" /> : null}
+        {!running && ms !== null ? <span className="ob-tabular shrink-0 font-mono text-[10px] text-t3">{formatDuration(ms)}</span> : null}
         {child ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            iconRight={ArrowUpRight}
-            className="h-7 px-2 text-ob-text-2"
-            onClick={() => openSession(child.id)}
-            data-testid="subagent-open"
-          >
+          <Button size="sm" variant="ghost" iconRight={ArrowUpRight} className="-mr-2 px-2" onClick={() => openSession(child.id)} data-testid="subagent-open">
             Open
           </Button>
         ) : null}
       </div>
-      {child && live ? (
-        <div className="border-t border-ob-border">
-          <MiniTranscript childId={child.id} cwd={child.cwd} />
-        </div>
-      ) : null}
-      {child && !live ? (
-        <div className="border-t border-ob-border">
-          <button
-            type="button"
-            onClick={() => setShowSteps((v) => !v)}
-            aria-expanded={showSteps}
-            data-testid="subagent-steps-toggle"
-            className="ob-transition flex h-7 w-full items-center gap-1.5 px-3.5 text-left text-small text-ob-text-3 hover:bg-ob-hover hover:text-ob-text-2"
-          >
-            {showSteps ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}
-            Steps
-          </button>
-          {showSteps ? <MiniTranscript childId={child.id} cwd={child.cwd} /> : null}
-        </div>
-      ) : null}
-      {result ? (
-        <div className="border-t border-ob-border bg-[rgba(0,0,0,0.12)]">
-          <Clamp maxHeight={150} fadeFrom="#0e171b">
-            <div className="px-3.5 py-2.5">
-              <div className="ob-section-label mb-1 text-[10px]">Result</div>
+      <div className="ml-[4px] flex flex-col border-l border-rule">
+        {child && live ? <MiniTranscript childId={child.id} cwd={child.cwd} /> : null}
+        {child && !live ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowSteps((v) => !v)}
+              aria-expanded={showSteps}
+              data-testid="subagent-steps-toggle"
+              className="ob-transition flex h-6 w-full items-center gap-1.5 pl-4 text-left font-mono text-[9px] uppercase tracking-[0.16em] text-t3 hover:text-t1"
+            >
+              {showSteps ? <ChevronDown size={11} aria-hidden /> : <ChevronRight size={11} aria-hidden />}
+              Steps
+            </button>
+            {showSteps ? <MiniTranscript childId={child.id} cwd={child.cwd} /> : null}
+          </>
+        ) : null}
+        {result ? (
+          <Clamp maxHeight={150}>
+            <div className="py-1.5 pl-4">
+              <div className="ob-cap mb-1">Result</div>
               <Markdown text={result} compact />
             </div>
           </Clamp>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }

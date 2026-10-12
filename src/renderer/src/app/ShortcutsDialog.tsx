@@ -1,4 +1,5 @@
 // Keyboard shortcuts reference (palette → "Keyboard shortcuts", or Ctrl+/). Owner: ui-foundation.
+// M13: reference keybind table — mono cap group headings, 28 px rows on --rule2 sub-hairlines, key caps on the right.
 import { Dialog, DialogContent } from '@renderer/components/ui/dialog';
 import { Kbd } from '@renderer/components/ui/kbd';
 import { useUi } from '@renderer/state/ui';
@@ -38,22 +39,29 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
   },
 ];
 
+/** "Ctrl+Shift+K" → caps; "1 / 2 / 3" → three caps; a lone "+" stays a key. */
+function keyCaps(k: string): string[] {
+  if (k.includes(' / ')) return k.split(' / ');
+  if (k.length > 1 && k.includes('+')) return k.split('+');
+  return [k];
+}
+
 export function ShortcutsDialog() {
   const open = useUi((s) => s.shortcutsOpen);
   return (
     <Dialog open={open} onOpenChange={(o) => useUi.setState({ shortcutsOpen: o })}>
       <DialogContent title="Keyboard shortcuts" size="md">
-        <div className="flex flex-col gap-4 pb-2" data-testid="shortcuts-dialog">
+        <div className="flex flex-col gap-5 pb-2" data-testid="shortcuts-dialog">
           {GROUPS.map((g) => (
-            <section key={g.title} className="flex flex-col gap-1.5">
-              <h3 className="ob-section-label text-[10.5px]">{g.title}</h3>
+            <section key={g.title} className="flex flex-col">
+              <h3 className="ob-cap border-b border-rule pb-2">{g.title}</h3>
               <dl className="flex flex-col">
                 {g.rows.map(([k, label]) => (
-                  <div key={`${g.title}:${k}`} className="flex h-8 items-center justify-between gap-4 border-b border-ob-border last:border-b-0">
-                    <dt className="text-ui text-ob-text-2">{label}</dt>
-                    <dd className="flex shrink-0 items-center gap-1">
-                      {k.split(' / ').map((part) => (
-                        <Kbd key={part}>{part}</Kbd>
+                  <div key={`${g.title}:${k}`} className="flex min-h-7 items-center justify-between gap-4 border-b border-rule2 py-1 last:border-b-0">
+                    <dt className="text-[12px] tracking-[-0.014em] text-t2">{label}</dt>
+                    <dd className="flex shrink-0 items-center gap-[3px]">
+                      {keyCaps(k).map((part, i) => (
+                        <Kbd key={`${part}-${i}`}>{part}</Kbd>
                       ))}
                     </dd>
                   </div>

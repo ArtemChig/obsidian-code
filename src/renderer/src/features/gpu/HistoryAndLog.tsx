@@ -1,12 +1,14 @@
-// History table and server log viewer of the GPU view. Owner: ui-views.
-import { ChevronDown, ChevronRight, History, RefreshCw, ScrollText } from 'lucide-react';
+// History (a mono table) and the server log (an --s1 mono well) of the GPU view. Owner: ui-views.
+import { ChevronDown, ChevronRight, History, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogModel, GpuSessionRecord } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
 import { EmptyState, Skeleton } from '@renderer/components/ui/feedback';
+import { SectionLabel } from '@renderer/components/ui/layout';
 import { cn } from '@renderer/lib/cn';
 import { formatDateTime, formatDuration, formatMoney, formatPerHour, shortModelName } from '@renderer/lib/format';
+import { TD, TH } from '../settings/view-kit';
 import { END_REASON_LABEL, endReasonTone, splitModelLabel, sumCost } from './model';
 import { useServerLog } from './hooks';
 
@@ -24,56 +26,62 @@ export function HistoryTable({ records, error, catalog, pageSize = 8 }: { record
     return m ? splitModelLabel(m.label).name : shortModelName(id);
   };
   return (
-    <section className="overflow-hidden rounded-card border border-ob-border bg-ob-surface-1" data-testid="gpu-history" aria-label="History">
-      <header className="flex items-center gap-2 border-b border-ob-border px-4 py-3">
-        <History size={15} aria-hidden className="text-ob-text-3" />
-        <h3 className="text-ui font-medium text-ob-text">History</h3>
-        <span className="flex-1" />
-        {records ? <span className="ob-tabular font-mono text-[11.5px] text-ob-text-3">{formatMoney(sumCost(records))} over {total} {total === 1 ? 'session' : 'sessions'}</span> : null}
-      </header>
+    <section className="flex flex-col gap-1.5" data-testid="gpu-history" aria-label="History">
+      <SectionLabel
+        rule
+        action={
+          records ? (
+            <span className="ob-tabular font-mono normal-case tracking-[0.01em] text-t3">
+              <span className="text-t1">{formatMoney(sumCost(records))}</span> over {total} {total === 1 ? 'session' : 'sessions'}
+            </span>
+          ) : undefined
+        }
+      >
+        History
+      </SectionLabel>
       {records === null && !error ? (
-        <div className="flex flex-col gap-3 p-4" aria-hidden>
+        <div className="flex flex-col gap-2.5 py-2" aria-hidden>
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-4 w-full" />
+            <Skeleton key={i} className="h-3 w-full" />
           ))}
         </div>
       ) : error && records === null ? (
-        <div className="px-4 py-6 text-center text-ui text-ob-danger">{error}</div>
+        <div className="border-b border-rule2 py-3 text-[11.5px] text-err">{error}</div>
       ) : total === 0 ? (
         <EmptyState size="sm" icon={History} title="No GPU sessions yet" description="Past clock-ins, their cost and why they ended show up here." />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-ui">
+          <table className="w-full min-w-[680px] border-collapse">
             <thead>
-              <tr className="border-b border-ob-border text-left">
+              <tr>
                 {['Started', 'GPU', 'Model', 'Duration', 'Rate', 'Cost', 'Ended'].map((h, i) => (
-                  <th key={h} className={cn('ob-section-label px-4 py-2 font-normal', i >= 3 && i <= 5 && 'text-right')}>
+                  <th key={h} className={cn(TH, i >= 3 && i <= 5 && 'text-right')}>
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="font-mono text-[10.5px] tracking-[-0.02em]">
               {rows.map((r) => (
-                <tr key={r.id} data-testid="gpu-history-row" className="ob-transition border-b border-ob-border last:border-b-0 hover:bg-ob-hover">
-                  <td className="whitespace-nowrap px-4 py-2 text-ob-text-2">{formatDateTime(r.startedAt)}</td>
-                  <td className="whitespace-nowrap px-4 py-2 text-ob-text">
+                <tr key={r.id} data-testid="gpu-history-row" className="ob-transition hover:bg-hov">
+                  <td className={cn(TD, 'ob-tabular text-t2')}>{formatDateTime(r.startedAt)}</td>
+                  <td className={cn(TD, 'text-t1')}>
                     {r.numGpus > 1 ? `${r.numGpus}× ` : ''}
                     {r.gpuName}
                   </td>
-                  <td className="max-w-[220px] truncate px-4 py-2 text-ob-text-2" title={r.modelId}>
+                  <td className={cn(TD, 'max-w-[220px] truncate font-sans text-[11.5px] tracking-[-0.01em] text-t2')} title={r.modelId}>
                     {modelName(r.modelId)}
                   </td>
-                  <td className="ob-tabular whitespace-nowrap px-4 py-2 text-right font-mono text-[12px] text-ob-text-2">{r.endedAt ? formatDuration(r.endedAt - r.startedAt) : 'running'}</td>
-                  <td className="ob-tabular whitespace-nowrap px-4 py-2 text-right font-mono text-[12px] text-ob-text-3">{formatPerHour(r.pricePerHour)}</td>
-                  <td className="ob-tabular whitespace-nowrap px-4 py-2 text-right font-mono text-[12px] text-ob-text">{formatMoney(r.cost)}</td>
-                  <td className="whitespace-nowrap px-4 py-2">
+                  <td className={cn(TD, 'ob-tabular text-right text-t2')}>{r.endedAt ? formatDuration(r.endedAt - r.startedAt) : 'running'}</td>
+                  <td className={cn(TD, 'ob-tabular text-right text-t3')}>{formatPerHour(r.pricePerHour)}</td>
+                  <td className={cn(TD, 'ob-tabular text-right text-t1')}>{formatMoney(r.cost)}</td>
+                  <td className={cn(TD, 'pl-4')}>
                     {r.endReason ? (
-                      <Badge tone={endReasonTone(r.endReason)} variant="soft">
+                      <Badge tone={endReasonTone(r.endReason)} variant="outline">
                         {END_REASON_LABEL[r.endReason]}
                       </Badge>
                     ) : (
-                      <span className="text-ob-text-3">{r.endedAt ? '—' : 'in progress'}</span>
+                      <span className="text-t3">{r.endedAt ? '—' : 'in progress'}</span>
                     )}
                   </td>
                 </tr>
@@ -83,8 +91,8 @@ export function HistoryTable({ records, error, catalog, pageSize = 8 }: { record
         </div>
       )}
       {total > pageSize ? (
-        <div className="border-t border-ob-border px-4 py-2">
-          <Button size="sm" variant="ghost" onClick={() => setAll((v) => !v)} data-testid="gpu-history-more">
+        <div className="py-1">
+          <Button size="sm" variant="ghost" className="-ml-2.5" onClick={() => setAll((v) => !v)} data-testid="gpu-history-more">
             {all ? 'Show fewer' : `Show all ${total}`}
           </Button>
         </div>
@@ -107,40 +115,40 @@ export function ServerLog({ live }: { live: boolean }) {
 
   const lines = text ? text.split(/\r?\n/).length : 0;
   return (
-    <section className="overflow-hidden rounded-card border border-ob-border bg-ob-surface-1" data-testid="gpu-log" aria-label="Server log">
-      <header className="flex items-center gap-2 px-4 py-3">
+    <section className="flex flex-col gap-1.5" data-testid="gpu-log" aria-label="Server log">
+      <div className="flex min-h-7 items-center gap-2.5">
         <button
           type="button"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="ob-transition -ml-1 flex flex-1 items-center gap-2 rounded-ctl px-1 py-0.5 text-left hover:bg-ob-hover"
+          className="ob-transition group -ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-[2px] px-1 py-1 text-left hover:bg-hov"
           data-testid="gpu-log-toggle"
         >
-          {open ? <ChevronDown size={14} aria-hidden className="text-ob-text-3" /> : <ChevronRight size={14} aria-hidden className="text-ob-text-3" />}
-          <ScrollText size={15} aria-hidden className="text-ob-text-3" />
-          <span className="text-ui font-medium text-ob-text">Server log</span>
-          <span className="text-small text-ob-text-3">llama-server output on the rented machine</span>
+          {open ? <ChevronDown size={12} aria-hidden className="shrink-0 text-t3" /> : <ChevronRight size={12} aria-hidden className="shrink-0 text-t3" />}
+          <span className="ob-cap shrink-0 group-hover:text-t2">Server log</span>
+          <span className="truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">llama-server output on the rented machine</span>
+          <span aria-hidden className="ml-1 h-px min-w-4 flex-1 bg-rule2" />
         </button>
         {open ? (
           <>
-            {lines ? <span className="ob-tabular font-mono text-[11.5px] text-ob-text-3">{lines} lines</span> : null}
-            <IconButton label="Refresh log" icon={RefreshCw} size="md" loading={loading} onClick={() => void reload()} />
+            {lines ? <span className="ob-tabular shrink-0 font-mono text-[9.5px] text-t3">{lines} lines</span> : null}
+            <IconButton label="Refresh log" icon={RefreshCw} size="sm" loading={loading} onClick={() => void reload()} />
           </>
         ) : null}
-      </header>
+      </div>
       {open ? (
-        <div className="border-t border-ob-border bg-ob-code-bg">
+        <div className="rounded-[2px] bg-s1 shadow-[inset_0_0_0_1px_var(--rule)]">
           {error ? (
-            <div className="px-4 py-4 text-ui text-ob-danger">{error}</div>
+            <div className="px-4 py-3 text-[11.5px] text-err">{error}</div>
           ) : text === null ? (
-            <div className="px-4 py-4 text-ui text-ob-text-3">Loading…</div>
+            <div className="px-4 py-3 font-mono text-[10.5px] text-t3">Loading…</div>
           ) : text.trim() === '' ? (
-            <div className="px-4 py-4 text-ui text-ob-text-3">The log is empty. It fills once a GPU is clocked in and the server starts.</div>
+            <div className="px-4 py-3 text-[11.5px] text-t3">The log is empty. It fills once a GPU is clocked in and the server starts.</div>
           ) : (
             <pre
               ref={ref}
               data-testid="gpu-log-text"
-              className="ob-selectable max-h-[280px] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[11.5px] leading-[1.6] text-ob-text-2"
+              className="ob-selectable max-h-[280px] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[10.5px] leading-[1.6] tracking-[-0.01em] text-t2"
             >
               {text}
             </pre>

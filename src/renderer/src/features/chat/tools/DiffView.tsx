@@ -1,4 +1,5 @@
-// Unified diff viewer: old/new line numbers, +/- colours, syntax highlighting, collapsed unchanged hunks. Owner: ui-chat.
+// Unified diff viewer (M13): --t3 line-number gutters, thin --ok/--err text on very faint washes, monochrome
+// highlighting on context lines, collapsed unchanged hunks. Owner: ui-chat.
 import { ChevronsUpDown } from 'lucide-react';
 import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { cn } from '@renderer/lib/cn';
@@ -33,45 +34,36 @@ function useTokenLines(code: string, lang: string | null): ThemedToken[][] | nul
   return useMemo(() => (ready && lang && code ? tokenizeSync(code, lang) : null), [ready, lang, code]);
 }
 
-function tokStyle(t: ThemedToken): CSSProperties | undefined {
-  if (!t.color && !t.fontStyle) return undefined;
-  const s: CSSProperties = { color: t.color };
+/** Token style; on added/deleted lines the status colour wins (thin --ok / --err text), weight and italics stay. */
+function tokStyle(t: ThemedToken, plain?: boolean): CSSProperties | undefined {
+  if ((plain || !t.color) && !t.fontStyle) return undefined;
+  const s: CSSProperties = plain ? {} : { color: t.color };
   if (t.fontStyle && t.fontStyle & 1) s.fontStyle = 'italic';
   if (t.fontStyle && t.fontStyle & 2) s.fontWeight = 600;
   return s;
 }
 
 function Line({ row, tokens, single }: { row: DiffRow; tokens: ThemedToken[] | undefined; single: boolean }) {
+  // A new file is all additions: there is no change to point at, so its code keeps the monochrome highlighting and only
+  // the sign + a fainter wash carry the status. Real edits tint the changed lines' text (thin --ok / --err).
+  const changed = !single && (row.type === 'add' || row.type === 'del');
   return (
-    <div
-      className={cn(
-        'flex min-w-full',
-        row.type === 'add' && 'bg-ob-diff-add',
-        row.type === 'del' && 'bg-ob-diff-del',
-      )}
-      data-diff={row.type}
-    >
+    <div className={cn('flex min-w-full', row.type === 'add' && (single ? 'bg-ok/[0.035]' : 'bg-ok/[0.055]'), row.type === 'del' && 'bg-err/[0.065]')} data-diff={row.type}>
       {!single ? (
-        <span className="w-[var(--dv-g)] shrink-0 select-none pr-2 text-right text-[#42525e]" aria-hidden>
+        <span className="w-[var(--dv-g)] shrink-0 select-none pr-2 text-right text-t3" aria-hidden>
           {row.oldNo ?? ''}
         </span>
       ) : null}
-      <span className="w-[var(--dv-g)] shrink-0 select-none pr-2 text-right text-[#42525e]" aria-hidden>
+      <span className="w-[var(--dv-g)] shrink-0 select-none pr-2 text-right text-t3" aria-hidden>
         {row.newNo ?? ''}
       </span>
-      <span
-        aria-hidden
-        className={cn(
-          'w-5 shrink-0 select-none text-center',
-          row.type === 'add' ? 'text-ob-success' : row.type === 'del' ? 'text-ob-danger' : 'text-transparent',
-        )}
-      >
+      <span aria-hidden className={cn('w-5 shrink-0 select-none text-center', row.type === 'add' ? 'text-ok' : row.type === 'del' ? 'text-err' : 'text-transparent')}>
         {row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' '}
       </span>
-      <span className={cn('whitespace-pre pr-4', row.type === 'ctx' && !tokens && 'text-ob-text-2')}>
+      <span className={cn('whitespace-pre pr-4', changed ? (row.type === 'add' ? 'text-ok' : 'text-err') : !tokens && (single ? 'text-t1' : 'text-t2'))}>
         {tokens && tokens.length
           ? tokens.map((t, i) => (
-              <span key={i} style={tokStyle(t)}>
+              <span key={i} style={tokStyle(t, changed)}>
                 {t.content}
               </span>
             ))
@@ -103,12 +95,12 @@ export const DiffView = memo(function DiffView({ before, after, path, isNewFile,
   };
 
   if (!model.rows.length) {
-    return <div className={cn('px-3.5 py-3 font-mono text-[12px] text-ob-text-3', className)}>(empty file)</div>;
+    return <div className={cn('px-3.5 py-3 font-mono text-[11px] text-t3', className)}>(empty file)</div>;
   }
 
   return (
     <div
-      className={cn('overflow-auto bg-ob-code-bg py-1.5 font-mono text-[12px] leading-[1.6] text-[#d5dee3] ob-selectable', className)}
+      className={cn('ob-selectable overflow-auto bg-s1 py-1.5 font-mono text-[12px] leading-[1.6] tracking-[-0.01em] text-t2', className)}
       style={{ maxHeight, ['--dv-g' as string]: gutter }}
       data-testid="diff-view"
     >
@@ -123,7 +115,7 @@ export const DiffView = memo(function DiffView({ before, after, path, isNewFile,
               key={it.id}
               type="button"
               onClick={() => setOpen((o) => ({ ...o, [it.id]: true }))}
-              className="ob-transition my-0.5 flex w-full min-w-full items-center gap-2 bg-[rgba(143,184,222,0.05)] py-0.5 pl-3 text-left font-sans text-meta text-ob-text-3 hover:bg-[rgba(143,184,222,0.1)] hover:text-ob-text-2"
+              className="ob-transition my-1 flex h-6 w-full min-w-full items-center gap-2 border-y border-rule2 pl-3 text-left font-mono text-[9px] uppercase tracking-[0.14em] text-t3 hover:bg-hov hover:text-t1"
               data-testid="diff-gap"
             >
               <ChevronsUpDown size={12} aria-hidden />
@@ -139,9 +131,9 @@ export const DiffView = memo(function DiffView({ before, after, path, isNewFile,
 /** "+12 −3" stat pair. */
 export function DiffStat({ additions, deletions, className }: { additions: number; deletions: number; className?: string }) {
   return (
-    <span className={cn('ob-tabular inline-flex items-center gap-1.5 font-mono text-[11px]', className)}>
-      <span className="text-ob-success">+{additions}</span>
-      <span className="text-ob-danger">−{deletions}</span>
+    <span className={cn('ob-tabular inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[-0.02em]', className)}>
+      <span className="text-ok">+{additions}</span>
+      <span className="text-err">−{deletions}</span>
     </span>
   );
 }

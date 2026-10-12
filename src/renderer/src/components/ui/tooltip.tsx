@@ -1,4 +1,4 @@
-// Tooltip (Radix). Owner: ui-foundation.
+// Tooltip (Radix). M13: ground + 1 px --line + separation shadow, 11 px text, shortcut as quiet mono. Owner: ui-foundation.
 import * as RT from '@radix-ui/react-tooltip';
 import type { ReactNode } from 'react';
 import { cn } from '@renderer/lib/cn';
@@ -36,13 +36,13 @@ export function Tooltip({ content, shortcut, side = 'top', align = 'center', sid
           sideOffset={sideOffset}
           collisionPadding={8}
           className={cn(
-            'z-[100] flex max-w-[280px] items-center gap-2 rounded-[6px] border border-ob-border bg-ob-surface-3 px-2 py-1 text-small text-ob-text shadow-pop',
+            'z-[100] flex max-w-[280px] items-center gap-2.5 rounded-[2px] border border-line bg-s0 px-2 py-[5px] text-[11px] leading-[15px] tracking-[-0.008em] text-t1 shadow-deep',
             'animate-ob-fade-in select-none',
             className,
           )}
         >
           <span className="min-w-0">{content}</span>
-          {shortcut ? <Shortcut keys={shortcut} className="-mr-0.5" /> : null}
+          {shortcut ? <Shortcut keys={shortcut} plain /> : null}
         </RT.Content>
       </RT.Portal>
     </RT.Root>

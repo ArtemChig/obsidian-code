@@ -1,4 +1,5 @@
-// App shell: title bar, sidebar, routed main view, right panel, banners. Owner: ui-foundation.
+// App shell (M13): title bar, menu strip, [sidebar | routed main view | right panel], status bar. One #000 ground;
+// regions are separated only by --rule hairlines. Owner: ui-foundation.
 import { ActivityView } from '@renderer/features/activity/ActivityView';
 import { ChatView } from '@renderer/features/chat/ChatView';
 import { GpuView } from '@renderer/features/gpu/GpuView';
@@ -9,8 +10,10 @@ import { useUi } from '@renderer/state/ui';
 import { ConnectionBanner } from './ConnectionBanner';
 import { ErrorBoundary } from './ErrorBoundary';
 import { HomeView } from './HomeView';
+import { MenuBar } from './MenuBar';
 import { RightPanel } from './RightPanel';
 import { Sidebar } from './Sidebar';
+import { StatusBar } from './StatusBar';
 import { TitleBar } from './TitleBar';
 
 function MainView() {
@@ -61,8 +64,9 @@ export function AppShell() {
   const activeId = useSessions((s) => s.activeSessionId);
   const showRight = route === 'session' && !!activeId && rightOpen;
   return (
-    <div className="flex h-full flex-col bg-ob-bg text-ob-text" data-testid="app-shell">
+    <div className="flex h-full flex-col bg-s0 text-t1" data-testid="app-shell">
       <TitleBar />
+      <MenuBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
         <main className={showRight ? 'flex min-w-[min(420px,50vw)] flex-1 flex-col' : 'flex min-w-0 flex-1 flex-col'} aria-label="Main">
@@ -73,6 +77,7 @@ export function AppShell() {
         </main>
         {showRight && activeId ? <RightPanel sessionId={activeId} /> : null}
       </div>
+      <StatusBar />
     </div>
   );
 }

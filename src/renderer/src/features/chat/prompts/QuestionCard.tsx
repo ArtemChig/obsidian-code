@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { QuestionRequest } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
+import { StatusDot } from '@renderer/components/ui/feedback';
 import { Input } from '@renderer/components/ui/input';
 import { Kbd } from '@renderer/components/ui/kbd';
 import { cn } from '@renderer/lib/cn';
@@ -72,6 +73,7 @@ export function QuestionCard({ request, active }: { request: QuestionRequest; ac
     root.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, []);
 
+  // M13: an actionable block waiting on the user → 1 px --warn frame, mono heading, options as numbered rows.
   return (
     <div
       ref={root}
@@ -81,34 +83,42 @@ export function QuestionCard({ request, active }: { request: QuestionRequest; ac
       aria-label="Question from the agent"
       tabIndex={-1}
       className={cn(
-        'overflow-hidden rounded-[12px] border bg-ob-surface-1 outline-none animate-ob-slide-up focus:shadow-[0_0_0_4px_rgba(143,184,222,0.14)]',
-        active ? 'border-[rgba(143,184,222,0.42)] shadow-[0_0_0_4px_rgba(143,184,222,0.05)]' : 'border-ob-border',
+        'rounded-[2px] bg-s0 outline-none animate-ob-slide-up focus:outline-solid focus:outline-1 focus:outline-offset-2 focus:outline-warn',
+        active ? 'shadow-[inset_0_0_0_1px_var(--warn)]' : 'shadow-[inset_0_0_0_1px_var(--line)]',
       )}
     >
-      <div className="flex items-center gap-3 px-4 pt-3.5">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-ob-accent-soft text-ob-accent">
-          <MessageCircleQuestionMark size={15} aria-hidden />
-        </span>
-        <div className="flex-1 text-[13.5px] font-medium text-ob-text">
-          {request.questions.length > 1 ? `${request.questions.length} questions need your input` : 'The agent needs your input'}
-        </div>
+      <div className="flex h-8 items-center gap-2.5 border-b border-rule px-4">
+        <StatusDot tone="warning" pulse={active} size={6} />
+        <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-warn">Question</span>
+        {request.questions.length > 1 ? (
+          <>
+            <span className="font-mono text-[9px] text-t3" aria-hidden>
+              ·
+            </span>
+            <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-t1">
+              {currentIdx + 1} of {request.questions.length}
+            </span>
+          </>
+        ) : null}
+        <span className="flex-1" />
+        <MessageCircleQuestionMark size={12} aria-hidden className="shrink-0 text-t3" />
       </div>
 
-      <div className="flex flex-col gap-4 px-4 pt-3">
+      <div className="px-4 pt-3.5 text-lead font-semibold text-t1">
+        {request.questions.length > 1 ? `${request.questions.length} questions need your input` : 'The agent needs your input'}
+      </div>
+
+      <div className="flex flex-col gap-5 px-4 pt-3">
         {request.questions.map((q, qi) => {
           const s = state[qi];
           return (
-            <fieldset key={qi} className="flex min-w-0 flex-col gap-2" data-testid="question" aria-label={q.question}>
-              <legend className="mb-2 flex flex-wrap items-center gap-2">
-                {q.header ? (
-                  <Badge tone="accent" mono>
-                    {q.header}
-                  </Badge>
-                ) : null}
-                <span className="text-ui text-ob-text">{q.question}</span>
-                {q.multiSelect ? <span className="text-small text-ob-text-3">Select all that apply</span> : null}
+            <fieldset key={qi} className="flex min-w-0 flex-col" data-testid="question" aria-label={q.question}>
+              <legend className="mb-2.5 flex flex-wrap items-center gap-2.5">
+                {q.header ? <Badge variant="outline">{q.header}</Badge> : null}
+                <span className="text-[12.5px] tracking-[-0.012em] text-t1">{q.question}</span>
+                {q.multiSelect ? <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-t3">Select all that apply</span> : null}
               </legend>
-              <div className="flex flex-col gap-1.5" role={q.multiSelect ? 'group' : 'radiogroup'}>
+              <div className="flex flex-col border-t border-rule2" role={q.multiSelect ? 'group' : 'radiogroup'}>
                 {q.options.map((o, oi) => (
                   <OptionRow
                     key={o.label}
@@ -146,7 +156,7 @@ export function QuestionCard({ request, active }: { request: QuestionRequest; ac
                     }}
                     placeholder="Your answer"
                     aria-label={`Other answer for: ${q.question}`}
-                    className="ml-[30px] w-[calc(100%-30px)]"
+                    className="ml-[42px] mt-2 w-[calc(100%-42px)]"
                     data-testid="question-other-input"
                   />
                 ) : null}
@@ -156,8 +166,8 @@ export function QuestionCard({ request, active }: { request: QuestionRequest; ac
         })}
       </div>
 
-      <div className="flex items-center gap-2 px-4 pb-3.5 pt-3">
-        <span className="flex items-center gap-1.5 text-meta text-ob-text-3">
+      <div className="flex items-center gap-2 px-4 pb-3.5 pt-3.5">
+        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-t3">
           <Kbd>1</Kbd>–<Kbd>{(request.questions[currentIdx]?.options.length ?? 2) + 1}</Kbd> to pick · <Kbd>Enter</Kbd> to submit
         </span>
         <span className="flex-1" />

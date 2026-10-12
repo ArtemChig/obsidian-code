@@ -4,6 +4,7 @@ import { ClipboardList, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PermissionMode, PlanRequest } from '@shared/types';
 import { Button } from '@renderer/components/ui/button';
+import { StatusDot } from '@renderer/components/ui/feedback';
 import { Textarea } from '@renderer/components/ui/input';
 import { Kbd } from '@renderer/components/ui/kbd';
 import { Markdown } from '@renderer/components/ui/markdown';
@@ -54,6 +55,7 @@ export function PlanApproval({ request, active }: { request: PlanRequest; active
     root.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, []);
 
+  // M13: actionable, not urgent → 1 px --line frame; the plan sits in an --s1 well; decisions as numbered rows.
   return (
     <div
       ref={root}
@@ -63,25 +65,31 @@ export function PlanApproval({ request, active }: { request: PlanRequest; active
       aria-label="Plan approval"
       tabIndex={-1}
       className={cn(
-        'overflow-hidden rounded-[12px] border bg-ob-surface-1 outline-none animate-ob-slide-up focus:shadow-[0_0_0_4px_rgba(143,184,222,0.14)]',
-        active ? 'border-[rgba(143,184,222,0.42)] shadow-[0_0_0_4px_rgba(143,184,222,0.05)]' : 'border-ob-border',
+        'rounded-[2px] bg-s0 outline-none animate-ob-slide-up focus:outline-solid focus:outline-1 focus:outline-offset-2 focus:outline-acc',
+        active ? 'shadow-[inset_0_0_0_1px_var(--line)]' : 'shadow-[inset_0_0_0_1px_var(--rule)]',
       )}
     >
-      <div className="flex items-center gap-3 px-4 pt-3.5">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-ob-accent-soft text-ob-accent">
-          <ClipboardList size={15} aria-hidden />
+      <div className="flex h-8 items-center gap-2.5 border-b border-rule px-4">
+        <StatusDot tone="warning" pulse={active} size={6} />
+        <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-t1">Plan</span>
+        <span className="font-mono text-[9px] text-t3" aria-hidden>
+          ·
         </span>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-[13.5px] font-medium text-ob-text">Ready to code?</span>
-          <span className="text-small text-ob-text-3">Review the plan. Nothing has been changed yet.</span>
-        </div>
+        <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-t3">Approval</span>
+        <span className="flex-1" />
+        <ClipboardList size={12} aria-hidden className="shrink-0 text-t3" />
       </div>
 
-      <div className="mx-4 mt-3 max-h-[340px] overflow-y-auto rounded-[8px] border border-ob-border bg-ob-bg px-4 py-3" data-testid="plan-body">
+      <div className="flex flex-col gap-1 px-4 pt-3.5">
+        <span className="text-lead font-semibold text-t1">Ready to code?</span>
+        <span className="text-[11.5px] text-t3">Review the plan. Nothing has been changed yet.</span>
+      </div>
+
+      <div className="mx-4 mt-3 max-h-[340px] overflow-y-auto rounded-[2px] border border-rule bg-s1 px-4 py-3" data-testid="plan-body">
         <Markdown text={request.plan} compact />
       </div>
 
-      <div className="flex flex-col gap-1.5 px-4 pt-3">
+      <div className="mx-4 mt-3 flex flex-col border-t border-rule2">
         <OptionRow
           compact
           index={1}
@@ -111,7 +119,7 @@ export function PlanApproval({ request, active }: { request: PlanRequest; active
           testId="plan-keep"
         />
         {mode === 'keep' ? (
-          <div className="ml-[30px] flex flex-col gap-2 animate-ob-fade-in">
+          <div className="ml-[42px] mt-2 flex flex-col gap-2 animate-ob-fade-in">
             <Textarea
               ref={feedbackRef}
               minRows={2}
@@ -140,7 +148,7 @@ export function PlanApproval({ request, active }: { request: PlanRequest; active
         ) : null}
       </div>
 
-      <div className="flex items-center gap-1.5 px-4 pb-3 pt-2.5 text-meta text-ob-text-3">
+      <div className="flex items-center gap-1.5 px-4 pb-3 pt-3 font-mono text-[9px] uppercase tracking-[0.12em] text-t3">
         <Kbd>1</Kbd>
         <Kbd>2</Kbd>
         <span>approve</span>

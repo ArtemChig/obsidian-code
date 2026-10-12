@@ -40,7 +40,7 @@ export function SyncFailed({ what, error, compact }: { what: string; error: stri
   };
   if (compact) {
     return (
-      <div className="flex flex-col items-start gap-2 px-2 py-3 text-small text-ob-text-3" data-testid="sync-failed">
+      <div className="flex flex-col items-start gap-2 px-2 py-3 text-small text-t3" data-testid="sync-failed">
         <span>Couldn&rsquo;t load {what}.</span>
         <Button size="sm" variant="secondary" icon={RotateCcw} loading={busy} onClick={() => void retry()}>
           Retry

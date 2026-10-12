@@ -43,9 +43,9 @@ export function ModelNotice({ model, className }: { model: ModelRef | null | und
       role="status"
       data-testid="model-notice"
       data-action={r.action}
-      className={cn('flex items-center gap-2 rounded-[10px] border border-[rgba(232,184,92,0.3)] bg-ob-warning-soft py-1.5 pl-3 pr-1.5 text-small text-ob-text', className)}
+      className={cn('flex items-center gap-2.5 rounded-[2px] py-1.5 pl-3 pr-1.5 text-[11.5px] tracking-[-0.008em] text-t1 shadow-[inset_0_0_0_1px_var(--warn-edge)]', className)}
     >
-      <TriangleAlert size={13} aria-hidden className="shrink-0 text-ob-warning" />
+      <TriangleAlert size={12} aria-hidden className="shrink-0 text-warn" />
       <span className="min-w-0 flex-1">{r.message}</span>
       <Button size="sm" variant="secondary" className="h-6 shrink-0 px-2" onClick={act} data-testid="model-notice-action">
         {ACTION_LABEL[r.action]}

@@ -1,4 +1,4 @@
-// Select (Radix). Owner: ui-foundation.
+// Select (Radix). M13: trigger = input well (reference .sel), list = menu surface with 28 px rows. Owner: ui-foundation.
 import * as RS from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -32,6 +32,8 @@ export interface SelectProps {
   contentClassName?: string;
   /** Ghost trigger (no border/background until hover) for toolbars. */
   ghost?: boolean;
+  /** Technical values (models, encoders, paths): Chivo Mono 10.5 px like the reference .sel. */
+  mono?: boolean;
   'aria-label'?: string;
   id?: string;
   align?: 'start' | 'center' | 'end';
@@ -43,17 +45,17 @@ function Item({ o }: { o: SelectOption }) {
       value={o.value}
       disabled={o.disabled}
       className={cn(
-        'relative flex min-h-7 cursor-default select-none items-center gap-2 rounded-[5px] py-1 pl-2 pr-7 text-ui text-ob-text outline-none',
-        'data-[highlighted]:bg-[rgba(236,240,241,0.07)] data-[disabled]:opacity-40',
+        'relative flex min-h-7 cursor-default select-none items-center gap-2.5 rounded-[2px] py-1 pl-2.5 pr-8 text-[12px] tracking-[-0.01em] text-t2 outline-none',
+        'data-[highlighted]:bg-s3 data-[highlighted]:text-t1 data-[state=checked]:text-t1 data-[disabled]:opacity-40',
       )}
     >
-      {o.icon ? <span className="flex shrink-0 items-center text-ob-text-3">{o.icon}</span> : null}
+      {o.icon ? <span className="flex shrink-0 items-center text-t3">{o.icon}</span> : null}
       <div className="flex min-w-0 flex-col">
         <RS.ItemText>{o.label}</RS.ItemText>
-        {o.description ? <span className="text-small text-ob-text-3">{o.description}</span> : null}
+        {o.description ? <span className="font-mono text-[9.5px] tracking-[0.01em] text-t3">{o.description}</span> : null}
       </div>
-      <RS.ItemIndicator className="absolute right-2 flex items-center text-ob-accent">
-        <Check size={14} aria-hidden />
+      <RS.ItemIndicator className="absolute right-2.5 flex items-center text-t1">
+        <Check size={13} aria-hidden />
       </RS.ItemIndicator>
     </RS.Item>
   );
@@ -70,6 +72,7 @@ export function Select({
   className,
   contentClassName,
   ghost,
+  mono,
   id,
   align = 'start',
   ...aria
@@ -83,20 +86,21 @@ export function Select({
         aria-label={aria['aria-label']}
         className={cn(
           ghost
-            ? 'ob-transition rounded-ctl border border-transparent bg-transparent text-ui text-ob-text-2 hover:bg-ob-hover hover:text-ob-text data-[state=open]:bg-ob-hover'
-            : FIELD_BASE,
-          'inline-flex items-center justify-between gap-2 text-left',
-          size === 'sm' ? 'h-7 px-2 text-small' : 'h-8 px-2.5',
-          'data-[placeholder]:text-ob-text-3',
+            ? 'ob-transition rounded-[2px] border border-transparent bg-transparent text-[11.5px] text-t2 hover:bg-hov hover:text-t1 data-[state=open]:bg-s3 data-[state=open]:text-t1'
+            : cn(FIELD_BASE, 'data-[state=open]:border-acc'),
+          'inline-flex items-center justify-between gap-2.5 text-left',
+          size === 'sm' ? 'h-6 pl-2.5 pr-2 text-[11px]' : 'h-7 pl-[11px] pr-[9px]',
+          mono && 'font-mono text-[10.5px] tracking-[-0.01em]',
+          'data-[placeholder]:text-t3',
           className,
         )}
       >
         <span className="flex min-w-0 items-center gap-2 truncate">
-          {selected?.icon ? <span className="flex shrink-0 items-center text-ob-text-3">{selected.icon}</span> : null}
+          {selected?.icon ? <span className="flex shrink-0 items-center text-t3">{selected.icon}</span> : null}
           <RS.Value placeholder={placeholder}>{selected ? (selected.triggerLabel ?? selected.label) : undefined}</RS.Value>
         </span>
-        <RS.Icon className="shrink-0 text-ob-text-3">
-          <ChevronDown size={14} aria-hidden />
+        <RS.Icon className="shrink-0 text-t3">
+          <ChevronDown size={11} aria-hidden />
         </RS.Icon>
       </RS.Trigger>
       <RS.Portal>
@@ -114,8 +118,8 @@ export function Select({
             {groups
               ? groups.map((g, gi) => (
                   <RS.Group key={gi}>
-                    {gi > 0 ? <RS.Separator className="-mx-1 my-1 h-px bg-ob-border" /> : null}
-                    <RS.Label className="ob-section-label px-2 pb-1 pt-1.5">{g.label}</RS.Label>
+                    {gi > 0 ? <RS.Separator className="-mx-1 my-1 h-px bg-rule" /> : null}
+                    <RS.Label className="ob-cap px-2.5 pb-1 pt-2">{g.label}</RS.Label>
                     {g.options.map((o) => (
                       <Item key={o.value} o={o} />
                     ))}

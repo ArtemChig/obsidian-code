@@ -29,6 +29,7 @@ import { useActivity } from '@renderer/state/activity';
 import { usePending } from '@renderer/state/pending';
 import { useSessions } from '@renderer/state/sessions';
 import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from '../settings/core-missing';
+import { ViewHeader } from '../settings/view-kit';
 import {
   KIND_LABEL,
   KIND_ORDER,
@@ -87,75 +88,74 @@ export function ActivityView() {
   };
 
   return (
-    <div className="h-full overflow-y-auto" data-testid="activity-view">
-      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-8 pb-12 pt-7">
-        <header className="flex flex-col gap-1">
-          <h1 className="text-title font-semibold leading-7 text-ob-text">Activity</h1>
-          <p className="max-w-[680px] text-ui text-ob-text-3">Everything running on this machine: sessions, subagents, background shells, scheduled runs and the rented GPU. Stop anything from here.</p>
-        </header>
+    <div className="@container flex h-full flex-col overflow-y-auto" data-testid="activity-view">
+      <ViewHeader
+        title="Activity"
+        description="Everything running on this machine: sessions, subagents, background shells, scheduled runs and the rented GPU. Stop anything from here."
+      />
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="activity-counters">
-          <Counter id="running" label="Running" value={counts.running} tone="accent" sub={counts.running ? breakdown(liveItems.filter((i) => i.status === 'running')) : 'nothing active'} loaded={loaded} />
-          <Counter id="waiting" label="Waiting for you" value={Math.max(counts.waiting, counts.pending)} tone="warning" sub={counts.pending ? pluralize(counts.pending, 'request') : counts.waiting ? 'needs input' : 'all clear'} loaded={loaded} />
-          <Counter id="done" label="Finished" value={counts.done} tone="success" sub="recent runs" loaded={loaded} />
-          <Counter id="failed" label="Failed" value={counts.failed} tone={counts.failed ? 'danger' : 'neutral'} sub={counts.failed ? 'check the details' : 'no failures'} loaded={loaded} />
-        </div>
+      <div className="flex shrink-0 flex-wrap items-stretch gap-y-3 border-b border-rule px-6 pb-[13px] pt-3" data-testid="activity-counters">
+        <Counter id="running" label="Running" value={counts.running} tone="violet" sub={counts.running ? breakdown(liveItems.filter((i) => i.status === 'running')) : 'nothing active'} loaded={loaded} />
+        <Counter id="waiting" label="Waiting for you" value={Math.max(counts.waiting, counts.pending)} tone="warning" sub={counts.pending ? pluralize(counts.pending, 'request') : counts.waiting ? 'needs input' : 'all clear'} loaded={loaded} />
+        <Counter id="done" label="Finished" value={counts.done} tone="success" sub="recent runs" loaded={loaded} />
+        <Counter id="failed" label="Failed" value={counts.failed} tone="danger" sub={counts.failed ? 'check the details' : 'no failures'} loaded={loaded} />
+      </div>
 
+      <div className="flex h-[50px] shrink-0 items-center gap-3 border-b border-rule px-6">
+        <Tabs value={filter} onValueChange={(v) => setFilter(v as KindFilter)}>
+          <TabsList variant="pill" aria-label="Filter by kind" data-testid="activity-filter">
+            <TabsTrigger value="all" count={items.length || undefined}>
+              All
+            </TabsTrigger>
+            {KIND_ORDER.filter((k) => counts.byKind[k] > 0 || filter === k).map((k) => (
+              <TabsTrigger key={k} value={k} count={counts.byKind[k] || undefined}>
+                {KIND_PLURAL[k]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <span className="ob-mn ml-auto hidden @min-[640px]:inline">
+          <b className="font-normal text-t2">{items.length}</b> {items.length === 1 ? 'item' : 'items'} · updates live
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-7 px-6 pb-12 pt-5">
         {pending.length > 0 ? (
-          <section className="flex flex-col gap-2.5" aria-label="Needs your attention" data-testid="activity-pending">
-            <SectionLabel action={<span className="ob-tabular font-mono text-[11px] text-ob-warning">{pending.length}</span>}>Needs your attention</SectionLabel>
-            <div className="overflow-hidden rounded-card border border-[rgba(232,184,92,0.3)] bg-ob-surface-1">
-              <ul className="flex flex-col divide-y divide-ob-border">
-                {pending.map((p) => (
-                  <PendingItem key={p.requestId} row={p} sessionTitle={sessionTitle(p.sessionId)} />
-                ))}
-              </ul>
-            </div>
+          <section className="flex flex-col" aria-label="Needs your attention" data-testid="activity-pending">
+            <SectionLabel rule action={<span className="ob-tabular text-warn">{pending.length}</span>}>
+              Needs you
+            </SectionLabel>
+            <ul className="mt-1.5 flex flex-col border-t border-rule">
+              {pending.map((p) => (
+                <PendingItem key={p.requestId} row={p} sessionTitle={sessionTitle(p.sessionId)} />
+              ))}
+            </ul>
           </section>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Tabs value={filter} onValueChange={(v) => setFilter(v as KindFilter)}>
-            <TabsList variant="pill" aria-label="Filter by kind" data-testid="activity-filter">
-              <TabsTrigger value="all" count={items.length || undefined}>
-                All
-              </TabsTrigger>
-              {KIND_ORDER.filter((k) => counts.byKind[k] > 0 || filter === k).map((k) => (
-                <TabsTrigger key={k} value={k} count={counts.byKind[k] || undefined}>
-                  {KIND_PLURAL[k]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-
         {!loaded && coreMissing ? (
-          <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
+          <div className="h-[320px]">
             <CoreMissing what="Activity" />
           </div>
         ) : !loaded && syncError ? (
-          <div className="h-[320px] rounded-card border border-ob-border bg-ob-surface-1">
+          <div className="h-[320px]">
             <SyncFailed what="activity" error={syncError} />
           </div>
         ) : !loaded ? (
-          <div className="flex flex-col gap-3 rounded-card border border-ob-border bg-ob-surface-1 p-4" aria-hidden>
+          <div className="flex flex-col" aria-hidden>
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-8" />
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <Skeleton className="h-3 w-1/2" />
-                  <Skeleton className="h-2.5 w-1/3" />
-                </div>
+              <div key={i} className="flex h-8 items-center gap-3 border-b border-rule2">
+                <Skeleton className="size-1.5" />
+                <Skeleton className="h-2.5 w-1/3" />
+                <Skeleton className="ml-auto h-2.5 w-16" />
               </div>
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-card border border-ob-border bg-ob-surface-1">
-            <EmptyState icon={ActivityIcon} title="Nothing has run yet" description="Sessions, subagents, shells and scheduled runs show up here while they work." />
-          </div>
+          <EmptyState icon={ActivityIcon} title="Nothing has run yet" description="Sessions, subagents, shells and scheduled runs show up here while they work." />
         ) : (
           <>
-            <Group testId="activity-running" title="Running" count={groups.running.length} empty={filter === 'all' ? 'Nothing is running right now.' : `No running ${KIND_PLURAL[filter as keyof typeof KIND_PLURAL].toLowerCase()}.`}>
+            <Group testId="activity-running" title="Running" count={groups.running.length} tone="violet" empty={filter === 'all' ? 'Nothing is running right now.' : `No running ${KIND_PLURAL[filter as keyof typeof KIND_PLURAL].toLowerCase()}.`}>
               {groups.running.map((i) => (
                 <Row key={i.id} item={i} parent={parentTitle(i.sessionId)} sessionTitle={sessionTitle(i.sessionId)} onStop={() => stop(i)} />
               ))}
@@ -172,8 +172,8 @@ export function ActivityView() {
                 <Row key={i.id} item={i} parent={parentTitle(i.sessionId)} sessionTitle={sessionTitle(i.sessionId)} onStop={() => stop(i)} />
               ))}
               {groups.recent.length > RECENT_PAGE ? (
-                <li className="px-4 py-2">
-                  <Button size="sm" variant="ghost" onClick={() => setShowAll((v) => !v)} data-testid="activity-show-all">
+                <li className="py-1">
+                  <Button size="sm" variant="ghost" className="-ml-2.5" onClick={() => setShowAll((v) => !v)} data-testid="activity-show-all">
                     {showAll ? 'Show fewer' : `Show all ${groups.recent.length}`}
                   </Button>
                 </li>
@@ -200,33 +200,45 @@ export function ActivityView() {
 
 // ───────────────────────────── Parts ─────────────────────────────
 
-const TILE_TONE = {
-  accent: 'text-ob-accent',
-  warning: 'text-ob-warning',
-  success: 'text-ob-success',
-  danger: 'text-ob-danger',
-  neutral: 'text-ob-text-3',
-} as const;
+const COUNT_TONE = { violet: 'text-live', warning: 'text-warn', success: 'text-ok', danger: 'text-err' } as const;
 
-function Counter({ id, label, value, sub, tone, loaded }: { id: string; label: string; value: number; sub: string; tone: keyof typeof TILE_TONE; loaded: boolean }) {
+/** One mono stat of the counter strip (reference .recseg): status-coloured label + dot when non-zero, big mono value. */
+function Counter({ id, label, value, sub, tone, loaded }: { id: string; label: string; value: number; sub: string; tone: keyof typeof COUNT_TONE; loaded: boolean }) {
+  const lit = loaded && value > 0;
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-card border border-ob-border bg-ob-surface-1 px-4 py-3" data-testid={`activity-count-${id}`}>
-      <span className="ob-section-label text-[10px]">{label}</span>
-      <span className={cn('ob-tabular font-mono text-[26px] font-medium leading-8', value > 0 ? TILE_TONE[tone] : 'text-ob-text-3')} data-value={value}>
+    <div className="flex min-w-[150px] flex-1 flex-col gap-1.5 px-5 first:pl-0 [&+&]:shadow-[inset_1px_0_0_var(--rule2)]" data-testid={`activity-count-${id}`}>
+      <span className={cn('flex items-center gap-1.5 font-mono text-[8.5px] uppercase tracking-[0.18em]', lit ? COUNT_TONE[tone] : 'text-t3')}>
+        {lit ? <StatusDot tone={tone} size={5} pulse={tone === 'violet'} /> : null}
+        {label}
+      </span>
+      <span className={cn('ob-tabular font-mono text-[23px] leading-none tracking-[-0.05em]', lit ? 'text-t1' : 'text-t3')} data-value={value}>
         {loaded ? value : '–'}
       </span>
-      <span className="truncate text-small text-ob-text-3" title={sub}>{sub}</span>
+      <span className="truncate font-mono text-[9px] tracking-[0.02em] text-t3" title={sub}>
+        {sub}
+      </span>
     </div>
   );
 }
 
-function Group({ title, count, children, empty, tone, testId }: { title: string; count: number; children: ReactNode; empty?: string; tone?: 'warning'; testId: string }) {
+/** Shared grid of the column header and the rows: status · name · kind · state · elapsed · actions. */
+const COLS = 'grid grid-cols-[10px_minmax(0,1fr)_auto] @min-[760px]:grid-cols-[10px_minmax(0,1fr)_84px_104px_150px_136px] items-center gap-x-3';
+
+function Group({ title, count, children, empty, tone, testId }: { title: string; count: number; children: ReactNode; empty?: string; tone?: 'warning' | 'violet'; testId: string }) {
   return (
-    <section className="flex flex-col gap-2.5" aria-label={title} data-testid={testId}>
-      <SectionLabel action={<span className={cn('ob-tabular font-mono text-[11px]', tone === 'warning' ? 'text-ob-warning' : 'text-ob-text-3')}>{count}</span>}>{title}</SectionLabel>
-      <div className="overflow-hidden rounded-card border border-ob-border bg-ob-surface-1">
-        {count === 0 ? <div className="px-4 py-4 text-ui text-ob-text-3">{empty ?? 'Nothing here.'}</div> : <ul className="flex flex-col divide-y divide-ob-border">{children}</ul>}
+    <section className="flex flex-col" aria-label={title} data-testid={testId}>
+      <SectionLabel rule action={<span className={cn('ob-tabular', count && tone === 'warning' ? 'text-warn' : count && tone === 'violet' ? 'text-live' : 'text-t3')}>{count}</span>}>
+        {title}
+      </SectionLabel>
+      <div className={cn(COLS, 'ob-label mt-1.5 hidden h-7 border-b border-rule @min-[760px]:grid')} aria-hidden>
+        <span />
+        <span>Name</span>
+        <span>Kind</span>
+        <span>Status</span>
+        <span>Elapsed</span>
+        <span />
       </div>
+      {count === 0 ? <div className="flex h-8 items-center border-b border-rule2 text-[11.5px] text-t3">{empty ?? 'Nothing here.'}</div> : <ul className="flex flex-col">{children}</ul>}
     </section>
   );
 }
@@ -234,29 +246,22 @@ function Group({ title, count, children, empty, tone, testId }: { title: string;
 function PendingItem({ row, sessionTitle }: { row: PendingRow; sessionTitle?: string }) {
   const Icon = PENDING_ICON[row.kind];
   return (
-    <li className="flex items-center gap-3 px-4 py-3" data-testid="activity-pending-row" data-kind={row.kind}>
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-ob-warning-soft text-ob-warning">
-        <Icon size={16} aria-hidden />
+    <li
+      className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule2 bg-hov py-1 pl-3 pr-1 shadow-[inset_2px_0_0_var(--warn)]"
+      data-testid="activity-pending-row"
+      data-kind={row.kind}
+    >
+      <Icon size={13} aria-hidden className="shrink-0 text-warn" />
+      <Badge tone="warning">{PENDING_LABEL[row.kind]}</Badge>
+      <span className="min-w-0 flex-1 truncate text-[12px] font-medium tracking-[-0.012em] text-t1" title={row.title}>
+        {row.title}
       </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge tone="warning" mono>
-            {PENDING_LABEL[row.kind]}
-          </Badge>
-          <span className="truncate text-ui font-medium text-ob-text" title={row.title}>
-            {row.title}
-          </span>
-        </div>
-        <div className="flex min-w-0 items-center gap-1.5 text-small text-ob-text-3">
-          <span className="truncate">{sessionTitle ?? 'Unknown session'}</span>
-          <span aria-hidden>·</span>
-          <span className="shrink-0">
-            waiting <LiveDuration since={row.createdAt} format="compact" />
-          </span>
-        </div>
-      </div>
+      <span className="ob-mn hidden min-w-0 max-w-[260px] truncate @min-[640px]:inline">{sessionTitle ?? 'Unknown session'}</span>
+      <span className="ob-tabular w-[92px] shrink-0 text-right font-mono text-[10.5px] tracking-[-0.02em] text-warn" title="Waiting for">
+        <LiveDuration since={row.createdAt} format="compact" />
+      </span>
       <Button size="sm" variant="secondary" iconRight={SquareArrowOutUpRight} data-testid="activity-pending-open" onClick={() => openSession(row.sessionId)}>
-        {row.kind === 'plan' ? 'Review' : row.kind === 'question' ? 'Answer' : 'Review'}
+        {row.kind === 'question' ? 'Answer' : 'Review'}
       </Button>
     </li>
   );
@@ -267,80 +272,59 @@ function Row({ item, parent, sessionTitle, onStop }: { item: ActivityItem; paren
   const live = isLive(item);
   const target = openTarget(item);
   const status = item.status;
+  const context = item.kind === 'subagent' && parent ? `in ${parent}` : item.kind === 'shell' && sessionTitle ? `from ${sessionTitle}` : null;
   return (
-    <li className="group flex items-center gap-3 px-4 py-3 hover:bg-ob-hover" data-testid="activity-row" data-kind={item.kind} data-status={status}>
+    <li className={cn(COLS, 'ob-transition min-h-8 border-b border-rule2 py-1 hover:bg-hov')} data-testid="activity-row" data-kind={item.kind} data-status={status}>
+      <StatusDot status={status} pulse={status === 'running'} size={6} label={STATUS_LABEL[status]} />
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon size={13} aria-hidden className="shrink-0 text-t3" />
+        {target ? (
+          <button type="button" onClick={target.run} className="min-w-0 truncate text-left text-[12px] font-medium tracking-[-0.012em] text-t1 hover:underline" title={item.title}>
+            {item.title}
+          </button>
+        ) : (
+          <span className="min-w-0 truncate text-[12px] font-medium tracking-[-0.012em] text-t1" title={item.title}>
+            {item.title}
+          </span>
+        )}
+        {item.detail || context ? (
+          <span className="ob-mn min-w-0 flex-1 truncate" title={[item.detail, context].filter(Boolean).join(' · ')}>
+            {item.detail ? <b className={cn('font-normal', item.kind === 'shell' || item.kind === 'subagent' ? 'text-t2' : 'text-t3')}>{item.detail}</b> : null}
+            {item.detail && context ? <span className="opacity-[.42]"> / </span> : null}
+            {context}
+          </span>
+        ) : null}
+      </div>
+      <span className="hidden @min-[760px]:block">
+        <Badge tone="neutral">{KIND_LABEL[item.kind]}</Badge>
+      </span>
       <span
         className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-[8px] border',
-          status === 'running' && 'border-[rgba(143,184,222,0.25)] bg-ob-accent-soft text-ob-accent',
-          status === 'waiting' && 'border-[rgba(232,184,92,0.25)] bg-ob-warning-soft text-ob-warning',
-          status === 'error' && 'border-[rgba(240,113,120,0.25)] bg-ob-danger-soft text-ob-danger',
-          (status === 'done' || status === 'stopped') && 'border-ob-border bg-ob-surface-2 text-ob-text-3',
+          'hidden text-[11.5px] tracking-[-0.01em] @min-[760px]:block',
+          status === 'running' ? 'text-live' : status === 'waiting' ? 'text-warn' : status === 'error' ? 'text-err' : 'text-t2',
         )}
       >
-        <Icon size={15} aria-hidden />
+        {STATUS_LABEL[status]}
       </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-2">
-          {target ? (
-            <button type="button" onClick={target.run} className="min-w-0 truncate text-left text-ui font-medium text-ob-text hover:underline" title={item.title}>
-              {item.title}
-            </button>
-          ) : (
-            <span className="min-w-0 truncate text-ui font-medium text-ob-text" title={item.title}>
-              {item.title}
-            </span>
-          )}
-          <Badge tone={item.kind === 'subagent' ? 'violet' : 'neutral'} mono>
-            {KIND_LABEL[item.kind]}
-          </Badge>
-        </div>
-        <div className="flex min-w-0 items-center gap-1.5 text-small text-ob-text-3">
-          {item.detail ? (
-            <span className={cn('truncate', item.kind === 'shell' || item.kind === 'subagent' ? 'font-mono text-[11.5px]' : '')} title={item.detail}>
-              {item.detail}
-            </span>
-          ) : null}
-          {item.kind === 'subagent' && parent ? (
-            <>
-              {item.detail ? <span aria-hidden>·</span> : null}
-              <span className="shrink-0 truncate">in {parent}</span>
-            </>
-          ) : item.kind === 'shell' && sessionTitle ? (
-            <>
-              {item.detail ? <span aria-hidden>·</span> : null}
-              <span className="shrink-0 truncate">from {sessionTitle}</span>
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="hidden w-[150px] shrink-0 flex-col items-end gap-0.5 sm:flex">
-        <span className="flex items-center gap-1.5 text-small text-ob-text-2">
-          <StatusDot status={status} pulse={status === 'running'} size={6} />
-          {STATUS_LABEL[status]}
-        </span>
-        <span className="ob-tabular font-mono text-[11.5px] text-ob-text-3">
-          {live ? (
-            <LiveDuration since={item.startedAt} format="compact" />
-          ) : item.endedAt ? (
-            <span title="Total run time">
-              {formatDuration(item.endedAt - item.startedAt)} · <RelativeTime ts={item.endedAt} ago />
-            </span>
-          ) : (
-            <RelativeTime ts={item.startedAt} />
-          )}
-        </span>
-      </div>
-
-      <div className="flex w-[128px] shrink-0 items-center justify-end gap-1.5">
+      <span className="ob-tabular hidden truncate font-mono text-[10.5px] tracking-[-0.02em] text-t2 @min-[760px]:block">
+        {live ? (
+          <LiveDuration since={item.startedAt} format="compact" className="text-t1" />
+        ) : item.endedAt ? (
+          <span title="Total run time">
+            {formatDuration(item.endedAt - item.startedAt)} <span className="text-t3">· <RelativeTime ts={item.endedAt} ago /></span>
+          </span>
+        ) : (
+          <RelativeTime ts={item.startedAt} />
+        )}
+      </span>
+      <div className="flex items-center justify-end gap-1.5">
         {live ? (
           <Button size="sm" variant="danger" icon={CircleStop} data-testid="activity-stop" aria-label={`Stop ${item.title}`} onClick={onStop}>
             Stop
           </Button>
         ) : null}
         {target ? (
-          <Button size="sm" variant="ghost" data-testid="activity-open" aria-label={`Open ${item.title}`} onClick={target.run}>
+          <Button size="sm" variant="secondary" data-testid="activity-open" aria-label={`Open ${item.title}`} onClick={target.run}>
             Open
           </Button>
         ) : null}

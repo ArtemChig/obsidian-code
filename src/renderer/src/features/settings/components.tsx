@@ -1,6 +1,7 @@
 // Building blocks shared by the Settings sections. Owner: ui-views.
 import { Check, CircleAlert, KeyRound, Lock, Plus, RotateCcw, Trash2, WandSparkles, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
 import { ConfirmDialog } from '@renderer/components/ui/dialog';
@@ -17,60 +18,71 @@ export { SAVED_TOAST_ID, patchLocal, patchPermissions, patchSearch, patchVast, s
 
 // ───────────────────────────── Layout ─────────────────────────────
 
+/**
+ * Where a Section puts its title + description: the Settings view's fixed header (reference .s6-hd). SettingsView
+ * provides the element; without it (e.g. in isolation) the Section renders its own header.
+ */
+export const SettingsHeaderSlot = createContext<HTMLElement | null>(null);
+
 export function Section({ id, title, description, children, actions }: { id: string; title: string; description?: ReactNode; children: ReactNode; actions?: ReactNode }) {
+  const slot = useContext(SettingsHeaderSlot);
+  const head = (
+    <div className="flex min-w-0 flex-1 items-center gap-3 @max-[520px]:flex-col @max-[520px]:items-start @max-[520px]:gap-0.5">
+      <h2 id={`settings-h-${id}`} className="shrink-0 text-title font-semibold leading-[1.2] text-t1">
+        {title}
+      </h2>
+      {description ? <p className="line-clamp-2 max-w-[64ch] text-[11px] @max-[520px]:line-clamp-1 leading-[1.45] tracking-[-0.006em] text-t3">{description}</p> : null}
+      {actions ? <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div> : null}
+    </div>
+  );
   return (
-    <section aria-labelledby={`settings-h-${id}`} data-testid={`settings-section-${id}`} className="flex flex-col gap-5">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 id={`settings-h-${id}`} className="text-[18px] font-semibold leading-6 text-ob-text">
-            {title}
-          </h2>
-          {description ? <p className="max-w-[560px] text-ui text-ob-text-3">{description}</p> : null}
-        </div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-      </header>
+    <section aria-labelledby={`settings-h-${id}`} data-testid={`settings-section-${id}`} className="flex flex-col">
+      {slot ? createPortal(head, slot) : <header className="flex min-h-14 items-center border-b border-rule">{head}</header>}
       {children}
     </section>
   );
 }
 
-/** A titled card holding rows (divided) or free content. */
+/** A group of setting rows (reference .grp): a mono cap label, then rows on the ground split by sub-hairlines. No card. */
 export function Group({ title, description, children, actions, testId, className, flush }: { title?: ReactNode; description?: ReactNode; children: ReactNode; actions?: ReactNode; testId?: string; className?: string; flush?: boolean }) {
   return (
-    <div className="flex flex-col gap-2" data-testid={testId}>
+    <div className="flex flex-col pb-[5px] pt-4" data-testid={testId}>
       {title || actions ? (
-        <div className="flex items-end justify-between gap-3 px-0.5">
-          <div className="flex min-w-0 flex-col">
-            {title ? <h3 className="ob-section-label">{title}</h3> : null}
-            {description ? <p className="mt-1 text-small text-ob-text-3">{description}</p> : null}
+        <div className="flex min-h-7 items-end justify-between gap-3 pb-1.5">
+          <div className="flex min-w-0 flex-col gap-1">
+            {title ? <h3 className="ob-cap">{title}</h3> : null}
+            {description ? <p className="text-[11px] leading-[1.45] text-t3">{description}</p> : null}
           </div>
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </div>
       ) : null}
-      <div className={cn('rounded-card border border-ob-border bg-ob-surface-1', flush ? '' : 'divide-y divide-ob-border', className)}>{children}</div>
+      <div className={cn('flex flex-col border-b border-rule2', flush ? '' : 'divide-y divide-rule2', className)}>{children}</div>
     </div>
   );
 }
 
-/** Label + description on the left, control on the right (or below when `stacked`). */
+/** Label + description on the left, control on the right (or below when `stacked`) — the reference .srow. */
 export function Row({ label, description, htmlFor, children, stacked, testId, className }: { label: ReactNode; description?: ReactNode; htmlFor?: string; children?: ReactNode; stacked?: boolean; testId?: string; className?: string }) {
   return (
-    <div className={cn('flex gap-6 px-4 py-3.5', stacked ? 'flex-col gap-2.5' : 'items-center justify-between', className)} data-testid={testId}>
-      <div className={cn('flex min-w-0 flex-col gap-0.5', !stacked && 'max-w-[460px]')}>
-        <label htmlFor={htmlFor} className="text-ui font-medium text-ob-text">
+    <div
+      className={cn('flex min-h-[42px] py-[9px]', stacked ? 'flex-col gap-2.5' : 'items-center justify-between gap-6', className)}
+      data-testid={testId}
+    >
+      <div className={cn('flex min-w-0 flex-col gap-[3px]', !stacked && 'max-w-[480px]')}>
+        <label htmlFor={htmlFor} className="text-[12.5px] font-medium tracking-[-0.016em] text-t1">
           {label}
         </label>
-        {description ? <div className="text-small leading-[1.45] text-ob-text-3">{description}</div> : null}
+        {description ? <div className="text-[11px] leading-[1.45] tracking-[-0.006em] text-t3">{description}</div> : null}
       </div>
-      {children !== undefined ? <div className={cn(stacked ? 'min-w-0' : 'shrink-0')}>{children}</div> : null}
+      {children !== undefined ? <div className={cn(stacked ? 'min-w-0' : 'flex shrink-0 items-center justify-end gap-[9px]')}>{children}</div> : null}
     </div>
   );
 }
 
 export function InlineError({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div role="alert" className={cn('mt-1 flex items-start gap-1 text-small text-ob-danger', className)}>
-      <CircleAlert size={12} aria-hidden className="mt-[3px] shrink-0" />
+    <div role="alert" className={cn('mt-1 flex items-start gap-1 text-[11px] text-err', className)}>
+      <CircleAlert size={12} aria-hidden className="mt-[2px] shrink-0" />
       <span>{children}</span>
     </div>
   );
@@ -119,7 +131,7 @@ export function NumberField({ id, value, onCommit, min, max, integer, unit, pref
   return (
     <div className="relative flex flex-col items-end">
       <div className="flex items-center gap-2">
-        {prefix ? <span className="text-ui text-ob-text-3">{prefix}</span> : null}
+        {prefix ? <span className="font-mono text-[10.5px] text-t3">{prefix}</span> : null}
         <Input
           id={id}
           aria-label={aria['aria-label']}
@@ -148,7 +160,7 @@ export function NumberField({ id, value, onCommit, min, max, integer, unit, pref
             }
           }}
         />
-        {unit ? <span className="min-w-[2.5rem] text-ui text-ob-text-3">{unit}</span> : null}
+        {unit ? <span className="min-w-[2.5rem] font-mono text-[9.5px] tracking-[0.01em] text-t3">{unit}</span> : null}
       </div>
       {/* absolutely positioned: an error that appears on blur must not shift the controls below it */}
       {error ? <InlineError className="absolute right-0 top-full z-10 whitespace-nowrap">{error}</InlineError> : null}
@@ -358,12 +370,12 @@ export function SecretField({ name, placeholder = 'Paste a new key…', onChange
         ) : null}
         {extra}
       </div>
-      <div className="flex items-center gap-2 text-small text-ob-text-3">
+      <div className="flex items-center gap-2 text-[11px] text-t3">
         <SecretPresence present={present} />
         <span>{present ? 'Stored encrypted on this PC. It cannot be displayed again.' : 'Nothing stored yet.'}</span>
       </div>
       {present && removeBlocked ? (
-        <div className="flex items-start gap-1.5 text-small text-ob-warning" data-testid={`${testId ?? `secret-${name}`}-locked`}>
+        <div className="flex items-start gap-1.5 text-[11px] leading-[1.45] text-warn" data-testid={`${testId ?? `secret-${name}`}-locked`}>
           <CircleAlert size={13} aria-hidden className="mt-[2px] shrink-0" />
           <span>{removeBlocked}</span>
         </div>
@@ -439,7 +451,7 @@ export function JsonEditor<T>({ value, validate, onApply, example, testId, minRo
 
   return (
     <div className="flex flex-col gap-2.5" data-testid={testId}>
-      {hint ? <div className="text-small text-ob-text-3">{hint}</div> : null}
+      {hint ? <div className="text-[11px] leading-[1.45] text-t3">{hint}</div> : null}
       <Textarea
         aria-label="JSON"
         data-testid={`${testId}-text`}
@@ -449,29 +461,29 @@ export function JsonEditor<T>({ value, validate, onApply, example, testId, minRo
         minRows={minRows}
         maxRows={26}
         invalid={!result.ok && dirty}
-        className="overflow-x-auto whitespace-pre text-[12px] leading-[1.6]"
+        className="overflow-x-auto whitespace-pre text-[11px] leading-[1.6]"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
       {!result.ok ? (
         <ul className="flex flex-col gap-1" data-testid={`${testId}-errors`} role="alert">
           {result.errors.slice(0, 8).map((e, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-small text-ob-danger">
+            <li key={i} className="flex items-start gap-1.5 text-[11px] text-err">
               <CircleAlert size={12} aria-hidden className="mt-[3px] shrink-0" />
               <span className="min-w-0 break-words">{e}</span>
             </li>
           ))}
-          {result.errors.length > 8 ? <li className="pl-[18px] text-small text-ob-text-3">and {result.errors.length - 8} more</li> : null}
+          {result.errors.length > 8 ? <li className="pl-[18px] text-[11px] text-t3">and {result.errors.length - 8} more</li> : null}
         </ul>
       ) : (
-        <div className="flex items-center gap-1.5 text-small text-ob-text-3" data-testid={`${testId}-status`}>
+        <div className="flex items-center gap-1.5 font-mono text-[9.5px] tracking-[0.01em] text-t3" data-testid={`${testId}-status`}>
           {dirty ? (
             <>
-              <span className="size-1.5 rounded-full bg-ob-warning" /> Unsaved changes
+              <span className="size-1.5 rounded-full bg-warn" /> Unsaved changes
             </>
           ) : (
             <>
-              <Check size={12} aria-hidden className="text-ob-success" /> Saved and valid
+              <span className="size-1.5 rounded-full bg-ok" /> Saved and valid
             </>
           )}
         </div>
@@ -516,7 +528,7 @@ export function RuleList({ rules, onChange, tone, placeholder, testId, empty, va
 
   return (
     <div className="flex flex-col gap-3" data-testid={testId}>
-      <div className="flex flex-col px-4 pt-3.5">
+      <div className="flex flex-col pt-3">
         <div className="flex items-center gap-2">
           <Input
             aria-label={`Add ${tone} ${itemLabel}`}
@@ -546,16 +558,16 @@ export function RuleList({ rules, onChange, tone, placeholder, testId, empty, va
         {error ? <InlineError>{error}</InlineError> : null}
       </div>
       {rules.length === 0 ? (
-        <div className="px-4 pb-4 text-small text-ob-text-3">{empty}</div>
+        <div className="pb-3 text-[11px] text-t3">{empty}</div>
       ) : (
-        <ul className="flex flex-col border-t border-ob-border" data-testid={`${testId}-list`}>
+        <ul className="flex flex-col border-t border-rule2" data-testid={`${testId}-list`}>
           {rules.map((r) => (
-            <li key={r} className="group flex items-center gap-2 border-b border-ob-border px-4 py-1.5 last:border-b-0 hover:bg-ob-hover" data-testid={`${testId}-rule`}>
-              <span className={cn('size-1.5 shrink-0 rounded-full', tone === 'allow' ? 'bg-ob-success' : 'bg-ob-danger')} aria-hidden />
-              <code className="ob-selectable min-w-0 flex-1 truncate font-mono text-[12px] text-ob-text" title={r}>
+            <li key={r} className="ob-transition group flex h-7 items-center gap-[9px] border-b border-rule2 last:border-b-0 hover:bg-hov" data-testid={`${testId}-rule`}>
+              <span className={cn('size-1.5 shrink-0 rounded-full', tone === 'allow' ? 'bg-ok' : 'bg-err')} aria-hidden />
+              <code className="ob-selectable min-w-0 flex-1 truncate font-mono text-[10.5px] tracking-[-0.01em] text-t1" title={r}>
                 {r}
               </code>
-              <IconButton label={`Remove ${r}`} icon={X} size="sm" onClick={() => void onChange(rules.filter((x) => x !== r))} />
+              <IconButton label={`Remove ${r}`} icon={X} size="xs" onClick={() => void onChange(rules.filter((x) => x !== r))} />
             </li>
           ))}
         </ul>

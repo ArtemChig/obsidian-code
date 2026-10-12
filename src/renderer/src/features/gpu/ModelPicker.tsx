@@ -1,4 +1,4 @@
-// Model picker for the selected GPU profile with an Uncensored <-> Standard segmented toggle. Owner: ui-views.
+// Model list for the selected GPU profile: 28 px table rows with an Uncensored <-> Standard segmented control. Owner: ui-views.
 import { FlaskConical, RefreshCw } from 'lucide-react';
 import type { CatalogModel, GpuProfile } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -8,6 +8,7 @@ import { Switch } from '@renderer/components/ui/toggles';
 import { Tooltip } from '@renderer/components/ui/tooltip';
 import { cn } from '@renderer/lib/cn';
 import { formatMoney } from '@renderer/lib/format';
+import { RadioMark } from '../settings/view-kit';
 import { availableVariants, contextLabel, formatWarmup, profileModels, siblingModel, splitModelLabel, warmupCost, warmupSeconds } from './model';
 
 type Variant = 'uncensored' | 'standard';
@@ -31,22 +32,25 @@ export interface ModelPickerProps {
   onRetryCatalog: () => void;
 }
 
+/** Shared grid of the header and the rows: mark · model · build · size · context · warm-up. */
+const COLS = 'grid grid-cols-[12px_minmax(0,1.5fr)_minmax(0,1fr)_64px_52px_112px] items-center gap-3 px-2';
+
 export function ModelPicker({ profile, catalog, catalogError, selectedId, currentId, canSwitch, switching, showTest, pricePerHour, onShowTest, onSelect, onSwitch, onRetryCatalog }: ModelPickerProps) {
   if (!catalog) {
     return (
-      <div className="rounded-card border border-ob-border bg-ob-surface-1 p-4" data-testid="gpu-model-picker">
+      <div className="py-3" data-testid="gpu-model-picker">
         {catalogError ? (
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-ui text-ob-text-3">The model catalog could not be loaded.</span>
+          <div className="flex items-center justify-between gap-3 border-b border-rule2 py-2">
+            <span className="text-[11.5px] text-t3">The model catalog could not be loaded.</span>
             <Button size="sm" icon={RefreshCw} onClick={onRetryCatalog}>
               Retry
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-3" aria-hidden>
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
+          <div className="flex flex-col gap-2.5" aria-hidden>
+            <Skeleton className="h-3 w-48" />
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-full" />
           </div>
         )}
       </div>
@@ -67,44 +71,25 @@ export function ModelPicker({ profile, catalog, catalogError, selectedId, curren
   };
 
   return (
-    <div className="overflow-hidden rounded-card border border-ob-border bg-ob-surface-1" data-testid="gpu-model-picker">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ob-border px-4 py-3">
-        <div className="flex min-w-0 flex-col">
-          <span className="text-ui font-medium text-ob-text">Model for {profile.label}</span>
-          <span className="text-small text-ob-text-3">Flip the toggle to get the other build of the same model.</span>
+    <div data-testid="gpu-model-picker">
+      <div className="flex min-h-[42px] flex-wrap items-center justify-between gap-x-4 gap-y-2 py-1.5">
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          <span className="text-[12.5px] font-medium tracking-[-0.016em] text-t1">Model for {profile.label}</span>
+          <span className="truncate text-[11px] text-t3">Flip the toggle to get the other build of the same model.</span>
         </div>
-        <div role="group" aria-label="Model variant" data-testid="gpu-variant-toggle" className="inline-flex h-8 items-center gap-0.5 rounded-[8px] border border-ob-border bg-ob-bg p-[3px]">
-          {(['uncensored', 'standard'] as const).map((v) => {
-            const enabled = variants.has(v);
-            const btn = (
-              <button
-                key={v}
-                type="button"
-                role="radio"
-                aria-checked={variant === v}
-                disabled={!enabled}
-                data-testid={`gpu-variant-${v}`}
-                onClick={() => setVariant(v)}
-                className={cn(
-                  'ob-transition h-full rounded-[6px] px-3 text-small font-medium capitalize',
-                  variant === v ? (v === 'uncensored' ? 'bg-ob-violet-soft text-ob-violet shadow-[0_0_0_1px_rgba(179,166,232,0.25)]' : 'bg-ob-surface-3 text-ob-text') : 'text-ob-text-3 hover:text-ob-text-2',
-                  !enabled && 'cursor-not-allowed opacity-40 hover:text-ob-text-3',
-                )}
-              >
-                {v}
-              </button>
-            );
-            return enabled ? btn : (
-              <Tooltip key={v} content={`No ${v} build for ${profile.label}`}>
-                <span className="h-full">{btn}</span>
-              </Tooltip>
-            );
-          })}
-        </div>
+        <VariantToggle variant={variant} enabled={variants} profileLabel={profile.label} onChange={setVariant} />
       </div>
 
-      <div role="radiogroup" aria-label="GPU model" className="flex flex-col divide-y divide-ob-border">
-        {visible.length === 0 ? <div className="px-4 py-6 text-center text-ui text-ob-text-3">No {variant} models for this profile.</div> : null}
+      <div role="radiogroup" aria-label="GPU model" className="-mx-2">
+        <div className={cn(COLS, 'ob-label h-7 border-b border-rule')} aria-hidden>
+          <span />
+          <span>Model</span>
+          <span>Build</span>
+          <span className="text-right">Size</span>
+          <span className="text-right">Context</span>
+          <span className="text-right">Warm-up</span>
+        </div>
+        {visible.length === 0 ? <div className="border-b border-rule2 px-2 py-3 text-[11.5px] text-t3">No {variant} models for this profile.</div> : null}
         {visible.map((m) => (
           <ModelRow
             key={m.id}
@@ -119,21 +104,68 @@ export function ModelPicker({ profile, catalog, catalogError, selectedId, curren
       </div>
 
       {hasTest || currentId ? (
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ob-border bg-[rgba(0,0,0,0.12)] px-4 py-2.5">
-        {hasTest ? (
-          <Switch size="sm" checked={showTest} onCheckedChange={onShowTest} label={<span className="flex items-center gap-1.5 text-small"><FlaskConical size={13} aria-hidden /> Show tiny test models</span>} />
-        ) : (
-          <span />
-        )}
-        {canSwitch && currentId && selectedId !== currentId ? (
-          <Button size="sm" variant="primary" loading={switching} data-testid="gpu-switch-model" onClick={() => onSwitch(selectedId)}>
-            Switch running GPU to this model
-          </Button>
-        ) : currentId ? (
-          <span className="text-small text-ob-text-3">{canSwitch ? 'Serving this model.' : 'Model switching is available once the GPU is ready.'}</span>
-        ) : null}
-      </div>
+        <div className="flex min-h-10 flex-wrap items-center justify-between gap-3 py-1.5">
+          {hasTest ? (
+            <Switch
+              size="sm"
+              checked={showTest}
+              onCheckedChange={onShowTest}
+              label={
+                <span className="flex items-center gap-1.5 text-[11.5px] text-t2">
+                  <FlaskConical size={12} aria-hidden className="text-t3" /> Show tiny test models
+                </span>
+              }
+            />
+          ) : (
+            <span />
+          )}
+          {canSwitch && currentId && selectedId !== currentId ? (
+            <Button size="sm" variant="primary" loading={switching} data-testid="gpu-switch-model" onClick={() => onSwitch(selectedId)}>
+              Switch running GPU to this model
+            </Button>
+          ) : currentId ? (
+            <span className="ob-mn">{canSwitch ? 'serving this model' : 'model switching is available once the GPU is ready'}</span>
+          ) : null}
+        </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Uncensored | Standard (reference .seg): 1 px --line frame, the chosen side solid cold white. */
+function VariantToggle({ variant, enabled, profileLabel, onChange }: { variant: Variant; enabled: Set<Variant>; profileLabel: string; onChange: (v: Variant) => void }) {
+  return (
+    <div role="group" aria-label="Model variant" data-testid="gpu-variant-toggle" className="inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-[2px] shadow-[inset_0_0_0_1px_var(--line)]">
+      {(['uncensored', 'standard'] as const).map((v, i) => {
+        const on = variant === v;
+        const ok = enabled.has(v);
+        const btn = (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            disabled={!ok}
+            data-testid={`gpu-variant-${v}`}
+            onClick={() => onChange(v)}
+            className={cn(
+              'ob-transition flex h-full items-center px-[11px] text-[11px] capitalize tracking-[-0.008em] outline-offset-[-2px]',
+              i > 0 && !on && 'shadow-[inset_1px_0_0_var(--line)]',
+              on ? 'bg-acc font-semibold text-acc-ink' : 'text-t3 hover:text-t1',
+              !ok && 'cursor-not-allowed hover:text-t3',
+            )}
+          >
+            {v}
+          </button>
+        );
+        return ok ? (
+          btn
+        ) : (
+          <Tooltip key={v} content={`No ${v} build for ${profileLabel}`}>
+            <span className="flex h-full">{btn}</span>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }
@@ -170,37 +202,36 @@ function ModelRow({
           onSelect();
         }
       }}
-      className={cn('ob-transition flex cursor-default items-start gap-3 px-4 py-3 outline-offset-[-2px]', selected ? 'bg-ob-accent-soft' : 'hover:bg-ob-hover')}
+      className={cn(COLS, 'ob-transition min-h-7 cursor-default border-b border-rule2 py-1 outline-offset-[-2px]', selected ? 'ob-selected' : 'hover:bg-hov')}
     >
-      <span
-        aria-hidden
-        className={cn('mt-[3px] flex size-4 shrink-0 items-center justify-center rounded-full border', selected ? 'border-ob-accent' : 'border-[#3a4a57]')}
-      >
-        {selected ? <span className="size-2 rounded-full bg-ob-accent" /> : null}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-ui font-medium text-ob-text">{name}</span>
-          {detail ? <span className="truncate text-small text-ob-text-3">{detail}</span> : null}
-          {isDefault ? <Badge tone="neutral" mono>default</Badge> : null}
-          {isCurrent ? <Badge tone="success" mono>running</Badge> : null}
-          {model.experimental ? (
-            <Tooltip content="Young llama.cpp support. If it fails to load, the clock-in falls back to a stable model on the same machine.">
-              <span>
-                <Badge tone="warning" mono data-testid="gpu-experimental-badge">experimental</Badge>
-              </span>
-            </Tooltip>
-          ) : null}
-        </div>
-        <div className="ob-tabular flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11.5px] text-ob-text-3">
-          <span>{model.sizeGb.toFixed(1)} GB</span>
-          <span>{contextLabel(model.contextLength)}</span>
-          <span title="Download at ~150 MB/s plus boot and load. Billed while it warms up.">
-            warm-up {formatWarmup(secs)}
-            {cost != null ? ` (≈ ${formatMoney(cost)})` : ''}
-          </span>
-        </div>
+      <RadioMark on={selected} />
+      <div className="flex min-w-0 items-center gap-2">
+        <span className={cn('truncate text-[12px] tracking-[-0.012em]', selected ? 'font-medium text-t1' : 'text-t1')}>{name}</span>
+        {isDefault ? <Badge tone="neutral">default</Badge> : null}
+        {isCurrent ? <Badge tone="success">running</Badge> : null}
+        {model.experimental ? (
+          <Tooltip content="Young llama.cpp support. If it fails to load, the clock-in falls back to a stable model on the same machine.">
+            <span className="flex">
+              <Badge tone="warning" data-testid="gpu-experimental-badge">
+                experimental
+              </Badge>
+            </span>
+          </Tooltip>
+        ) : null}
       </div>
+      <span className="truncate font-mono text-[9.5px] tracking-[0.01em] text-t3" title={detail || undefined}>
+        {detail || '—'}
+      </span>
+      <span className="ob-tabular text-right font-mono text-[10.5px] tracking-[-0.02em] text-t2">
+        {model.sizeGb.toFixed(1)}
+        <span className="ob-unit ml-1">gb</span>
+      </span>
+      <span className="ob-tabular text-right font-mono text-[10.5px] tracking-[-0.02em] text-t2">{contextLabel(model.contextLength)}</span>
+      <span className="ob-tabular truncate text-right font-mono text-[10.5px] tracking-[-0.02em] text-t2" title="Download at ~150 MB/s plus boot and load. Billed while it warms up.">
+        <span className="sr-only">warm-up </span>
+        {formatWarmup(secs)}
+        {cost != null ? <span className="text-t3"> ≈ {formatMoney(cost)}</span> : ''}
+      </span>
     </div>
   );
 }

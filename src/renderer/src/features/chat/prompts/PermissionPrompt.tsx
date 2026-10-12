@@ -4,6 +4,7 @@ import { Globe, ShieldAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PermissionDecision, PermissionRequest } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
+import { StatusDot } from '@renderer/components/ui/feedback';
 import { Input } from '@renderer/components/ui/input';
 import { Kbd } from '@renderer/components/ui/kbd';
 import { cn } from '@renderer/lib/cn';
@@ -52,7 +53,7 @@ function Details({ req, cwd }: { req: PermissionRequest; cwd: string }) {
   const i = req.input ?? {};
   if (req.toolName === 'Bash' || req.toolName === 'PowerShell') {
     return (
-      <div className="overflow-hidden rounded-[8px] border border-ob-border">
+      <div className="overflow-hidden rounded-[2px] border border-rule">
         <TerminalBody command={String(i.command ?? '')} output="" shell={req.toolName === 'PowerShell' ? 'powershell' : 'bash'} preview />
       </div>
     );
@@ -60,11 +61,11 @@ function Details({ req, cwd }: { req: PermissionRequest; cwd: string }) {
   const preview = previewFromInput(req.toolName, i);
   if (preview) {
     return (
-      <div className="overflow-hidden rounded-[8px] border border-ob-border">
-        <div className="flex h-8 items-center gap-2 border-b border-ob-border bg-[#101b21] px-3 font-mono text-[11.5px] text-ob-text-2">
+      <div className="overflow-hidden rounded-[2px] border border-rule">
+        <div className="flex h-7 items-center gap-2 border-b border-rule2 bg-s1 px-3 font-mono text-[10.5px] tracking-[-0.01em] text-t2">
           <span className="min-w-0 truncate">{displayPath(preview.path, cwd)}</span>
           {preview.isNew ? (
-            <Badge tone="success" mono>
+            <Badge tone="success" variant="outline">
               new
             </Badge>
           ) : null}
@@ -75,14 +76,14 @@ function Details({ req, cwd }: { req: PermissionRequest; cwd: string }) {
   }
   if (req.toolName === 'WebFetch') {
     return (
-      <div className="flex items-center gap-2.5 rounded-[8px] border border-ob-border bg-ob-code-bg px-3 py-2 font-mono text-[12px] text-ob-text-2">
-        <Globe size={14} aria-hidden className="shrink-0 text-ob-text-3" />
+      <div className="flex items-center gap-2.5 rounded-[2px] border border-rule bg-s1 px-3 py-2 font-mono text-[11.5px] tracking-[-0.02em] text-t1">
+        <Globe size={13} aria-hidden className="shrink-0 text-t3" />
         <span className="min-w-0 truncate">{String(i.url ?? '')}</span>
       </div>
     );
   }
   return (
-    <div className="overflow-hidden rounded-[8px] border border-ob-border">
+    <div className="overflow-hidden rounded-[2px] border border-rule">
       <InputJson input={i} />
     </div>
   );
@@ -126,6 +127,10 @@ export function PermissionPrompt({ request, cwd, active }: PermissionPromptProps
 
   const denyIndex = request.suggestedRule ? 3 : 2;
 
+  const tool = request.toolName.startsWith('mcp__') ? 'MCP' : request.toolName;
+
+  // M13: an actionable block, so it carries a frame — 1 px --warn (it waits for the user) — with a mono heading,
+  // the real call in a well, and the decisions as numbered 32 px rows.
   return (
     <div
       ref={root}
@@ -135,45 +140,48 @@ export function PermissionPrompt({ request, cwd, active }: PermissionPromptProps
       aria-label={`Permission request: ${request.title}`}
       tabIndex={-1}
       className={cn(
-        'overflow-hidden rounded-[12px] border bg-ob-surface-1 outline-none animate-ob-slide-up focus:shadow-[0_0_0_4px_rgba(232,184,92,0.16)]',
-        active ? 'border-[rgba(232,184,92,0.45)] shadow-[0_0_0_4px_rgba(232,184,92,0.06)]' : 'border-ob-border',
+        'rounded-[2px] bg-s0 outline-none animate-ob-slide-up focus:outline-solid focus:outline-1 focus:outline-offset-2 focus:outline-warn',
+        active ? 'shadow-[inset_0_0_0_1px_var(--warn)]' : 'shadow-[inset_0_0_0_1px_var(--line)]',
       )}
     >
-      <div className="flex items-start gap-3 px-4 pt-3.5">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-ob-warning-soft text-ob-warning">
-          <ShieldAlert size={15} aria-hidden />
+      <div className="flex h-8 items-center gap-2.5 border-b border-rule px-4">
+        <StatusDot tone="warning" pulse={active} size={6} />
+        <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-warn">Permission</span>
+        <span className="font-mono text-[9px] text-t3" aria-hidden>
+          ·
         </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="text-[13.5px] font-medium text-ob-text">{headline(request)}</div>
-          {/* the real call is always shown; the model's own description is only a labelled note (it can be misleading) */}
-          <div className="truncate text-small text-ob-text-3" title={request.title}>
-            {request.title}
-          </div>
-          {description ? (
-            <div className="truncate text-small italic text-ob-text-3" title={description} data-testid="perm-agent-note">
-              Agent says: {description}
-            </div>
-          ) : null}
+        <span className="min-w-0 truncate font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-t1">{tool}</span>
+        <span className="flex-1" />
+        <ShieldAlert size={12} aria-hidden className="shrink-0 text-t3" />
+      </div>
+
+      <div className="flex flex-col gap-1 px-4 pt-3.5">
+        <div className="text-lead font-semibold text-t1">{headline(request)}</div>
+        {/* the real call is always shown; the model's own description is only a labelled note (it can be misleading) */}
+        <div className="truncate font-mono text-[10.5px] tracking-[-0.01em] text-t3" title={request.title}>
+          {request.title}
         </div>
-        <Badge mono className="mt-1 shrink-0">
-          {request.toolName.startsWith('mcp__') ? 'MCP' : request.toolName}
-        </Badge>
+        {description ? (
+          <div className="truncate text-[11.5px] italic text-t3" title={description} data-testid="perm-agent-note">
+            Agent says: {description}
+          </div>
+        ) : null}
       </div>
 
       <div className="px-4 pt-3">
         <Details req={request} cwd={cwd} />
       </div>
 
-      <div className="flex flex-col gap-1.5 px-4 pt-3" role="radiogroup" aria-label="Decision">
+      <div className="mx-4 mt-3 flex flex-col border-t border-rule2" role="radiogroup" aria-label="Decision">
         <OptionRow compact index={1} title="Allow once" description="Only this call" onSelect={() => decide('allow')} selected={busy === 'allow'} testId="perm-allow" />
         {request.suggestedRule ? (
           <OptionRow
             compact
             index={2}
             title={
-              <span className="flex flex-wrap items-center gap-1.5">
+              <span className="flex flex-wrap items-center gap-2">
                 Always allow
-                <code className="rounded-[4px] border border-ob-border bg-ob-code-bg px-1.5 py-px font-mono text-[11.5px] text-ob-text">{request.suggestedRule}</code>
+                <code className="rounded-[2px] bg-s2 px-1.5 py-px font-mono text-[11px] tracking-[-0.02em] text-t1">{request.suggestedRule}</code>
               </span>
             }
             description="Saved to this project's allow rules"
@@ -194,7 +202,7 @@ export function PermissionPrompt({ request, cwd, active }: PermissionPromptProps
         />
       </div>
 
-      <div className="px-4 pt-2">
+      <div className="px-4 pt-3">
         <Input
           size="sm"
           value={feedback}
@@ -214,7 +222,7 @@ export function PermissionPrompt({ request, cwd, active }: PermissionPromptProps
         />
       </div>
 
-      <div className="flex items-center gap-1.5 px-4 pb-3 pt-2.5 text-meta text-ob-text-3">
+      <div className="flex items-center gap-1.5 px-4 pb-3 pt-2.5 font-mono text-[9px] uppercase tracking-[0.12em] text-t3">
         <Kbd>1</Kbd>
         {request.suggestedRule ? <Kbd>2</Kbd> : null}
         <Kbd>{denyIndex}</Kbd>

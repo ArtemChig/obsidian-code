@@ -1,4 +1,5 @@
-// CodeBlock: shiki-highlighted code with language label + copy button. Owner: ui-foundation.
+// CodeBlock: shiki-highlighted (monochrome) code in an --s1 well with a hairline, language label + copy button.
+// Owner: ui-foundation.
 import { Check, Copy, TextWrap } from 'lucide-react';
 import { memo, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@renderer/lib/cn';
@@ -89,7 +90,7 @@ export const CodeBlock = memo(function CodeBlock({
   const copyButton = (
     <IconButton
       label={copied ? 'Copied' : 'Copy code'}
-      icon={copied ? <Check size={14} className="text-ob-success" /> : Copy}
+      icon={copied ? <Check size={13} className="text-ok" /> : Copy}
       size="sm"
       onClick={copy}
     />
@@ -98,8 +99,8 @@ export const CodeBlock = memo(function CodeBlock({
   return (
     <div className={cn('ob-codeblock group/code', className)}>
       {!bare ? (
-        <div className="flex h-8 items-center justify-between gap-2 border-b border-ob-border bg-[#101b21] pl-3 pr-1.5">
-          <div className="min-w-0 truncate font-mono text-[11px] text-ob-text-3">{title ?? langLabel(lang)}</div>
+        <div className="flex h-7 items-center justify-between gap-2 border-b border-rule2 pl-3.5 pr-1">
+          <div className={cn('min-w-0 truncate', title ? 'font-mono text-[10px] tracking-[0.01em] text-t2' : 'ob-label')}>{title ?? langLabel(lang)}</div>
           <div className="flex shrink-0 items-center gap-0.5">
             {actions}
             <IconButton label={wrap ? 'Disable line wrap' : 'Wrap lines'} icon={TextWrap} size="sm" active={wrap} onClick={() => setWrap((w) => !w)} />

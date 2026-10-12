@@ -4,18 +4,18 @@ import { cn, utilityGroup } from '@renderer/lib/cn';
 describe('cn (clsx + tailwind conflict resolution)', () => {
   it('keeps the last utility of a group', () => {
     expect(cn('h-7 px-2.5 text-ui', 'h-[26px] px-2')).toBe('text-ui h-[26px] px-2');
-    expect(cn('text-ob-text-3', 'text-ob-accent')).toBe('text-ob-accent');
-    expect(cn('bg-ob-surface-2', false, 'bg-ob-accent-soft')).toBe('bg-ob-accent-soft');
+    expect(cn('text-t3', 'text-acc')).toBe('text-acc');
+    expect(cn('bg-s1', false, 'bg-acc-wash')).toBe('bg-acc-wash');
   });
 
   it('separates text size from text color and border width from color', () => {
-    expect(cn('text-meta text-ob-text-2', 'text-[10px]')).toBe('text-ob-text-2 text-[10px]');
-    expect(cn('border border-ob-border', 'border-[rgba(240,113,120,0.6)]')).toBe('border border-[rgba(240,113,120,0.6)]');
-    expect(cn('border-b-2 border-transparent', 'border-ob-accent')).toBe('border-b-2 border-ob-accent');
+    expect(cn('text-meta text-t2', 'text-[10px]')).toBe('text-t2 text-[10px]');
+    expect(cn('border border-rule', 'border-[rgba(240,113,120,0.6)]')).toBe('border border-[rgba(240,113,120,0.6)]');
+    expect(cn('border-b-2 border-transparent', 'border-acc')).toBe('border-b-2 border-acc');
   });
 
   it('respects variants independently', () => {
-    expect(cn('hover:bg-ob-hover bg-ob-bg', 'hover:bg-ob-accent-soft')).toBe('bg-ob-bg hover:bg-ob-accent-soft');
+    expect(cn('hover:bg-hov bg-s0', 'hover:bg-acc-wash')).toBe('bg-s0 hover:bg-acc-wash');
     expect(cn('data-[state=open]:bg-a', 'bg-b')).toBe('data-[state=open]:bg-a bg-b');
   });
 

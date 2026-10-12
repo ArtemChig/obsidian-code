@@ -1,7 +1,8 @@
-// Thinking block: violet accent, live timer + tail of the reasoning while streaming, collapsed "Thought for Ns" after.
-// Owner: ui-chat.
-import { Brain, ChevronRight } from 'lucide-react';
+// Thinking block (M13): not coloured. Collapsed = a mono "THOUGHT FOR 12S" row with a chevron; expanded = --t2 text on a
+// --rule left hairline; while streaming = a --live dot, a mono timer and the tail of the reasoning. Owner: ui-chat.
+import { ChevronRight } from 'lucide-react';
 import { memo, useState } from 'react';
+import { StatusDot } from '@renderer/components/ui/feedback';
 import { cn } from '@renderer/lib/cn';
 import { formatDuration } from '@renderer/lib/format';
 import { Elapsed } from '../ui';
@@ -27,25 +28,20 @@ export const ThinkingBlock = memo(function ThinkingBlock({ text, streaming, star
         type="button"
         onClick={() => setUserOpen(!open)}
         aria-expanded={streaming || open}
-        className="ob-transition group -ml-1.5 flex h-7 items-center gap-1.5 rounded-ctl px-1.5 text-ui text-ob-text-3 hover:bg-ob-hover hover:text-ob-text-2"
+        className="ob-transition group -ml-1 flex h-6 items-center gap-2 rounded-[2px] px-1 font-mono text-[9px] font-medium uppercase tracking-[0.16em] text-t3 hover:text-t1"
       >
-        <Brain size={14} aria-hidden className={cn('text-ob-violet', streaming && 'animate-ob-pulse')} />
-        <span className={cn(streaming && 'text-ob-violet')}>{label}</span>
-        {streaming && startedAt ? <Elapsed since={startedAt} className="font-mono text-[11.5px] text-ob-violet/80" /> : null}
-        {!streaming ? (
-          <ChevronRight size={13} aria-hidden className={cn('transition-transform duration-150', open && 'rotate-90')} />
-        ) : null}
+        {streaming ? <StatusDot tone="violet" pulse size={6} /> : null}
+        <span>{label}</span>
+        {streaming && startedAt ? <Elapsed since={startedAt} className="font-mono text-[10px] normal-case tracking-[-0.01em] text-t2" /> : null}
+        {!streaming ? <ChevronRight size={11} aria-hidden className={cn('transition-transform duration-150', open && 'rotate-90')} /> : null}
       </button>
       {streaming && !open ? (
-        <div
-          className="ml-[5px] mt-1 flex max-h-[6.6em] flex-col justify-end overflow-hidden border-l-2 border-[rgba(179,166,232,0.35)] pl-3.5 text-small leading-[1.65] text-ob-text-3 [mask-image:linear-gradient(to_bottom,transparent,black_45%)]"
-          aria-live="off"
-        >
+        <div className="ml-[2px] mt-1 flex max-h-[6.4em] flex-col justify-end overflow-hidden border-l border-rule pl-4 text-[12px] leading-[1.6] text-t3" aria-live="off">
           <p className="whitespace-pre-wrap">{text}</p>
         </div>
       ) : null}
       {open ? (
-        <div className="ob-selectable ml-[5px] mt-1 border-l-2 border-[rgba(179,166,232,0.35)] pl-3.5 text-small leading-[1.65] text-ob-text-2 animate-ob-fade-in">
+        <div className="ob-selectable ml-[2px] mt-1 border-l border-rule pl-4 text-[12px] leading-[1.6] tracking-[-0.006em] text-t2 animate-ob-fade-in">
           <p className="whitespace-pre-wrap">{text || '(empty)'}</p>
         </div>
       ) : null}

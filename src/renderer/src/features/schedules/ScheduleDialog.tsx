@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { ModelRef, PermissionMode, ScheduledTask } from '@shared/types';
 import { Button } from '@renderer/components/ui/button';
 import { Dialog, DialogContent } from '@renderer/components/ui/dialog';
+import { SectionLabel } from '@renderer/components/ui/layout';
 import { Field, Input, Textarea } from '@renderer/components/ui/input';
 import { Select, type SelectGroupDef, type SelectOption } from '@renderer/components/ui/select';
 import { Checkbox, Switch } from '@renderer/components/ui/toggles';
@@ -15,6 +16,7 @@ import { useModels } from '@renderer/state/models';
 import { useModelGroups } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { PERMISSION_MODES, permissionModeInfo } from '../settings/permission-modes';
+import { Notice } from '../settings/view-kit';
 import { createSchedule, updateSchedule } from './actions';
 import {
   PRESET_LABEL,
@@ -254,9 +256,11 @@ function DialogBody({ task, onClose }: { task: ScheduledTask | null; onClose: ()
           </div>
         </Field>
 
-        {/* schedule */}
-        <fieldset className="flex flex-col gap-2.5 rounded-card border border-ob-border bg-[rgba(0,0,0,0.12)] p-3.5" data-testid="schedule-when">
-          <legend className="ob-section-label -ml-1 px-1">Schedule</legend>
+        {/* schedule: a cap + hairline, controls, then a mono preview of the next runs (no frame) */}
+        <fieldset className="flex flex-col gap-2.5" data-testid="schedule-when">
+          <legend className="contents">
+            <SectionLabel as="h3" rule>Schedule</SectionLabel>
+          </legend>
           <div className="flex flex-wrap items-start gap-2">
             <Select
               aria-label="Schedule type"
@@ -271,22 +275,35 @@ function DialogBody({ task, onClose }: { task: ScheduledTask | null; onClose: ()
             <Checkbox checked={form.schedule.runOnce} onCheckedChange={(v) => setSched({ runOnce: v })} label="Run once, then disable" />
           ) : null}
           {show('schedule') ? (
-            <div role="alert" className="text-small text-ob-danger" data-testid="schedule-error">
+            <div role="alert" className="text-[11px] text-err" data-testid="schedule-error">
               {show('schedule')}
             </div>
           ) : preview ? (
-            <div className="flex flex-col gap-1 text-small" data-testid="schedule-preview">
-              <div className="flex items-center gap-2 text-ob-text">
-                <CalendarClock size={14} aria-hidden className="text-ob-accent" />
+            <div className="flex flex-col gap-1.5" data-testid="schedule-preview">
+              <div className="flex items-center gap-2 text-[12px] tracking-[-0.012em] text-t1">
+                <CalendarClock size={13} aria-hidden className="text-t3" />
                 <span className="font-medium">{preview.words}</span>
               </div>
-              <div className="ob-tabular font-mono text-[11.5px] text-ob-text-3">
-                {preview.runs.length === 0 ? 'Never runs again' : `Next: ${preview.runs.map(fmtRun).join('  ·  ')}`}
+              <div className="flex items-start gap-3">
+                <span className="ob-label w-10 shrink-0 pt-[3px]">Next:</span>
+                {preview.runs.length === 0 ? (
+                  <span className="font-mono text-[10.5px] tracking-[-0.02em] text-t3">Never runs again</span>
+                ) : (
+                  <ol className="ob-tabular flex min-w-0 flex-1 flex-col font-mono text-[10.5px] tracking-[-0.02em]">
+                    {preview.runs.map((ts) => (
+                      <li key={ts} className="flex h-[22px] items-center justify-between gap-3 border-b border-rule2 last:border-b-0">
+                        <span className="text-t1">{fmtRun(ts)}</span>
+                        <span className="text-t3">{relativeFuture(ts - Date.now())}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
             </div>
           ) : null}
         </fieldset>
 
+        <SectionLabel rule className="-mb-1.5">Run as</SectionLabel>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Model" htmlFor="sch-model">
             <Select id="sch-model" aria-label="Model" value={form.model} onValueChange={(v) => set('model', v)} groups={modelGroups} />
@@ -301,7 +318,7 @@ function DialogBody({ task, onClose }: { task: ScheduledTask | null; onClose: ()
             />
           </Field>
         </div>
-        <p className={cn('-mt-2 text-small', form.mode === 'bypassPermissions' ? 'text-ob-warning' : 'text-ob-text-3')} data-testid="schedule-mode-note">
+        <p className={cn('-mt-2 text-[11px] leading-[1.45]', form.mode === 'bypassPermissions' ? 'text-warn' : 'text-t3')} data-testid="schedule-mode-note">
           {form.mode === 'bypassPermissions' ? <TriangleAlert size={12} aria-hidden className="mr-1 inline align-[-1px]" /> : null}
           {modeInfo.unattended}
         </p>
@@ -316,7 +333,7 @@ function fmtRun(ts: number): string {
   const d = new Date(ts);
   const date = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return `${date} ${time} (${relativeFuture(ts - Date.now())})`;
+  return `${date} ${time}`;
 }
 
 // ───────────────────────────── Schedule inputs per preset ─────────────────────────────
@@ -330,6 +347,7 @@ function ScheduleInputs({ form, error, setSched, onBlur }: { form: ScheduleForm;
           <Input
             aria-label="Hours between runs"
             data-testid="schedule-hours"
+            mono
             className="w-[72px] text-center"
             inputMode="numeric"
             value={form.everyHours}
@@ -337,7 +355,7 @@ function ScheduleInputs({ form, error, setSched, onBlur }: { form: ScheduleForm;
             onChange={(e) => setSched({ everyHours: e.target.value })}
             onBlur={onBlur}
           />
-          <span className="text-ui text-ob-text-2">{form.everyHours === '1' ? 'hour' : 'hours'}</span>
+          <span className="text-[11.5px] text-t2">{form.everyHours === '1' ? 'hour' : 'hours'}</span>
         </div>
       );
     case 'daily':
@@ -395,7 +413,7 @@ function AutoClockIn({ checked, disabled, onChange }: { checked: boolean; disabl
   const profile = useSettings((s) => s.settings?.vast.profiles.find((p) => p.id === 'standard'));
   const budget = useGpu((s) => (s.status ? Math.max(0, s.status.monthlyBudget - s.status.monthCost) : null));
   return (
-    <div className={cn('flex flex-col gap-2 rounded-card border p-3.5', checked ? 'border-[rgba(232,184,92,0.4)] bg-ob-warning-soft' : 'border-ob-border bg-[rgba(0,0,0,0.12)]')} data-testid="schedule-autoclockin">
+    <div className="flex flex-col gap-2 border-t border-rule2 pt-1" data-testid="schedule-autoclockin">
       <Field
         inline
         label="Allow auto clock-in"
@@ -405,14 +423,11 @@ function AutoClockIn({ checked, disabled, onChange }: { checked: boolean; disabl
         <Switch id="sch-autoclock" aria-label="Allow auto clock-in" checked={checked} disabled={disabled} onCheckedChange={onChange} />
       </Field>
       {checked ? (
-        <div className="flex items-start gap-2 text-small text-ob-text" data-testid="schedule-cost-warning">
-          <TriangleAlert size={14} aria-hidden className="mt-0.5 shrink-0 text-ob-warning" />
-          <span>
-            This spends real money while you are away. Each run rents the Standard GPU
-            {profile ? ` (up to ${formatMoney(profile.maxPricePerHour)}/h)` : ''}, pays for the model download (about 5–15 minutes, billed) and clocks out when the run ends.
-            {budget != null ? ` It stops when the monthly budget is used up — ${formatMoney(budget)} left.` : ' The monthly budget still applies.'}
-          </span>
-        </div>
+        <Notice tone="warn" icon={TriangleAlert} testId="schedule-cost-warning">
+          This spends real money while you are away. Each run rents the Standard GPU
+          {profile ? ` (up to ${formatMoney(profile.maxPricePerHour)}/h)` : ''}, pays for the model download (about 5–15 minutes, billed) and clocks out when the run ends.
+          {budget != null ? ` It stops when the monthly budget is used up — ${formatMoney(budget)} left.` : ' The monthly budget still applies.'}
+        </Notice>
       ) : null}
     </div>
   );

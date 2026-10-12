@@ -35,8 +35,8 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@fontsource/ibm-plex-sans": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/chivo": "^5.3.0",
+    "@fontsource/chivo-mono": "^5.3.0",
     "@playwright/test": "^1.64.0",
     "@radix-ui/react-collapsible": "^1.2.0",
     "@radix-ui/react-context-menu": "^2.4.0",

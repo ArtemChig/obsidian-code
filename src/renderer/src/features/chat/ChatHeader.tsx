@@ -1,5 +1,5 @@
-// Chat header: editable title, cwd chip (folder picker → new session in that folder), git branch, context meter,
-// right-panel toggle. Owner: ui-chat.
+// Chat header (M13): Chivo 600 title, cwd + branch as mono tags (cwd = folder picker → new session in that folder),
+// mono "CTX %" meter, right-panel toggle. Shares --ob-pane-head-h with the right panel's tab bar. Owner: ui-chat.
 import { Bot, ChevronRight, Folder, GitBranch, PanelRightClose, PanelRightOpen, Pencil, ShieldOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { SessionSummary } from '@shared/types';
@@ -55,7 +55,7 @@ function EditableTitle({ session }: { session: SessionSummary }) {
         }}
         aria-label="Session title"
         data-testid="chat-title-input"
-        className="h-7 min-w-[200px] max-w-[480px] flex-1 rounded-ctl border border-[rgba(143,184,222,0.5)] bg-ob-surface-2 px-2 text-[14px] font-medium text-ob-text outline-none"
+        className="h-7 min-w-[200px] max-w-[480px] flex-1 rounded-[2px] bg-s1 px-2 text-title font-semibold text-t1 shadow-[inset_0_0_0_1px_var(--acc)] outline-none"
       />
     );
   }
@@ -65,15 +65,15 @@ function EditableTitle({ session }: { session: SessionSummary }) {
       onClick={() => setEditing(true)}
       title="Rename session"
       data-testid="chat-title"
-      className="ob-transition group -ml-1.5 flex h-7 min-w-0 items-center gap-1.5 rounded-ctl px-1.5 text-left hover:bg-ob-hover"
+      className="ob-transition group -ml-2 flex h-7 min-w-0 items-center gap-2 rounded-[2px] px-2 text-left hover:bg-hov"
     >
-      <span className="truncate text-[14px] font-medium text-ob-text">{session.title || 'Untitled session'}</span>
-      <Pencil size={12} aria-hidden className="shrink-0 text-ob-text-3 opacity-0 transition-opacity group-hover:opacity-100" />
+      <span className="truncate text-title font-semibold text-t1">{session.title || 'Untitled session'}</span>
+      <Pencil size={11} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   );
 }
 
-/** Context window usage ring: last prompt tokens vs the model's context length. */
+/** Context window usage: mono "CTX 31%" + a thin flat bar (last prompt tokens vs the model's context length). */
 export function ContextMeter({ session }: { session: SessionSummary }) {
   const model = useModelInfo(session.model);
   const compactAt = useSettings((s) => s.settings?.autoCompactPercent ?? 80) / 100;
@@ -81,9 +81,9 @@ export function ContextMeter({ session }: { session: SessionSummary }) {
   const total = model?.contextLength ?? 32_768;
   const ratio = total > 0 ? Math.min(1, used / total) : 0;
   const pct = Math.round(ratio * 100);
-  const tone = ratio >= compactAt ? 'var(--ob-danger)' : ratio >= compactAt * 0.75 ? 'var(--ob-warning)' : 'var(--ob-accent)';
-  const r = 7;
-  const c = 2 * Math.PI * r;
+  // Colour only means status: near the auto-compact line the bar warns, past it it is an error.
+  const fill = ratio >= compactAt ? 'bg-err' : ratio >= compactAt * 0.75 ? 'bg-warn' : 'bg-t2';
+  const value = ratio >= compactAt ? 'text-err' : ratio >= compactAt * 0.75 ? 'text-warn' : 'text-t1';
   return (
     <Tooltip
       content={
@@ -91,14 +91,14 @@ export function ContextMeter({ session }: { session: SessionSummary }) {
           <span>
             {formatTokens(used)} of {formatTokens(total)} tokens used
           </span>
-          <span className="text-ob-text-3">
+          <span className="text-t3">
             {model?.label ?? 'Unknown model'} · auto-compacts at {Math.round(compactAt * 100)}%
           </span>
         </span>
       }
     >
       <span
-        className="flex h-7 items-center gap-1.5 rounded-ctl px-1.5 font-mono text-[11px] text-ob-text-3"
+        className="flex h-7 shrink-0 items-center gap-2.5 px-1.5 font-mono"
         data-testid="context-meter"
         aria-label={`Context ${pct}% used`}
         role="meter"
@@ -106,21 +106,13 @@ export function ContextMeter({ session }: { session: SessionSummary }) {
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden className="-rotate-90">
-          <circle cx="9" cy="9" r={r} fill="none" stroke="var(--ob-border)" strokeWidth="2.25" />
-          <circle
-            cx="9"
-            cy="9"
-            r={r}
-            fill="none"
-            stroke={tone}
-            strokeWidth="2.25"
-            strokeLinecap="round"
-            strokeDasharray={`${Math.max(used ? 1.5 : 0, ratio * c)} ${c}`}
-            style={{ transition: 'stroke-dasharray 300ms ease-out' }}
-          />
-        </svg>
-        <span className="ob-tabular">{pct}%</span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-t3">Ctx</span>
+          <span className={cn('ob-tabular text-[10.5px] tracking-[-0.02em]', value)}>{pct}%</span>
+        </span>
+        <span aria-hidden className="relative h-[2px] w-12 overflow-hidden bg-s4 @max-[560px]:hidden">
+          <span className={cn('absolute inset-y-0 left-0 transition-[width] duration-300 ease-out', fill)} style={{ width: `${Math.max(used ? 2 : 0, pct)}%` }} />
+        </span>
       </span>
     </Tooltip>
   );
@@ -144,39 +136,38 @@ export function ChatHeader({ session, disposable }: { session: SessionSummary; d
   const isSub = session.kind === 'subagent';
 
   return (
-    <div className="@container flex h-11 shrink-0 items-center gap-2 border-b border-ob-border pl-5 pr-2.5" data-testid="chat-header">
+    <div className="@container flex h-[var(--ob-pane-head-h)] shrink-0 items-center gap-3 border-b border-rule pl-8 pr-3" data-testid="chat-header">
       {isSub && parent ? (
         <>
           <button
             type="button"
             onClick={() => openSession(parent.id)}
-            className="ob-transition flex h-7 min-w-0 max-w-[220px] shrink items-center gap-1.5 rounded-ctl px-1.5 text-ui text-ob-text-3 hover:bg-ob-hover hover:text-ob-text-2"
+            className="ob-transition -ml-2 flex h-7 min-w-0 max-w-[220px] shrink items-center gap-1.5 rounded-[2px] px-2 text-[12.5px] tracking-[-0.012em] text-t3 hover:bg-hov hover:text-t1"
             data-testid="parent-link"
           >
             <span className="truncate">{parent.title}</span>
           </button>
-          <ChevronRight size={13} aria-hidden className="shrink-0 text-ob-text-3" />
-          <Bot size={14} aria-hidden className="shrink-0 text-ob-violet" />
+          <ChevronRight size={12} aria-hidden className="-mx-1.5 shrink-0 text-t3" />
+          <Bot size={13} aria-hidden className="shrink-0 text-t3" />
         </>
       ) : null}
       <div className="flex min-w-0 shrink items-center">
         <EditableTitle session={session} />
       </div>
       {session.kind === 'scheduled' ? (
-        <Badge tone="accent" className="shrink-0">
+        <Badge tone="accent" variant="outline" className="shrink-0">
           Scheduled
         </Badge>
       ) : null}
       {session.permissionMode === 'bypassPermissions' ? (
         <Tooltip content="Bypass permissions: every tool runs without asking. Shift+Tab or the mode menu to change.">
           <span className="flex shrink-0" data-testid="bypass-badge">
-            <Badge tone="danger" icon={ShieldOff}>
+            <Badge tone="danger" variant="outline" icon={ShieldOff}>
               Bypass
             </Badge>
           </span>
         </Tooltip>
       ) : null}
-      <span className="mx-1 h-4 w-px shrink-0 bg-ob-border" aria-hidden />
       <Tooltip content={`${session.cwd} — click to start a session in another folder`}>
         <button
           type="button"
@@ -184,18 +175,21 @@ export function ChatHeader({ session, disposable }: { session: SessionSummary; d
           disabled={isSub}
           data-testid="cwd-chip"
           className={cn(
-            'ob-transition flex h-7 min-w-0 max-w-[260px] shrink items-center gap-1.5 rounded-ctl border border-ob-border bg-ob-surface-1 px-2 font-mono text-[11.5px] text-ob-text-2 hover:border-[#30414f] hover:text-ob-text',
+            'ob-transition flex h-[22px] min-w-0 max-w-[260px] shrink items-center gap-1.5 rounded-[1px] px-2 font-mono text-[10.5px] tracking-[-0.01em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] hover:bg-hov hover:text-t1',
             'disabled:pointer-events-none',
           )}
         >
-          <Folder size={12} aria-hidden className="shrink-0 text-ob-text-3" />
+          <Folder size={11} aria-hidden className="shrink-0 text-t3" />
           <span className="truncate @max-[600px]:hidden">{basename(session.cwd) || (homeDir && session.cwd) || session.cwd}</span>
         </button>
       </Tooltip>
       {branch ? (
         <Tooltip content={`Git branch: ${branch}`}>
-          <span className="flex h-7 min-w-0 max-w-[200px] shrink items-center gap-1.5 px-1 font-mono text-[11.5px] text-ob-text-3 @max-[680px]:hidden" data-testid="git-branch">
-            <GitBranch size={12} aria-hidden className="shrink-0" />
+          <span
+            className="flex h-[22px] min-w-0 max-w-[200px] shrink items-center gap-1.5 rounded-[1px] px-2 font-mono text-[10.5px] tracking-[-0.01em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] @max-[680px]:hidden"
+            data-testid="git-branch"
+          >
+            <GitBranch size={11} aria-hidden className="shrink-0 text-t3" />
             <span className="truncate">{branch}</span>
           </span>
         </Tooltip>

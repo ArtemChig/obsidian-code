@@ -3,7 +3,7 @@
 //   npx playwright test tests/e2e/ui-chat.spec.ts
 // Covers: send + stream, permission allow/deny by keyboard, question submit, plan approval, "/" and "@" palettes,
 // rewind dialog, error banner + retry, queued messages, interrupt, images, right panels. Saves design-review
-// screenshots to tests/e2e/screenshots/chat-*.png.
+// screenshots (M13 re-skin) to tests/e2e/screenshots/m13-chat-*.png.
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -59,7 +59,7 @@ async function waitIdle(page: Page, timeout = 30_000): Promise<void> {
 async function shot(page: Page, name: string): Promise<void> {
   await page.mouse.move(0, 0);
   await page.waitForTimeout(250);
-  await page.screenshot({ path: join(SHOTS, `chat-${name}.png`) });
+  await page.screenshot({ path: join(SHOTS, `m13-chat-${name}.png`) });
 }
 
 test.describe('ui-chat (demo mode)', () => {

@@ -32,14 +32,14 @@ export function ModelsSection() {
 // ───────────────────────────── Local server ─────────────────────────────
 
 function ProviderStatus({ provider, modelCount }: { provider?: ProviderInfo; modelCount: number }) {
-  if (!provider) return <span className="text-small text-ob-text-3">Not tested yet.</span>;
+  if (!provider) return <span className="text-small text-t3">Not tested yet.</span>;
   const tone = provider.status === 'online' ? 'success' : provider.status === 'error' ? 'danger' : provider.status === 'starting' ? 'warning' : 'neutral';
   return (
-    <div className="flex min-w-0 items-center gap-2 text-small" data-testid="provider-status" data-status={provider.status}>
+    <div className="flex min-w-0 items-center gap-2 text-[11.5px]" data-testid="provider-status" data-status={provider.status}>
       <StatusDot tone={tone} size={7} glow={provider.status === 'online'} />
-      <span className="font-medium capitalize text-ob-text-2">{provider.status}</span>
-      {provider.detail ? <span className="min-w-0 truncate text-ob-text-3">· {provider.detail}</span> : null}
-      {provider.status === 'online' ? <span className="shrink-0 text-ob-text-3">· {pluralize(modelCount, 'model')}</span> : null}
+      <span className="font-medium capitalize text-t2">{provider.status}</span>
+      {provider.detail ? <span className="min-w-0 truncate font-mono text-[10px] text-t3">· {provider.detail}</span> : null}
+      {provider.status === 'online' ? <span className="shrink-0 font-mono text-[10px] text-t3">· {pluralize(modelCount, 'model')}</span> : null}
     </div>
   );
 }
@@ -116,7 +116,7 @@ function CustomEndpoints() {
       }
     >
       {custom.length === 0 ? (
-        <div className="px-4 py-5 text-ui text-ob-text-3" data-testid="endpoint-empty">
+        <div className="py-3 text-[11.5px] text-t3" data-testid="endpoint-empty">
           No custom endpoints yet.
         </div>
       ) : (
@@ -124,15 +124,15 @@ function CustomEndpoints() {
           const p = providers.find((x) => x.id === `custom:${c.id}`);
           const hasKey = secrets[c.apiKeySecret ?? `custom.${c.id}.apiKey`];
           return (
-            <div key={c.id} className="flex items-center gap-3 px-4 py-3" data-testid="endpoint-row" data-id={c.id}>
+            <div key={c.id} className="ob-transition flex min-h-[42px] items-center gap-3 py-2 hover:bg-hov" data-testid="endpoint-row" data-id={c.id}>
               <StatusDot tone={p?.status === 'online' ? 'success' : p?.status === 'error' ? 'danger' : 'neutral'} size={7} glow={p?.status === 'online'} />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-ui font-medium text-ob-text">{c.label}</span>
+                  <span className="truncate text-[12.5px] font-medium tracking-[-0.016em] text-t1">{c.label}</span>
                   <SecretPresence present={hasKey} />
                   {c.models?.length ? <Badge tone="neutral">{pluralize(c.models.length, 'model')}</Badge> : null}
                 </div>
-                <span className="truncate font-mono text-[11.5px] text-ob-text-3" title={c.baseUrl}>
+                <span className="truncate font-mono text-[10px] tracking-[0.01em] text-t3" title={c.baseUrl}>
                   {c.baseUrl}
                   {p?.detail ? ` · ${p.detail}` : ''}
                 </span>

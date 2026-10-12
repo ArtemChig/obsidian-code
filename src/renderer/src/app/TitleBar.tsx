@@ -1,101 +1,60 @@
-// Custom title bar (40 px, draggable). Left block continues the sidebar column (app mark); right block shows only the
-// current view, or the current project (cwd folder) for a session — the session title and the right-panel toggle live
-// in the ChatHeader. ~140 px reserved for the Windows titleBarOverlay controls in Electron. Owner: ui-foundation.
-import { Folder, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
-import { IconButton } from '@renderer/components/ui/button';
+// Custom title bar (34 px, draggable) — reference .tbar: brand diamond + "OBSIDIAN CODE" (mono, tracked) on the left,
+// the document title centred ("<session> — <project>", or the view name). ~140 px reserved for the Windows
+// titleBarOverlay controls in Electron. Menus live in the menu strip below (MenuBar). Owner: ui-foundation.
+import { Fragment } from 'react';
 import { AppMark } from '@renderer/components/ui/app-mark';
-import { Shortcut } from '@renderer/components/ui/kbd';
 import { isElectron } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { basename } from '@renderer/lib/format';
-import { openPalette, toggleSidebar } from '@renderer/state/actions';
 import { useActiveSession } from '@renderer/state/selectors';
 import { ROUTE_TITLES, useUi } from '@renderer/state/ui';
-import { SHORTCUTS } from './shortcuts';
 
-/** The view name, or for an open session its project folder (full path in `path`). */
-function useViewTitle(): { title: string; path: string | null } {
+/** Document title parts: [session title, project folder] for an open session, otherwise [view name]. */
+function useDocTitle(): { parts: string[]; path: string | null } {
   const route = useUi((s) => s.route);
   const active = useActiveSession();
   if (route === 'session') {
-    if (!active) return { title: 'Home', path: null };
-    return { title: basename(active.cwd) || active.cwd, path: active.cwd };
+    if (!active) return { parts: ['Home'], path: null };
+    return { parts: [active.title || 'Untitled', basename(active.cwd) || active.cwd], path: active.cwd };
   }
-  return { title: ROUTE_TITLES[route], path: null };
+  return { parts: [ROUTE_TITLES[route]], path: null };
 }
 
 export function TitleBar() {
-  const collapsed = useUi((s) => s.sidebarCollapsed);
-  const { title, path } = useViewTitle();
+  const { parts, path } = useDocTitle();
   const electron = isElectron();
 
   return (
-    // In Electron the native controls overlay is exactly --ob-titlebar-h (40 px) tall and paints over everything under
+    // In Electron the native controls overlay is exactly --ob-titlebar-h (34 px) tall and paints over everything under
     // it, so the bar is 1 px taller there: its bottom hairline then runs unbroken beneath the window controls.
     <header
-      className={cn('ob-drag flex shrink-0 select-none items-stretch', electron ? 'h-[calc(var(--ob-titlebar-h)+1px)]' : 'h-[var(--ob-titlebar-h)]')}
+      className={cn(
+        'ob-drag relative flex shrink-0 select-none items-center border-b border-rule2 pl-[13px]',
+        electron ? 'h-[calc(var(--ob-titlebar-h)+1px)] pr-[var(--ob-window-controls-w)]' : 'h-[var(--ob-titlebar-h)] pr-3',
+      )}
       data-testid="titlebar"
     >
-      {/* Left: continues the sidebar column */}
-      <div
-        className={cn(
-          'flex shrink-0 items-center border-r border-ob-border bg-ob-surface-1',
-          collapsed ? 'w-[var(--ob-rail-w)] justify-center' : 'w-[var(--ob-sidebar-w)] justify-between pl-3.5 pr-1.5',
-        )}
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          <AppMark size={collapsed ? 20 : 18} />
-          {!collapsed ? (
-            <span data-testid="app-title" className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ob-text">
-              Obsidian Code
-            </span>
-          ) : (
-            <span data-testid="app-title" className="sr-only">
-              Obsidian Code
-            </span>
-          )}
-        </div>
-        {!collapsed ? (
-          <IconButton
-            className="ob-no-drag"
-            label="Collapse sidebar"
-            shortcut={SHORTCUTS.sidebar}
-            icon={PanelLeftClose}
-            size="md"
-            tooltipSide="bottom"
-            onClick={() => toggleSidebar(false)}
-          />
-        ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        <AppMark size={12} />
+        <span data-testid="app-title" className="font-mono text-[9.5px] font-semibold uppercase leading-none tracking-[0.24em] text-t1">
+          Obsidian Code
+        </span>
       </div>
 
-      {/* Right: view title + actions */}
-      <div className={cn('flex min-w-0 flex-1 items-center gap-3 border-b border-ob-border pl-4', electron ? 'pr-[var(--ob-window-controls-w)]' : 'pr-2')}>
-        {collapsed ? (
-          <IconButton
-            className="ob-no-drag -ml-2"
-            label="Expand sidebar"
-            shortcut={SHORTCUTS.sidebar}
-            icon={PanelLeftOpen}
-            size="md"
-            tooltipSide="bottom"
-            onClick={() => toggleSidebar(true)}
-          />
-        ) : null}
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-ui" data-testid="view-title" title={path ?? undefined}>
-          {path ? <Folder size={13} aria-hidden className="shrink-0 text-ob-text-3" /> : null}
-          <span className={cn('truncate', path ? 'text-ob-text-2' : 'font-medium text-ob-text')}>{title}</span>
+      {/* Centred document title (the window is the drag region, so this never takes the pointer). */}
+      <div className="pointer-events-none absolute inset-x-[220px] flex justify-center">
+        <div data-testid="view-title" title={path ?? undefined} className="truncate text-[11.5px] tracking-[-0.008em] text-t2">
+          {parts.map((p, i) => (
+            <Fragment key={i}>
+              {i > 0 ? (
+                <span aria-hidden className="mx-[7px] text-t3 opacity-55">
+                  —
+                </span>
+              ) : null}
+              {p}
+            </Fragment>
+          ))}
         </div>
-
-        <button
-          type="button"
-          onClick={() => openPalette()}
-          data-testid="palette-trigger"
-          className="ob-no-drag ob-transition flex h-7 w-[min(300px,28vw)] shrink-0 items-center gap-2 rounded-[7px] border border-ob-border bg-ob-surface-1 pl-2.5 pr-1.5 text-small text-ob-text-3 hover:border-[#2f404e] hover:text-ob-text-2"
-        >
-          <Search size={13} aria-hidden />
-          <span className="flex-1 truncate text-left">Search or run a command</span>
-          <Shortcut keys={SHORTCUTS.palette} />
-        </button>
       </div>
     </header>
   );

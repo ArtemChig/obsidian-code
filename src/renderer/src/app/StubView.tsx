@@ -12,7 +12,7 @@ export function StubView({ title, owner, icon = Construction, detail }: { title:
         title={title}
         description={detail ?? `This view is being built by ${owner}.`}
         action={
-          <Badge tone="warning" mono>
+          <Badge tone="warning" variant="outline">
             stub
           </Badge>
         }

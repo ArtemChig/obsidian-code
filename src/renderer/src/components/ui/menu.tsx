@@ -1,4 +1,5 @@
-// DropdownMenu + ContextMenu (Radix), sharing one look. Owner: ui-foundation.
+// DropdownMenu + ContextMenu (Radix), sharing one look. M13: --s0 surface, 1 px --line, separation shadow,
+// 28 px rows, highlighted row on --s3, shortcuts as quiet mono. Owner: ui-foundation.
 import * as RCM from '@radix-ui/react-context-menu';
 import * as RDM from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronRight } from 'lucide-react';
@@ -7,13 +8,13 @@ import type { LucideIcon } from 'lucide-react';
 import { cn } from '@renderer/lib/cn';
 import { Shortcut } from './kbd';
 
-const CONTENT = 'ob-popover z-[90] min-w-[188px] p-1 text-ui animate-ob-pop-in focus-visible:outline-none';
-const ITEM =
-  'relative flex h-7 cursor-default select-none items-center gap-2 rounded-[5px] px-2 text-ob-text outline-none ' +
-  'data-[highlighted]:bg-[rgba(236,240,241,0.07)] data-[disabled]:pointer-events-none data-[disabled]:opacity-40';
-const DANGER = 'text-ob-danger data-[highlighted]:bg-ob-danger-soft';
-const SEPARATOR = '-mx-1 my-1 h-px bg-ob-border';
-const LABEL = 'ob-section-label px-2 pb-1 pt-1.5';
+export const MENU_CONTENT = 'ob-popover z-[90] min-w-[200px] p-1 text-[12px] animate-ob-pop-in focus-visible:outline-none';
+export const MENU_ITEM =
+  'relative flex h-7 cursor-default select-none items-center gap-2.5 rounded-[2px] px-2.5 tracking-[-0.01em] text-t2 outline-none ' +
+  'data-[highlighted]:bg-s3 data-[highlighted]:text-t1 data-[disabled]:pointer-events-none data-[disabled]:opacity-40';
+const DANGER = 'text-err data-[highlighted]:bg-err-wash data-[highlighted]:text-err';
+const SEPARATOR = '-mx-1 my-1 h-px bg-rule';
+const LABEL = 'ob-cap px-2.5 pb-1 pt-2';
 
 export interface MenuItemExtras {
   icon?: LucideIcon;
@@ -30,11 +31,11 @@ export interface MenuItemExtras {
 function ItemInner({ icon: Icon, leading, trailing, shortcut, hint, children, danger }: MenuItemExtras & { children: ReactNode }) {
   return (
     <>
-      {leading ?? (Icon ? <Icon size={14} aria-hidden className={cn('shrink-0', danger ? 'text-ob-danger' : 'text-ob-text-3')} /> : null)}
+      {leading ?? (Icon ? <Icon size={13} aria-hidden className={cn('shrink-0', danger ? 'text-err' : 'text-t3')} /> : null)}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {hint ? <span className="truncate text-small text-ob-text-3">{hint}</span> : null}
+      {hint ? <span className="truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{hint}</span> : null}
       {trailing ? <span className="flex shrink-0 items-center gap-1.5">{trailing}</span> : null}
-      {shortcut ? <Shortcut keys={shortcut} className="ml-3 opacity-80" /> : null}
+      {shortcut ? <Shortcut keys={shortcut} plain className="ml-4" /> : null}
     </>
   );
 }
@@ -50,14 +51,14 @@ export const DropdownMenuRadioGroup = RDM.RadioGroup;
 export function DropdownMenuContent({ className, sideOffset = 4, align = 'start', ...rest }: ComponentProps<typeof RDM.Content>) {
   return (
     <RDM.Portal>
-      <RDM.Content sideOffset={sideOffset} align={align} collisionPadding={8} className={cn(CONTENT, className)} {...rest} />
+      <RDM.Content sideOffset={sideOffset} align={align} collisionPadding={8} className={cn(MENU_CONTENT, className)} {...rest} />
     </RDM.Portal>
   );
 }
 
 export function DropdownMenuItem({ icon, leading, trailing, shortcut, danger, hint, className, children, ...rest }: ComponentProps<typeof RDM.Item> & MenuItemExtras) {
   return (
-    <RDM.Item className={cn(ITEM, danger && DANGER, className)} {...rest}>
+    <RDM.Item className={cn(MENU_ITEM, danger && DANGER, className)} {...rest}>
       <ItemInner icon={icon} leading={leading} trailing={trailing} shortcut={shortcut} hint={hint} danger={danger}>
         {children}
       </ItemInner>
@@ -67,9 +68,9 @@ export function DropdownMenuItem({ icon, leading, trailing, shortcut, danger, hi
 
 export function DropdownMenuCheckboxItem({ className, children, ...rest }: ComponentProps<typeof RDM.CheckboxItem>) {
   return (
-    <RDM.CheckboxItem className={cn(ITEM, 'pl-7', className)} {...rest}>
-      <RDM.ItemIndicator className="absolute left-2 flex items-center text-ob-accent">
-        <Check size={14} aria-hidden />
+    <RDM.CheckboxItem className={cn(MENU_ITEM, 'pl-[30px]', className)} {...rest}>
+      <RDM.ItemIndicator className="absolute left-2.5 flex items-center text-t1">
+        <Check size={13} aria-hidden />
       </RDM.ItemIndicator>
       {children}
     </RDM.CheckboxItem>
@@ -78,9 +79,9 @@ export function DropdownMenuCheckboxItem({ className, children, ...rest }: Compo
 
 export function DropdownMenuRadioItem({ className, children, ...rest }: ComponentProps<typeof RDM.RadioItem>) {
   return (
-    <RDM.RadioItem className={cn(ITEM, 'pl-7', className)} {...rest}>
-      <RDM.ItemIndicator className="absolute left-2 flex items-center text-ob-accent">
-        <Check size={14} aria-hidden />
+    <RDM.RadioItem className={cn(MENU_ITEM, 'pl-[30px]', className)} {...rest}>
+      <RDM.ItemIndicator className="absolute left-2.5 flex items-center text-t1">
+        <Check size={13} aria-hidden />
       </RDM.ItemIndicator>
       {children}
     </RDM.RadioItem>
@@ -97,9 +98,9 @@ export function DropdownMenuLabel({ className, ...rest }: ComponentProps<typeof 
 
 export function DropdownMenuSubTrigger({ icon, className, children, ...rest }: ComponentProps<typeof RDM.SubTrigger> & { icon?: LucideIcon }) {
   return (
-    <RDM.SubTrigger className={cn(ITEM, 'data-[state=open]:bg-[rgba(236,240,241,0.07)]', className)} {...rest}>
+    <RDM.SubTrigger className={cn(MENU_ITEM, 'data-[state=open]:bg-s3 data-[state=open]:text-t1', className)} {...rest}>
       <ItemInner icon={icon}>{children}</ItemInner>
-      <ChevronRight size={14} aria-hidden className="text-ob-text-3" />
+      <ChevronRight size={12} aria-hidden className="text-t3" />
     </RDM.SubTrigger>
   );
 }
@@ -107,7 +108,7 @@ export function DropdownMenuSubTrigger({ icon, className, children, ...rest }: C
 export function DropdownMenuSubContent({ className, ...rest }: ComponentProps<typeof RDM.SubContent>) {
   return (
     <RDM.Portal>
-      <RDM.SubContent sideOffset={6} collisionPadding={8} className={cn(CONTENT, className)} {...rest} />
+      <RDM.SubContent sideOffset={6} collisionPadding={8} className={cn(MENU_CONTENT, className)} {...rest} />
     </RDM.Portal>
   );
 }
@@ -121,14 +122,14 @@ export const ContextMenuGroup = RCM.Group;
 export function ContextMenuContent({ className, ...rest }: ComponentProps<typeof RCM.Content>) {
   return (
     <RCM.Portal>
-      <RCM.Content collisionPadding={8} className={cn(CONTENT, className)} {...rest} />
+      <RCM.Content collisionPadding={8} className={cn(MENU_CONTENT, className)} {...rest} />
     </RCM.Portal>
   );
 }
 
 export function ContextMenuItem({ icon, leading, trailing, shortcut, danger, hint, className, children, ...rest }: ComponentProps<typeof RCM.Item> & MenuItemExtras) {
   return (
-    <RCM.Item className={cn(ITEM, danger && DANGER, className)} {...rest}>
+    <RCM.Item className={cn(MENU_ITEM, danger && DANGER, className)} {...rest}>
       <ItemInner icon={icon} leading={leading} trailing={trailing} shortcut={shortcut} hint={hint} danger={danger}>
         {children}
       </ItemInner>

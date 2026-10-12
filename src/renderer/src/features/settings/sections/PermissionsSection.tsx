@@ -37,8 +37,8 @@ export function PermissionsSection() {
         testId="settings-allow"
         description={
           <>
-            Written as <code className="font-mono text-[11px] text-ob-text-2">Tool</code> or <code className="font-mono text-[11px] text-ob-text-2">Tool(argument)</code>: <code className="font-mono text-[11px] text-ob-text-2">Bash(npm test:*)</code>,{' '}
-            <code className="font-mono text-[11px] text-ob-text-2">WebFetch(domain:docs.vast.ai)</code>, <code className="font-mono text-[11px] text-ob-text-2">Edit(src/**)</code>.
+            Written as <code className="font-mono text-[10px] text-t2">Tool</code> or <code className="font-mono text-[10px] text-t2">Tool(argument)</code>: <code className="font-mono text-[10px] text-t2">Bash(npm test:*)</code>,{' '}
+            <code className="font-mono text-[10px] text-t2">WebFetch(domain:docs.vast.ai)</code>, <code className="font-mono text-[10px] text-t2">Edit(src/**)</code>.
           </>
         }
         flush

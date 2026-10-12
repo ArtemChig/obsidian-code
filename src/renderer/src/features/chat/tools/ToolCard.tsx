@@ -1,4 +1,4 @@
-// Tool call card: one-line header (icon · verb · target · meta · status) + rich, collapsible body. Owner: ui-chat.
+// Tool call row (M13): status dot · mono verb · target · meta, then a rich, collapsible body in an --s1 well. Owner: ui-chat.
 import {
   Bot,
   CalendarClock,
@@ -117,7 +117,7 @@ function toolBody(tool: ToolUseBlock, cwd: string): ReactNode {
   const content = tool.result.content ?? '';
   const isError = !!tool.result.isError || tool.status === 'error';
   if (tool.status === 'denied' || tool.status === 'interrupted') {
-    return content ? <div className="px-3.5 py-2.5 text-small text-ob-text-3">{content}</div> : null;
+    return content ? <div className="px-3.5 py-2.5 text-[11.5px] text-t3">{content}</div> : null;
   }
   if (isError && (!d || d.kind === 'list' || d.kind === 'file')) return <RawBody text={content} error />;
 
@@ -162,7 +162,7 @@ function toolBody(tool: ToolUseBlock, cwd: string): ReactNode {
     return (
       <>
         <InputJson input={input} />
-        <div className="border-t border-ob-border">
+        <div className="border-t border-rule">
           <RawBody text={content} error={isError} />
         </div>
       </>
@@ -190,7 +190,6 @@ function GenericToolCard({ tool, cwd, className }: ToolCardProps) {
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? defaultExpanded(tool);
   const s = toolSummary(tool, cwd);
-  const Icon = toolIcon(tool.name);
   // Creating the body elements is cheap (nothing renders until it is mounted) and tells us if there is anything to expand.
   const body = toolBody(tool, cwd);
   const expandable = body !== null;
@@ -207,87 +206,84 @@ function GenericToolCard({ tool, cwd, className }: ToolCardProps) {
       : tool.status === 'done' && d?.kind === 'bash' && d.exitCode !== null && d.exitCode !== 0
         ? 'error'
         : tool.status;
+  const stat = s.meta && /^\+\d+ −\d+$/.test(s.meta) ? s.meta.split(' ') : null;
 
+  // M13: no card, no frame. A 28 px row on a sub-hairline (status dot · mono verb · title in ink · mono meta · chevron);
+  // the body opens below it in an --s1 well with one hairline.
   return (
-    <div
-      data-testid="tool-card"
-      data-tool={tool.name}
-      data-status={tool.status}
-      className={cn(
-        'overflow-hidden rounded-[9px] border bg-ob-surface-1',
-        tool.status === 'awaiting_permission' || awaiting ? 'border-[rgba(232,184,92,0.38)]' : tool.status === 'error' ? 'border-[rgba(240,113,120,0.3)]' : 'border-ob-border',
-        className,
-      )}
-    >
-      <div className="group/header flex items-center">
-      <button
-        type="button"
-        onClick={() => setUserOpen(!open)}
-        aria-expanded={open}
-        disabled={!expandable}
-        className="ob-transition group flex h-9 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-2.5 text-left hover:bg-ob-hover disabled:hover:bg-transparent"
-      >
-        <Icon size={15} aria-hidden className={cn('shrink-0', live ? 'text-ob-accent' : 'text-ob-text-3')} />
-        <span className="shrink-0 text-ui font-medium text-ob-text">{s.verb}</span>
-        {s.target ? (
-          <span className={cn('min-w-0 flex-1 truncate', s.mono ? 'font-mono text-[12px] text-ob-text-2' : 'text-ui text-ob-text-2')} title={s.target}>
-            {s.target}
+    <div data-testid="tool-card" data-tool={tool.name} data-status={tool.status} className={cn('min-w-0 border-b border-rule2', className)}>
+      <div className={cn('ob-transition group/header -mx-2 flex items-center px-2', expandable && 'hover:bg-hov')}>
+        <button
+          type="button"
+          onClick={() => setUserOpen(!open)}
+          aria-expanded={open}
+          disabled={!expandable}
+          className="group flex h-7 min-w-0 flex-1 items-center gap-2.5 text-left"
+        >
+          <Tooltip content={iconStatus === 'error' && tool.status === 'done' ? 'Exited with an error' : STATUS_LABEL[iconStatus]}>
+            <span className="flex shrink-0 items-center">
+              <ToolStatusIcon status={iconStatus} size={10} />
+            </span>
+          </Tooltip>
+          <span className="min-w-[84px] max-w-[168px] shrink-0 truncate whitespace-nowrap font-mono text-[9px] font-medium uppercase leading-none tracking-[0.16em] text-t3" title={s.verb}>
+            {s.verb}
           </span>
-        ) : (
-          <span className="flex-1" />
-        )}
-        {s.meta ? (
-          <span
-            className={cn(
-              'ob-tabular shrink-0 font-mono text-[11px]',
-              s.metaTone === 'success' && 'text-ob-success',
-              s.metaTone === 'danger' && 'text-ob-danger',
-              s.metaTone === 'warning' && 'text-ob-warning',
-              (!s.metaTone || s.metaTone === 'neutral') && 'text-ob-text-3',
-              /^\+\d+ −\d+$/.test(s.meta) && 'text-ob-text-3',
-            )}
-          >
-            {/^\+\d+ −\d+$/.test(s.meta) ? (
-              <>
-                <span className="text-ob-success">{s.meta.split(' ')[0]}</span> <span className="text-ob-danger">{s.meta.split(' ')[1]}</span>
-              </>
-            ) : (
-              s.meta
-            )}
-          </span>
+          {s.target ? (
+            <span
+              className={cn('min-w-0 flex-1 truncate text-t1', s.mono ? 'font-mono text-[11.5px] tracking-[-0.02em]' : 'text-[12.5px] tracking-[-0.012em]')}
+              title={s.target}
+            >
+              {s.target}
+            </span>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {s.meta ? (
+            <span
+              className={cn(
+                'ob-tabular shrink-0 font-mono text-[10px] tracking-[-0.01em]',
+                s.metaTone === 'success' && 'text-ok',
+                s.metaTone === 'danger' && 'text-err',
+                s.metaTone === 'warning' && 'text-warn',
+                (!s.metaTone || s.metaTone === 'neutral' || stat) && 'text-t3',
+              )}
+            >
+              {stat ? (
+                <>
+                  <span className="text-ok">{stat[0]}</span> <span className="text-err">{stat[1]}</span>
+                </>
+              ) : (
+                s.meta
+              )}
+            </span>
+          ) : null}
+          {live && tool.startedAt ? <Elapsed since={tool.startedAt} className="shrink-0 font-mono text-[10px] text-live" /> : null}
+          {!live && ms !== null && ms >= 1000 && !flagged ? <span className="ob-tabular shrink-0 font-mono text-[10px] text-t3">{formatDuration(ms)}</span> : null}
+          {flagged ? (
+            <span
+              className={cn(
+                'shrink-0 font-mono text-[8.5px] font-medium uppercase tracking-[0.14em]',
+                awaiting || tool.status === 'awaiting_permission' || tool.status === 'interrupted'
+                  ? 'text-warn'
+                  : tool.status === 'pending'
+                    ? 'text-t3'
+                    : 'text-err',
+              )}
+            >
+              {awaiting && tool.status === 'running' ? 'Waiting for you' : STATUS_LABEL[tool.status]}
+            </span>
+          ) : null}
+          <ChevronRight
+            size={13}
+            aria-hidden
+            className={cn('-mr-0.5 shrink-0 text-t3 transition-transform duration-150', open && 'rotate-90', !expandable && 'opacity-0')}
+          />
+        </button>
+        {filePath && tool.status === 'done' ? (
+          <FileActions path={filePath} cwd={cwd} className="pl-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/header:opacity-100" />
         ) : null}
-        {live && tool.startedAt ? <Elapsed since={tool.startedAt} className="shrink-0 font-mono text-[11px] text-ob-text-3" /> : null}
-        {!live && ms !== null && ms >= 1000 && !flagged ? <span className="shrink-0 font-mono text-[11px] text-ob-text-3">{formatDuration(ms)}</span> : null}
-        {flagged ? (
-          <span
-            className={cn(
-              'shrink-0 text-small',
-              awaiting || tool.status === 'awaiting_permission' || tool.status === 'interrupted'
-                ? 'text-ob-warning'
-                : tool.status === 'pending'
-                  ? 'text-ob-text-3'
-                  : 'text-ob-danger',
-            )}
-          >
-            {awaiting && tool.status === 'running' ? 'Waiting for you' : STATUS_LABEL[tool.status]}
-          </span>
-        ) : null}
-        <Tooltip content={iconStatus === 'error' && tool.status === 'done' ? 'Exited with an error' : STATUS_LABEL[iconStatus]}>
-          <span className="flex shrink-0 items-center">
-            <ToolStatusIcon status={iconStatus} size={13} />
-          </span>
-        </Tooltip>
-        <ChevronRight
-          size={14}
-          aria-hidden
-          className={cn('-mr-0.5 shrink-0 text-ob-text-3 transition-transform duration-150', open && 'rotate-90', !expandable && 'opacity-0')}
-        />
-      </button>
-      {filePath && tool.status === 'done' ? (
-        <FileActions path={filePath} cwd={cwd} className="pr-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/header:opacity-100" />
-      ) : null}
       </div>
-      {open && body ? <div className="border-t border-ob-border animate-ob-fade-in">{body}</div> : null}
+      {open && body ? <div className="mb-2.5 mt-0.5 overflow-hidden rounded-[2px] border border-rule bg-s1 animate-ob-fade-in">{body}</div> : null}
     </div>
   );
 }

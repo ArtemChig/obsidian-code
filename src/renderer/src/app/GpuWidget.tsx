@@ -1,4 +1,5 @@
 // Sidebar GPU widget + compact rail dot: status, model, $/h, live timer, Clock in/out. Owner: ui-foundation.
+// M13: no card — a hairline-separated block with a status dot, mono numbers and a --rec dot while money is being spent.
 import { Cpu, Power } from 'lucide-react';
 import { useEffect } from 'react';
 import type { GpuPhase, GpuStatus } from '@shared/types';
@@ -6,7 +7,6 @@ import { Button, IconButton } from '@renderer/components/ui/button';
 import { ProgressBar, StatusDot, type Tone } from '@renderer/components/ui/feedback';
 import { LiveDuration, useNow } from '@renderer/components/ui/time';
 import { Tooltip } from '@renderer/components/ui/tooltip';
-import { cn } from '@renderer/lib/cn';
 import { formatMoney, formatPerHour } from '@renderer/lib/format';
 import { clockIn, clockOut, defaultGpuProfileId, loadGpuCatalog, navigate, requestClockOut } from '@renderer/state/actions';
 import { useConnection } from '@renderer/state/connection';
@@ -32,7 +32,7 @@ export function gpuTone(phase: GpuPhase | undefined): Tone {
   if (phase === 'ready') return 'success';
   if (phase === 'error') return 'danger';
   if (phase === 'stopping') return 'warning';
-  return 'accent';
+  return 'violet'; // in flight = live
 }
 
 /** Live session cost: price × elapsed (per-second billing), falling back to the reported value. */
@@ -95,37 +95,27 @@ export function GpuWidget() {
   const month = (status?.monthCost ?? 0) + (on ? cost : 0);
 
   return (
-    <div
-      data-testid="gpu-widget"
-      className={cn(
-        'mx-2 mb-2 rounded-[10px] border p-2.5 ob-transition',
-        phase === 'ready'
-          ? 'border-[rgba(95,211,154,0.22)] bg-[linear-gradient(180deg,rgba(95,211,154,0.07),rgba(95,211,154,0.02))]'
-          : phase === 'error'
-            ? 'border-[rgba(240,113,120,0.3)] bg-ob-danger-soft'
-            : 'border-ob-border bg-ob-bg/60',
-      )}
-    >
-      <div className="flex items-center gap-2">
+    <div data-testid="gpu-widget" className="border-t border-rule2 px-4 pb-3.5 pt-3">
+      <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => navigate('gpu')}
-          className="ob-transition -m-1 flex min-w-0 flex-1 items-center gap-2 rounded-[6px] p-1 text-left hover:bg-ob-hover"
+          className="ob-transition -mx-1 flex min-w-0 items-center gap-2 rounded-[2px] px-1 py-0.5 text-left hover:bg-hov"
           aria-label="Open GPU view"
         >
           <StatusDot tone={gpuTone(phase)} pulse={inProgress} glow={phase === 'ready'} />
-          <span className="min-w-0 truncate text-small font-medium text-ob-text">
+          <span className="min-w-0 truncate text-[12.5px] font-medium tracking-[-0.016em] text-t1">
             {phase === 'off' ? 'GPU off' : phase === 'ready' ? (status?.gpuName ?? 'GPU ready') : GPU_PHASE_LABEL[phase]}
           </span>
         </button>
         {on && status?.clockedInAt ? (
-          <LiveDuration since={status.clockedInAt} className="font-mono text-[11px] text-ob-text-2" />
+          <LiveDuration since={status.clockedInAt} className="shrink-0 font-mono text-[11px] tracking-[-0.02em] text-t1" />
         ) : (
-          <span className="font-mono text-[11px] text-ob-text-3">{profile?.label ?? ''}</span>
+          <span className="ob-cap truncate">{profile?.label ?? 'GPU'}</span>
         )}
       </div>
 
-      <div className="mt-1.5 truncate pl-[15px] text-small text-ob-text-3" title={status?.message}>
+      <div className="mt-1 truncate pl-[14px] font-mono text-[9.5px] leading-[14px] tracking-[0.01em] text-t3" title={status?.message}>
         {phase === 'off' && status?.orphanInstanceIds?.length
           ? `${status.orphanInstanceIds.length} instance${status.orphanInstanceIds.length === 1 ? '' : 's'} may still be billing — open the GPU view`
           : phase === 'off'
@@ -137,27 +127,32 @@ export function GpuWidget() {
 
       {inProgress && phase !== 'stopping' ? (
         <ProgressBar
-          className="mt-2"
+          className="mt-2.5"
           size="xs"
+          tone="violet"
           value={phase === 'downloading' || phase === 'loading' ? (status?.progress ?? null) : null}
           label={GPU_PHASE_LABEL[phase]}
         />
       ) : null}
 
-      <div className="mt-2.5 flex items-center justify-between gap-2">
-        <div className="min-w-0 font-mono text-[11px] leading-4 text-ob-text-2">
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] leading-4 tracking-[-0.01em] text-t2">
           {on ? (
-            <span className="ob-tabular">
-              {formatPerHour(status?.pricePerHour)} <span className="text-ob-text-3">·</span> {formatMoney(cost)}
-            </span>
+            <>
+              <span aria-hidden className="size-[5px] shrink-0 rounded-full bg-rec" title="Billing" />
+              <span className="ob-tabular truncate">
+                <span className="text-t1">{formatPerHour(status?.pricePerHour)}</span> <span className="text-t3">·</span>{' '}
+                <span className="text-t1">{formatMoney(cost)}</span>
+              </span>
+            </>
           ) : (
-            <span className="ob-tabular" title="Spent this month / monthly budget">
+            <span className="ob-tabular truncate" title="Spent this month / monthly budget">
               {status ? (
                 <>
-                  {formatMoney(month)} <span className="text-ob-text-3">/ {formatMoney(budget)}</span>
+                  <span className="text-t1">{formatMoney(month)}</span> <span className="text-t3">/ {formatMoney(budget)}</span>
                 </>
               ) : (
-                <span className="text-ob-text-3">{gpuLoadFailed ? 'Status unavailable' : 'Not connected'}</span>
+                <span className="text-t3">{gpuLoadFailed ? 'Status unavailable' : 'Not connected'}</span>
               )}
             </span>
           )}
@@ -167,7 +162,6 @@ export function GpuWidget() {
           variant={on || trackedInError ? 'danger' : 'primary'}
           loading={busy || phase === 'stopping'}
           icon={Power}
-          className="h-[26px] px-2"
           data-testid="gpu-clock-button"
           onClick={() => void gpuPrimaryAction(status, hasApiKey)}
         >
@@ -186,7 +180,7 @@ export function GpuRailButton() {
     <Tooltip content={`GPU · ${GPU_PHASE_LABEL[phase]}${status?.pricePerHour && phase !== 'off' ? ` · ${formatPerHour(status.pricePerHour)}` : ''}`} side="right">
       <span className="relative">
         <IconButton label="GPU" noTooltip icon={Cpu} size="lg" onClick={() => navigate('gpu')} />
-        <StatusDot tone={gpuTone(phase)} pulse={GPU_BUSY_PHASES.has(phase)} size={6} className="pointer-events-none absolute right-1 top-1 ring-2 ring-ob-surface-1" />
+        <StatusDot tone={gpuTone(phase)} pulse={GPU_BUSY_PHASES.has(phase)} size={6} className="pointer-events-none absolute right-1 top-1 ring-2 ring-s0" />
       </span>
     </Tooltip>
   );

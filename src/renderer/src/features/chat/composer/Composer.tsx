@@ -1,6 +1,6 @@
 // Composer: auto-growing textarea, "/" command palette, "@" file palette, image paste/drop, permission mode,
 // thinking toggle, model picker, Send / Stop. Owner: ui-chat.
-import { ArrowUp, Brain, Clock, FileCode, Folder, Paperclip, Square, SquareSlash, TriangleAlert, X } from 'lucide-react';
+import { ArrowUp, Clock, FileCode, Folder, Paperclip, Square, Terminal, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import type { SessionSummary, SlashCommandInfo } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -16,7 +16,7 @@ import { useSettings } from '@renderer/state/settings';
 import { fuzzyRank } from '../lib/fuzzy';
 import { applyCompletion, detectTrigger, mentionFor, nextPermissionMode, slashInsert, type Trigger } from '../lib/composer';
 import { restoreToDraft, setAttachments, setDraft, stopTurn, useChatLocal } from '../state';
-import { ImageLightbox, ImageThumb } from '../ui';
+import { ImageLightbox, ImageThumb, ToolbarValue } from '../ui';
 import { addImageFiles, filesFrom, removeAttachment } from './attachments';
 import { ModeSelector } from './ModeSelector';
 import { ModelNotice } from './ModelNotice';
@@ -91,7 +91,7 @@ function textWidth(text: string, el: HTMLElement | null): number {
   if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
   if (!measureCtx) return text.length * 8;
   const cs = el ? window.getComputedStyle(el) : null;
-  measureCtx.font = cs ? `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}` : '400 14.5px "IBM Plex Sans"';
+  measureCtx.font = cs ? `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}` : '400 13.5px "Chivo"';
   return measureCtx.measureText(text).width;
 }
 
@@ -107,7 +107,7 @@ function ArgHint({ text, commands }: { text: string; commands: SlashCommandInfo[
       ref={ref}
       aria-hidden
       data-testid="arg-hint"
-      className="pointer-events-none absolute top-3 truncate font-mono text-[12.5px] leading-[22px] text-ob-text-3"
+      className="pointer-events-none absolute top-3 truncate font-mono text-[12px] leading-[22px] text-t3"
       style={{ left, maxWidth: `calc(100% - ${left + 16}px)` }}
     >
       {cmd.argumentHint}
@@ -117,8 +117,8 @@ function ArgHint({ text, commands }: { text: string; commands: SlashCommandInfo[
 
 function Hint({ k, label }: { k: string; label: string }) {
   return (
-    <span className="flex items-center gap-1 whitespace-nowrap">
-      <span className="font-mono text-[10.5px] text-ob-text-2">{k}</span>
+    <span className="flex items-center gap-1.5 whitespace-nowrap">
+      <span className="text-t2">{k}</span>
       <span>{label}</span>
     </span>
   );
@@ -331,13 +331,13 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
           {queued.map((q) => (
             <span
               key={q.messageId}
-              className="flex max-w-full items-center gap-1.5 rounded-pill border border-ob-border bg-ob-surface-1 py-0.5 pl-2 pr-1 text-small text-ob-text-2 animate-ob-fade-in"
+              className="flex h-6 max-w-full items-center gap-2 rounded-[2px] pl-2 pr-0.5 text-[11.5px] tracking-[-0.008em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] animate-ob-fade-in"
               data-testid="queued-chip"
             >
               <Tooltip content="Sent automatically after the current turn">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <Clock size={12} aria-hidden className="shrink-0 text-ob-accent" />
-                  <span className="text-ob-text-3">Queued</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <Clock size={11} aria-hidden className="shrink-0 text-t3" />
+                  <span className="font-mono text-[8.5px] font-medium uppercase tracking-[0.16em] text-t3">Queued</span>
                   <span className="min-w-0 truncate">{truncate(q.text.replace(/\s+/g, ' '), 90)}</span>
                 </span>
               </Tooltip>
@@ -370,13 +370,13 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
           items={slashItems.map(
             (c): PaletteItem => ({
               key: c.name,
-              icon: <SquareSlash size={14} aria-hidden />,
-              label: <span className="font-mono text-[12.5px]">/{c.name}</span>,
+              icon: <Terminal size={13} aria-hidden />,
+              label: <span className="font-mono text-[11.5px] tracking-[-0.02em]">/{c.name}</span>,
               hint: c.argumentHint,
               description: c.description,
               trailing:
                 c.source !== 'builtin' ? (
-                  <Badge tone={c.source === 'project' ? 'accent' : 'neutral'} mono>
+                  <Badge tone={c.source === 'project' ? 'accent' : 'neutral'} variant="outline">
                     {c.source}
                   </Badge>
                 ) : undefined,
@@ -400,7 +400,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
             const dir = dirname(norm);
             return {
               key: f,
-              icon: isDir ? <Folder size={14} aria-hidden /> : <FileCode size={14} aria-hidden />,
+              icon: isDir ? <Folder size={13} aria-hidden /> : <FileCode size={13} aria-hidden />,
               label: basename(norm),
               hint: dir && dir !== norm ? dir : undefined,
             };
@@ -409,64 +409,68 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
       ) : null}
 
       <ModelNotice model={session.model} className="mb-2" />
+      {/* M13 input well: --s1 + 1 px --line (focus → --acc; bypass mode → --err), 2 px radius. Toolbar on a hairline. */}
       <div
         className={cn(
-          'ob-transition rounded-[14px] border bg-ob-surface-1',
-          focused ? 'border-[rgba(143,184,222,0.42)] shadow-[0_0_0_4px_rgba(143,184,222,0.06)]' : 'border-ob-border',
-          session.permissionMode === 'bypassPermissions' && 'border-[rgba(240,113,120,0.35)]',
+          'ob-transition rounded-[2px] bg-s1',
+          session.permissionMode === 'bypassPermissions'
+            ? 'shadow-[inset_0_0_0_1px_var(--err)]'
+            : focused
+              ? 'shadow-[inset_0_0_0_1px_var(--acc)]'
+              : 'shadow-[inset_0_0_0_1px_var(--line)]',
         )}
       >
         {images.length ? (
-          <div className="flex flex-wrap items-center gap-2.5 px-3.5 pt-3" data-testid="attachments">
+          <div className="flex flex-wrap items-center gap-2.5 px-4 pt-3" data-testid="attachments">
             {images.map((img, i) => (
               <ImageThumb key={`${img.name}-${i}`} image={img} size={56} onRemove={() => removeAttachment(sessionId, i)} onOpen={() => setLightbox(img)} />
             ))}
             {visionWarning ? (
-              <span className="flex items-center gap-1.5 text-small text-ob-warning">
-                <TriangleAlert size={13} aria-hidden />
+              <span className="flex items-center gap-1.5 text-[11.5px] text-warn">
+                <TriangleAlert size={12} aria-hidden />
                 {model?.label ?? 'This model'} can't see images
               </span>
             ) : null}
           </div>
         ) : null}
         <div className="relative">
-        <Textarea
-          ref={ta}
-          bare
-          minRows={2}
-          maxRows={14}
-          value={text}
-          data-composer-input=""
-          data-testid="composer-input"
-          aria-label="Message"
-          role="combobox"
-          aria-expanded={paletteOpen}
-          aria-controls={paletteOpen ? listId : undefined}
-          aria-autocomplete="list"
-          aria-activedescendant={paletteOpen && count ? optionId(listId, active) : undefined}
-          placeholder={placeholder}
-          onChange={(e) => {
-            setText(e.target.value);
-            setCaret(e.target.selectionStart ?? e.target.value.length);
-          }}
-          onSelect={syncCaret}
-          onKeyUp={(e) => {
-            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') syncCaret();
-          }}
-          onClick={syncCaret}
-          onFocus={() => {
-            setFocused(true);
-            syncCaret();
-          }}
-          onBlur={() => setFocused(false)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          className="block px-4 pb-1 pt-3 text-[14.5px] leading-[22px]"
-        />
-        <ArgHint text={text} commands={commands} />
+          <Textarea
+            ref={ta}
+            bare
+            minRows={2}
+            maxRows={14}
+            value={text}
+            data-composer-input=""
+            data-testid="composer-input"
+            aria-label="Message"
+            role="combobox"
+            aria-expanded={paletteOpen}
+            aria-controls={paletteOpen ? listId : undefined}
+            aria-autocomplete="list"
+            aria-activedescendant={paletteOpen && count ? optionId(listId, active) : undefined}
+            placeholder={placeholder}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaret(e.target.selectionStart ?? e.target.value.length);
+            }}
+            onSelect={syncCaret}
+            onKeyUp={(e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') syncCaret();
+            }}
+            onClick={syncCaret}
+            onFocus={() => {
+              setFocused(true);
+              syncCaret();
+            }}
+            onBlur={() => setFocused(false)}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            className="block px-4 pb-2 pt-3 text-[13.5px] leading-[22px] tracking-[-0.008em] text-t1 placeholder:text-t3"
+          />
+          <ArgHint text={text} commands={commands} />
         </div>
-        <div className="flex items-center gap-0.5 px-2 pb-2 pt-1">
-          <IconButton label="Attach images" icon={Paperclip} size="md" onClick={() => fileInput.current?.click()} />
+        <div className="flex h-10 items-center gap-1 border-t border-rule2 pl-1.5 pr-1.5">
+          <IconButton label="Attach images" icon={Paperclip} size="sm" onClick={() => fileInput.current?.click()} />
           <input
             ref={fileInput}
             type="file"
@@ -479,6 +483,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
               void addImageFiles(sessionId, list);
             }}
           />
+          <span className="mx-1 h-3.5 w-px shrink-0 bg-rule" aria-hidden />
           <ModeSelector mode={session.permissionMode} confirmBypass={!bypassOptIn} onChange={(m) => void setPermissionMode(sessionId, m)} />
           <Tooltip content={session.thinking ? 'Thinking on — click to turn off' : 'Thinking off — click to turn on'}>
             <button
@@ -486,13 +491,15 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
               data-testid="thinking-toggle"
               aria-pressed={session.thinking}
               onClick={() => void setThinking(sessionId, !session.thinking)}
-              className={cn(
-                'ob-transition flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-small',
-                session.thinking ? 'text-ob-violet hover:bg-ob-violet-soft' : 'text-ob-text-3 hover:bg-ob-hover hover:text-ob-text-2',
-              )}
+              className="ob-transition flex h-6 items-center gap-2 rounded-[2px] px-2 hover:bg-hov"
             >
-              <Brain size={13} aria-hidden />
-              <span className="whitespace-nowrap @max-[600px]:hidden">{session.thinking ? 'Thinking' : 'No thinking'}</span>
+              <span
+                aria-hidden
+                className={cn('size-[7px] shrink-0 rounded-[1px]', session.thinking ? 'bg-acc' : 'shadow-[inset_0_0_0_1px_var(--line)]')}
+              />
+              <ToolbarValue label="Thinking" className={session.thinking ? 'text-t1' : 'text-t3'}>
+                {session.thinking ? 'On' : 'Off'}
+              </ToolbarValue>
             </button>
           </Tooltip>
           <span className="flex-1" />
@@ -504,9 +511,9 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
                 aria-label="Stop"
                 data-testid="stop-button"
                 onClick={() => void stopTurn(sessionId)}
-                className="ob-transition ml-1 flex size-8 items-center justify-center rounded-[8px] border border-ob-border bg-ob-surface-2 text-ob-text hover:border-[rgba(240,113,120,0.4)] hover:bg-ob-danger-soft hover:text-ob-danger"
+                className="ob-transition ml-1 flex size-7 items-center justify-center rounded-[2px] text-err shadow-[inset_0_0_0_1px_var(--err)] hover:bg-err-wash"
               >
-                <Square size={12} fill="currentColor" aria-hidden />
+                <Square size={10} fill="currentColor" aria-hidden />
               </button>
             </Tooltip>
           ) : null}
@@ -518,15 +525,18 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
                 data-testid="send-button"
                 disabled={!canSend}
                 onClick={() => void send()}
-                className="ob-transition ml-1 flex size-8 items-center justify-center rounded-[8px] bg-ob-accent text-ob-accent-ink hover:bg-ob-accent-hover disabled:bg-ob-surface-2 disabled:text-ob-text-3"
+                className="ob-transition ml-1 flex size-7 items-center justify-center rounded-[2px] bg-acc text-acc-ink hover:bg-white active:bg-[var(--acc)] disabled:bg-s3 disabled:text-t3"
               >
-                <ArrowUp size={16} strokeWidth={2.25} aria-hidden />
+                <ArrowUp size={14} strokeWidth={2.25} aria-hidden />
               </button>
             </Tooltip>
           ) : null}
         </div>
       </div>
-      <div className="mt-1.5 flex h-4 items-center gap-3 overflow-hidden px-1.5 text-meta text-ob-text-3 @max-[480px]:hidden" data-testid="composer-hints">
+      <div
+        className="mt-2 flex h-4 items-center gap-4 overflow-hidden px-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-t3 @max-[480px]:hidden"
+        data-testid="composer-hints"
+      >
         <Hint k="Enter" label={running ? 'queue' : 'send'} />
         <Hint k="Shift+Enter" label="new line" />
         <Hint k="Shift+Tab" label="mode" />

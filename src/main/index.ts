@@ -31,7 +31,7 @@ import type { GpuStatus, Settings } from '@shared/types';
 import { createAttentionRouter, type AttentionRouter } from './attention';
 
 const APP_ID = 'com.obsidian.code';
-const BG = '#0B1215';
+const BG = '#000000';
 const QUIT_CLOCK_OUT_TIMEOUT_MS = 20_000;
 const QUIT_CLOSE_TIMEOUT_MS = 15_000;
 const TRAY_CLOCK_IN_PROFILE = 'standard';
@@ -165,7 +165,7 @@ function createWindow(): BrowserWindow {
     autoHideMenuBar: true,
     icon: loadImage(process.platform === 'win32' ? iconIco : iconPng) ?? loadImage(iconPng),
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: BG, symbolColor: '#A9B6BF', height: 40 },
+    titleBarOverlay: { color: '#000000', symbolColor: '#7A7A85', height: 34 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

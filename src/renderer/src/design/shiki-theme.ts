@@ -1,24 +1,25 @@
-// Custom shiki (TextMate) theme "obsidian-dark", tuned to the Obsidian tokens (SPEC §5).
-// Owner: ui-foundation.
+// Custom shiki (TextMate) theme "obsidian-m13": MONOCHROME — greys and cold white only. Colour is reserved for
+// status in M13 (SPEC §5), so syntax is carried by tone and weight: keywords/functions in ink, strings in the cold
+// accent, comments in --t3 italic. The only hues are diff insert/delete, which ARE status. Owner: ui-foundation.
 import type { ThemeRegistration } from 'shiki/core';
 
 export const OB_CODE_COLORS = {
-  bg: '#0E171C',
-  fg: '#D5DEE3',
-  comment: '#62737E',
-  keyword: '#B3A6E8', // violet
-  fn: '#8FB8DE', // accent ice-blue
-  string: '#9DD4B0', // soft mint
-  number: '#E3BE7A', // amber
-  type: '#7FC8D2', // teal
-  variable: '#DCE4E8',
-  property: '#BCCBD4',
-  punctuation: '#8496A2',
-  tag: '#F0858B',
-  attr: '#E3BE7A',
-  regex: '#F2A47A',
-  inserted: '#5FD39A',
-  deleted: '#F07178',
+  bg: '#07070A', // --s1 well
+  fg: '#ADADB6', // --t2 — plain identifiers and text
+  comment: '#7A7A85', // --t3
+  keyword: '#FFFFFF', // --t1 ink
+  fn: '#E6EEFF', // --acc cold white
+  string: '#C9D2E3', // cold light grey (a step under the accent)
+  number: '#E6EEFF', // --acc
+  type: '#D6D6DC', // light grey
+  variable: '#ADADB6', // --t2
+  property: '#C2C2CA', // between t2 and t1
+  punctuation: '#7A7A85', // --t3
+  tag: '#FFFFFF',
+  attr: '#C2C2CA',
+  regex: '#C9D2E3',
+  inserted: '#3BE07A', // --ok (status)
+  deleted: '#FF6F62', // --err (status)
 } as const;
 
 const c = OB_CODE_COLORS;
@@ -84,17 +85,17 @@ export const obsidianShikiTheme: ThemeRegistration = {
     },
     { scope: ['entity.name.tag', 'meta.tag.sgml', 'punctuation.definition.tag'], settings: { foreground: c.tag } },
     { scope: ['entity.other.attribute-name'], settings: { foreground: c.attr } },
-    { scope: ['support.type.property-name.json', 'support.type.property-name.json.comments'], settings: { foreground: c.fn } },
-    { scope: ['markup.heading', 'markup.heading entity.name'], settings: { foreground: c.fn, fontStyle: 'bold' } },
+    { scope: ['support.type.property-name.json', 'support.type.property-name.json.comments'], settings: { foreground: c.property } },
+    { scope: ['markup.heading', 'markup.heading entity.name'], settings: { foreground: c.keyword, fontStyle: 'bold' } },
     { scope: ['markup.bold'], settings: { fontStyle: 'bold' } },
     { scope: ['markup.italic'], settings: { fontStyle: 'italic' } },
     { scope: ['markup.underline.link', 'string.other.link'], settings: { foreground: c.fn } },
-    { scope: ['markup.list punctuation.definition.list'], settings: { foreground: c.keyword } },
+    { scope: ['markup.list punctuation.definition.list'], settings: { foreground: c.punctuation } },
     { scope: ['markup.inserted', 'meta.diff.header.to-file', 'punctuation.definition.inserted'], settings: { foreground: c.inserted } },
     { scope: ['markup.deleted', 'meta.diff.header.from-file', 'punctuation.definition.deleted'], settings: { foreground: c.deleted } },
-    { scope: ['meta.diff.range', 'meta.diff.header'], settings: { foreground: c.keyword } },
+    { scope: ['meta.diff.range', 'meta.diff.header'], settings: { foreground: c.comment } },
     { scope: ['invalid', 'invalid.illegal'], settings: { foreground: c.deleted } },
-    { scope: ['entity.name.section', 'entity.name.tag.toml', 'support.type.property-name.toml'], settings: { foreground: c.fn } },
-    { scope: ['variable.other.env', 'variable.other.normal.shell', 'punctuation.definition.variable.shell'], settings: { foreground: c.type } },
+    { scope: ['entity.name.section', 'entity.name.tag.toml', 'support.type.property-name.toml'], settings: { foreground: c.keyword } },
+    { scope: ['variable.other.env', 'variable.other.normal.shell', 'punctuation.definition.variable.shell'], settings: { foreground: c.fn } },
   ],
 };

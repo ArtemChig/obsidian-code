@@ -57,7 +57,7 @@ export function ProfilesEditor() {
       }
     >
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="px-4" aria-label="Profiles editor view">
+        <TabsList className="px-0" aria-label="Profiles editor view">
           <TabsTrigger value="table" data-testid="profiles-tab-table">
             Table
           </TabsTrigger>
@@ -67,11 +67,11 @@ export function ProfilesEditor() {
         </TabsList>
         <TabsContent value="table">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-ui" data-testid="profiles-table">
+            <table className="w-full min-w-[640px] border-collapse text-[12px] tracking-[-0.012em]" data-testid="profiles-table">
               <thead>
-                <tr className="border-b border-ob-border text-left">
+                <tr className="text-left">
                   {['Profile', 'GPUs', 'Price cap', 'Default model', ''].map((h, i) => (
-                    <th key={i} className="ob-section-label px-4 py-2 font-normal">
+                    <th key={i} className="ob-label h-7 border-b border-rule px-2 font-medium first:pl-0 last:pr-0">
                       {h}
                     </th>
                   ))}
@@ -79,26 +79,26 @@ export function ProfilesEditor() {
               </thead>
               <tbody>
                 {profiles.map((p) => (
-                  <tr key={p.id} className="ob-transition border-b border-ob-border last:border-b-0 hover:bg-ob-hover" data-testid="profile-row" data-id={p.id}>
-                    <td className="px-4 py-2.5">
+                  <tr key={p.id} className="ob-transition border-b border-rule2 last:border-b-0 hover:bg-hov" data-testid="profile-row" data-id={p.id}>
+                    <td className="py-2 pl-0 pr-2">
                       <div className="flex flex-col">
-                        <span className="font-medium text-ob-text">{p.label}</span>
-                        <span className="font-mono text-[11px] text-ob-text-3">{p.id}</span>
+                        <span className="font-medium text-t1">{p.label}</span>
+                        <span className="font-mono text-[9.5px] tracking-[0.01em] text-t3">{p.id}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-ob-text-2">
-                      {gpuSpec(p)} <span className="text-ob-text-3">· {profileVramGb(p)} GB</span>
+                    <td className="px-2 py-2 text-t2">
+                      {gpuSpec(p)} <span className="text-t3">· {profileVramGb(p)} GB</span>
                       {p.datacenterOnly ? (
                         <Badge tone="accent" className="ml-2">
                           datacenter
                         </Badge>
                       ) : null}
                     </td>
-                    <td className="ob-tabular px-4 py-2.5 font-mono text-[12px] text-ob-text-2">{formatMoney(p.maxPricePerHour)}/h</td>
-                    <td className="max-w-[240px] truncate px-4 py-2.5 text-ob-text-2" title={p.defaultModelId}>
+                    <td className="ob-tabular px-2 py-2 font-mono text-[10.5px] tracking-[-0.02em] text-t1">{formatMoney(p.maxPricePerHour)}/h</td>
+                    <td className="max-w-[240px] truncate px-2 py-2 text-t2" title={p.defaultModelId}>
                       {modelName(p.defaultModelId)}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="py-2 pl-2 pr-0">
                       <div className="flex items-center justify-end gap-0.5">
                         <IconButton
                           label={`Edit ${p.label}`}
@@ -120,7 +120,7 @@ export function ProfilesEditor() {
           </div>
         </TabsContent>
         <TabsContent value="json">
-          <div className="p-4">
+          <div className="py-3">
             <ProfilesJson profiles={profiles} />
           </div>
         </TabsContent>
@@ -260,7 +260,7 @@ function ProfileForm({ profile, catalog, onClose }: { profile: GpuProfile | null
     <Field label={label} htmlFor={`pf-${k}`}>
       <div className="flex items-center gap-2">
         <Input id={`pf-${k}`} data-testid={`profile-${k}`} inputMode="decimal" mono step={step} value={d[k] as string} className="w-full" onChange={(e) => set(k, e.target.value as never)} />
-        {unit ? <span className="w-10 shrink-0 text-small text-ob-text-3">{unit}</span> : null}
+        {unit ? <span className="w-10 shrink-0 font-mono text-[9.5px] text-t3">{unit}</span> : null}
       </div>
     </Field>
   );
@@ -326,7 +326,7 @@ function ProfileForm({ profile, catalog, onClose }: { profile: GpuProfile | null
           )}
         </Field>
         {submitted && problems.length ? (
-          <ul role="alert" data-testid="profile-errors" className="flex flex-col gap-1 rounded-ctl border border-[rgba(240,113,120,0.3)] bg-ob-danger-soft px-3 py-2 text-small text-ob-text">
+          <ul role="alert" data-testid="profile-errors" className="flex flex-col gap-1 rounded-[2px] px-3 py-[9px] text-[11.5px] text-t2 shadow-[inset_0_0_0_1px_var(--err)]">
             {problems.map((p, i) => (
               <li key={i}>{p}</li>
             ))}

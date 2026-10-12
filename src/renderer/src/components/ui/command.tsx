@@ -1,4 +1,6 @@
 // Styled cmdk primitives for palettes (global Ctrl+K palette lives in app/CommandPalette.tsx). Owner: ui-foundation.
+// M13: --s0 surface with 1 px --line + separation shadow; 28 px rows; the selected row is the reference selected row
+// (acc-wash + 2 px cold-white left edge); group headings are mono caps.
 import * as RD from '@radix-ui/react-dialog';
 import { Command as Cmdk } from 'cmdk';
 import { Search } from 'lucide-react';
@@ -22,12 +24,12 @@ export function CommandDialog({ open, onOpenChange, children, label = 'Command p
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
-        <RD.Overlay className="fixed inset-0 z-[95] bg-[rgba(4,8,10,0.5)] animate-ob-fade-in" />
+        <RD.Overlay className="fixed inset-0 z-[95] bg-[rgba(0,0,0,0.6)] animate-ob-fade-in" />
         <RD.Content
           aria-label={label}
           className={cn(
             'fixed left-1/2 top-[13vh] z-[96] w-[640px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden',
-            'rounded-[12px] border border-[#2a3a47] bg-ob-surface-1 shadow-[0_16px_48px_rgba(0,0,0,0.55)] animate-ob-pop-in focus-visible:outline-none',
+            'rounded-[2px] border border-line bg-s0 shadow-deep animate-ob-pop-in focus-visible:outline-none',
             className,
           )}
         >
@@ -50,10 +52,10 @@ export function Command({ className, ...rest }: ComponentProps<typeof Cmdk>) {
 
 export function CommandInput({ className, leading, ...rest }: ComponentProps<typeof Cmdk.Input> & { leading?: ReactNode }) {
   return (
-    <div className="flex h-12 items-center gap-2.5 border-b border-ob-border px-4">
-      {leading ?? <Search size={16} aria-hidden className="shrink-0 text-ob-text-3" />}
+    <div className="flex h-11 items-center gap-3 border-b border-rule px-4">
+      {leading ?? <Search size={14} aria-hidden className="shrink-0 text-t3" />}
       <Cmdk.Input
-        className={cn('h-full min-w-0 flex-1 bg-transparent text-[14px] text-ob-text placeholder:text-ob-text-3 focus-visible:outline-none', className)}
+        className={cn('h-full min-w-0 flex-1 bg-transparent text-[13.5px] tracking-[-0.014em] text-t1 caret-acc placeholder:text-t3 focus-visible:outline-none', className)}
         {...rest}
       />
     </div>
@@ -61,12 +63,12 @@ export function CommandInput({ className, leading, ...rest }: ComponentProps<typ
 }
 
 export function CommandList({ className, ...rest }: ComponentProps<typeof Cmdk.List>) {
-  return <Cmdk.List className={cn('max-h-[min(420px,58vh)] overflow-y-auto overscroll-contain p-1.5 [scroll-padding-block:6px]', className)} {...rest} />;
+  return <Cmdk.List className={cn('max-h-[min(420px,58vh)] overflow-y-auto overscroll-contain py-1 [scroll-padding-block:6px]', className)} {...rest} />;
 }
 
 export function CommandEmpty({ className, children = 'No results', ...rest }: ComponentProps<typeof Cmdk.Empty>) {
   return (
-    <Cmdk.Empty className={cn('px-3 py-8 text-center text-ui text-ob-text-3', className)} {...rest}>
+    <Cmdk.Empty className={cn('px-4 py-8 text-center text-[12px] text-t3', className)} {...rest}>
       {children}
     </Cmdk.Empty>
   );
@@ -75,17 +77,14 @@ export function CommandEmpty({ className, children = 'No results', ...rest }: Co
 export function CommandGroup({ className, ...rest }: ComponentProps<typeof Cmdk.Group>) {
   return (
     <Cmdk.Group
-      className={cn(
-        '[&_[cmdk-group-heading]]:ob-section-label [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2.5',
-        className,
-      )}
+      className={cn('[&_[cmdk-group-heading]]:ob-cap [&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3', className)}
       {...rest}
     />
   );
 }
 
 export function CommandSeparator({ className }: { className?: string }) {
-  return <Cmdk.Separator className={cn('-mx-1.5 my-1 h-px bg-ob-border', className)} />;
+  return <Cmdk.Separator className={cn('my-1 h-px bg-rule2', className)} />;
 }
 
 export interface CommandItemProps extends ComponentProps<typeof Cmdk.Item> {
@@ -102,24 +101,24 @@ export function CommandItem({ icon: Icon, leading, shortcut, hint, trailing, cla
   return (
     <Cmdk.Item
       className={cn(
-        'group flex h-9 cursor-default select-none items-center gap-2.5 rounded-[7px] px-2.5 text-ui text-ob-text-2 outline-none',
-        'data-[selected=true]:bg-ob-accent-soft data-[selected=true]:text-ob-text data-[disabled=true]:opacity-40',
+        'group flex h-7 cursor-default select-none items-center gap-2.5 px-4 text-[12px] tracking-[-0.012em] text-t2 outline-none',
+        'data-[selected=true]:bg-acc-wash data-[selected=true]:text-t1 data-[selected=true]:shadow-[inset_2px_0_0_var(--acc)] data-[disabled=true]:opacity-40',
         className,
       )}
       {...rest}
     >
-      {leading ?? (Icon ? <Icon size={15} aria-hidden className="shrink-0 text-ob-text-3 group-data-[selected=true]:text-ob-accent" /> : null)}
+      {leading ?? (Icon ? <Icon size={13} aria-hidden className="shrink-0 text-t3 group-data-[selected=true]:text-acc" /> : null)}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {hint ? <span className="max-w-[45%] truncate text-small text-ob-text-3">{hint}</span> : null}
+      {hint ? <span className="max-w-[45%] truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{hint}</span> : null}
       {trailing}
-      {shortcut ? <Shortcut keys={shortcut} /> : null}
+      {shortcut ? <Shortcut keys={shortcut} plain /> : null}
     </Cmdk.Item>
   );
 }
 
 export function CommandFooter({ children }: { children?: ReactNode }) {
   return (
-    <div className="flex h-9 items-center gap-4 border-t border-ob-border bg-[#0d161a] px-4 text-small text-ob-text-3">
+    <div className="flex h-8 items-center gap-4 border-t border-rule px-4 font-mono text-[9px] uppercase tracking-[0.1em] text-t3">
       {children ?? (
         <>
           <span className="flex items-center gap-1.5">

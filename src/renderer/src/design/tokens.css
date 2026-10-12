@@ -1,133 +1,192 @@
 /*
- * Obsidian design system — tokens, Tailwind v4 theme mapping, base, prose and code styles.
- * Owner: ui-foundation. Dark-only by design (SPEC §5).
+ * Obsidian design system (M13 "Obsidian"): tokens, Tailwind v4 theme mapping, base, utilities, prose and code.
+ * Owner: ui-foundation. Source of truth: docs/design/m-13-obsidian/obsidian.css (SPEC §5).
  *
- * Use the Tailwind utilities generated from @theme below (bg-ob-surface-2, text-ob-text-2, border-ob-border, …)
- * or the raw variables (var(--ob-accent)) in custom CSS.
+ * Thesis: remove every surface. Pure #000, no cards, no panel fills, no frames. Structure is carried by space and a
+ * single hairline (--rule). Borders exist ONLY on things you can act on (--line, >= 3:1). One cold-white accent
+ * (--acc). Colour only for status. Flat fills and discrete tonal steps only: no gradients, no ramps, no glow.
+ *
+ * Use the Tailwind utilities generated from @theme below (bg-s1, text-t2, border-rule, border-line, text-acc,
+ * bg-acc-wash, text-live …) or the raw variables (var(--acc)) in custom CSS. The only --ob-* variables left are layout
+ * metrics (title bar, pane header, sidebar widths); the pre-M13 colour aliases were removed once nothing used them.
  */
 @import 'tailwindcss' source('../..');
 
-/* ───────────────────────────── Tokens ───────────────────────────── */
+/* ───────────────────────────── M13 tokens ───────────────────────────── */
 :root {
   color-scheme: dark;
 
-  /* surfaces */
-  --ob-bg: #0b1215;
-  --ob-surface-1: #101a1f;
-  --ob-surface-2: #1c2833;
-  --ob-surface-3: #212f3d;
-  --ob-border: #24323e;
-  --ob-border-strong: #566573;
+  --ui: 'Chivo', 'Inter', 'Segoe UI Variable Text', system-ui, -apple-system, sans-serif;
+  --mono: 'Chivo Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
-  /* text */
-  --ob-text: #ecf0f1;
-  --ob-text-2: #a9b6bf;
-  --ob-text-3: #7c8b96;
+  /* tonal steps — s0 is the only surface */
+  --s0: #000000; /* ground: app, sidebar, panels, transcript, dialogs */
+  --s1: #07070a; /* well: inputs, search, code wells, gutters */
+  --s2: #0e0e12; /* raised sliver: thumbnails, user-message sliver */
+  --s3: #17171c; /* control fill: active menu item, kbd, segmented */
+  --s4: #23232a; /* track / hover step / scrollbar thumb */
+  --s5: #2e2e36; /* highest tonal step */
 
-  /* accents & status */
-  --ob-accent: #8fb8de;
-  --ob-accent-hover: #a6c8e8;
-  --ob-accent-ink: #0b1215;
-  --ob-accent-soft: rgba(143, 184, 222, 0.12);
-  --ob-violet: #b3a6e8;
-  --ob-violet-soft: rgba(179, 166, 232, 0.12);
-  --ob-success: #5fd39a;
-  --ob-success-soft: rgba(95, 211, 154, 0.12);
-  --ob-warning: #e8b85c;
-  --ob-warning-soft: rgba(232, 184, 92, 0.12);
-  --ob-danger: #f07178;
-  --ob-danger-soft: rgba(240, 113, 120, 0.12);
+  /* ink */
+  --t1: #ffffff; /* 21:1 */
+  --t2: #adadb6; /* 9.4:1 */
+  --t3: #7a7a85; /* 4.95:1 — the floor for text */
 
-  /* code & diff */
-  --ob-code-bg: #0e171c;
-  --ob-diff-add: rgba(95, 211, 154, 0.13);
-  --ob-diff-del: rgba(240, 113, 120, 0.13);
+  /* the single accent: cold white */
+  --acc: #e6eeff; /* 18:1 */
+  --acc-ink: #000000;
+  --acc-wash: rgba(230, 238, 255, 0.07);
+  --acc-wash2: rgba(230, 238, 255, 0.13);
+  --acc-hi: #ffffff; /* primary hover */
+  --acc-press: #cfd8ea; /* primary pressed */
 
-  /* subtle overlays (hover/press washes over any surface) */
-  --ob-hover: rgba(236, 240, 241, 0.045);
-  --ob-press: rgba(236, 240, 241, 0.08);
+  /* lines */
+  --line: #63636e; /* functional outline 3.5:1 — actionable things only */
+  --line-hi: #7c7c88; /* the same outline under the pointer */
+  --rule: rgba(255, 255, 255, 0.1); /* the hairline */
+  --rule2: rgba(255, 255, 255, 0.055); /* sub-hairline */
+  --hov: rgba(255, 255, 255, 0.035); /* row hover */
+  --press: rgba(255, 255, 255, 0.06);
 
-  /* shape, depth, motion */
-  --ob-radius-ctl: 6px;
-  --ob-radius-card: 10px;
-  --ob-radius-pill: 999px;
-  --ob-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --ob-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ob-dur-fast: 120ms;
-  --ob-dur: 160ms;
-  --ob-dur-slow: 200ms;
+  /* status — colour only means status */
+  --rec: #ff453a; /* recording / money being spent */
+  --live: #bf6bff; /* running / streaming / live */
+  --err: #ff6f62; /* error / failed / denied / deletions */
+  --warn: #ffd426; /* waiting for the user */
+  --ok: #3be07a; /* done / ready / additions */
+
+  --rec-wash: rgba(255, 69, 58, 0.1);
+  --live-wash: rgba(191, 107, 255, 0.1);
+  --err-wash: rgba(255, 111, 98, 0.1);
+  --err-wash2: rgba(255, 111, 98, 0.16); /* danger pressed */
+  --err-hi: #ff8579; /* danger-solid hover */
+  --err-press: #f0645a; /* danger-solid pressed */
+  --warn-wash: rgba(255, 212, 38, 0.08);
+  --ok-wash: rgba(59, 224, 122, 0.08);
+  /* diff line washes (code blocks) */
+  --diff-add: rgba(59, 224, 122, 0.08);
+  --diff-del: rgba(255, 111, 98, 0.08);
+  /* status outlines for tags (reference .chip2 at 45 %) */
+  --rec-edge: rgba(255, 69, 58, 0.5);
+  --live-edge: rgba(191, 107, 255, 0.5);
+  --err-edge: rgba(255, 111, 98, 0.55);
+  --warn-edge: rgba(255, 212, 38, 0.45);
+  --ok-edge: rgba(59, 224, 122, 0.45);
+
+  /* geometry, depth, motion */
+  --r: 2px;
+  --shadow-deep: 0 16px 48px rgba(0, 0, 0, 0.7);
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 160ms;
 
   /* layout */
-  --ob-titlebar-h: 40px;
+  --ob-titlebar-h: 34px;
+  --ob-menubar-h: 27px;
+  --ob-statusbar-h: 25px;
+  /* pane header (chat header, right-panel tab bar) — share it so their hairlines line up */
+  --ob-pane-head-h: 44px;
   --ob-sidebar-w: 240px;
   --ob-rail-w: 52px;
   --ob-right-panel-w: 340px;
   /* space reserved on the right of the title bar for the Windows titleBarOverlay controls */
   --ob-window-controls-w: 140px;
-
-  --ob-font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
-  --ob-font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
 }
 
 /* ───────────────────────────── Tailwind theme mapping ───────────────────────────── */
 @theme inline {
-  --color-ob-bg: var(--ob-bg);
-  --color-ob-surface-1: var(--ob-surface-1);
-  --color-ob-surface-2: var(--ob-surface-2);
-  --color-ob-surface-3: var(--ob-surface-3);
-  --color-ob-border: var(--ob-border);
-  --color-ob-border-strong: var(--ob-border-strong);
-  --color-ob-text: var(--ob-text);
-  --color-ob-text-2: var(--ob-text-2);
-  --color-ob-text-3: var(--ob-text-3);
-  --color-ob-accent: var(--ob-accent);
-  --color-ob-accent-hover: var(--ob-accent-hover);
-  --color-ob-accent-ink: var(--ob-accent-ink);
-  --color-ob-accent-soft: var(--ob-accent-soft);
-  --color-ob-violet: var(--ob-violet);
-  --color-ob-violet-soft: var(--ob-violet-soft);
-  --color-ob-success: var(--ob-success);
-  --color-ob-success-soft: var(--ob-success-soft);
-  --color-ob-warning: var(--ob-warning);
-  --color-ob-warning-soft: var(--ob-warning-soft);
-  --color-ob-danger: var(--ob-danger);
-  --color-ob-danger-soft: var(--ob-danger-soft);
-  --color-ob-code-bg: var(--ob-code-bg);
-  --color-ob-diff-add: var(--ob-diff-add);
-  --color-ob-diff-del: var(--ob-diff-del);
-  --color-ob-hover: var(--ob-hover);
-  --color-ob-press: var(--ob-press);
+  /* 4 px spacing grid in real pixels (h-7 = 28 px), independent of the root font size. */
+  --spacing: 4px;
 
-  --font-sans: var(--ob-font-sans);
-  --font-mono: var(--ob-font-mono);
+  /* M13 colours */
+  --color-s0: var(--s0);
+  --color-s1: var(--s1);
+  --color-s2: var(--s2);
+  --color-s3: var(--s3);
+  --color-s4: var(--s4);
+  --color-s5: var(--s5);
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-t3: var(--t3);
+  --color-acc: var(--acc);
+  --color-acc-ink: var(--acc-ink);
+  --color-acc-wash: var(--acc-wash);
+  --color-acc-wash2: var(--acc-wash2);
+  --color-acc-hi: var(--acc-hi);
+  --color-acc-press: var(--acc-press);
+  --color-line: var(--line);
+  --color-line-hi: var(--line-hi);
+  --color-rule: var(--rule);
+  --color-rule2: var(--rule2);
+  --color-hov: var(--hov);
+  --color-press: var(--press);
+  --color-rec: var(--rec);
+  --color-live: var(--live);
+  --color-err: var(--err);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --color-rec-wash: var(--rec-wash);
+  --color-live-wash: var(--live-wash);
+  --color-err-wash: var(--err-wash);
+  --color-err-wash2: var(--err-wash2);
+  --color-err-hi: var(--err-hi);
+  --color-err-press: var(--err-press);
+  --color-warn-wash: var(--warn-wash);
+  --color-ok-wash: var(--ok-wash);
 
-  /* type scale (SPEC §5): text-meta 11 · text-small 12 · text-ui 13 · text-prose 14.5 · text-lead 16 · text-title 20 */
-  --text-meta: 11px;
-  --text-meta--line-height: 16px;
-  --text-small: 12px;
-  --text-small--line-height: 17px;
-  --text-ui: 13px;
-  --text-ui--line-height: 19px;
-  --text-prose: 14.5px;
-  --text-prose--line-height: 1.65;
-  --text-lead: 16px;
-  --text-lead--line-height: 24px;
-  --text-title: 20px;
-  --text-title--line-height: 28px;
+  --font-sans: var(--ui);
+  --font-ui: var(--ui);
+  --font-mono: var(--mono);
 
-  --radius-ctl: var(--ob-radius-ctl);
-  --radius-card: var(--ob-radius-card);
-  --radius-pill: var(--ob-radius-pill);
+  /* type scale: cap 9 (mono labels) · micro 8.5 (tags, table heads) · meta 10.5 · small 11.5 (controls) ·
+     ui 12.5 (base) · prose 13.5/1.62 · lead 15 · title 17 · display 23 */
+  --text-cap: 9px;
+  --text-cap--line-height: 12px;
+  --text-micro: 8.5px;
+  --text-micro--line-height: 12px;
+  --text-meta: 10.5px;
+  --text-meta--line-height: 15px;
+  --text-small: 11.5px;
+  --text-small--line-height: 16px;
+  --text-ui: 12.5px;
+  --text-ui--line-height: 18px;
+  --text-prose: 13.5px;
+  --text-prose--line-height: 1.62;
+  --text-lead: 15px;
+  --text-lead--line-height: 21px;
+  --text-lead--letter-spacing: -0.032em;
+  --text-title: 17px;
+  --text-title--line-height: 23px;
+  --text-title--letter-spacing: -0.035em;
+  --text-display: 23px;
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.042em;
 
-  --shadow-pop: var(--ob-shadow-pop);
+  --tracking-cap: 0.22em;
+  --tracking-label: 0.15em;
+  --tracking-tag: 0.16em;
+  --tracking-brand: 0.24em;
+  --tracking-tight: -0.03em;
 
-  --ease-ob: var(--ob-ease);
+  /* radius: 2 px everywhere. Tailwind's scale is flattened so no rounded-* utility can exceed it. */
+  --radius-xs: 1px;
+  --radius-sm: var(--r);
+  --radius: var(--r);
+  --radius-md: var(--r);
+  --radius-lg: var(--r);
+  --radius-xl: var(--r);
+  --radius-2xl: var(--r);
+  --radius-3xl: var(--r);
+  --radius-4xl: var(--r);
 
-  --animate-ob-fade-in: ob-fade-in 160ms var(--ob-ease);
-  --animate-ob-pop-in: ob-pop-in 160ms var(--ob-ease);
-  --animate-ob-slide-up: ob-slide-up 200ms var(--ob-ease);
+  /* the only shadow: menu / dialog separation */
+  --shadow-deep: var(--shadow-deep);
+
+  --animate-ob-fade-in: ob-fade-in 140ms var(--ease);
+  --animate-ob-pop-in: ob-pop-in 140ms var(--ease);
+  --animate-ob-slide-up: ob-slide-up 160ms var(--ease);
   --animate-ob-pulse: ob-pulse 1.6s ease-in-out infinite;
-  --animate-ob-shimmer: ob-shimmer 1.4s linear infinite;
+  --animate-ob-shimmer: ob-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes ob-fade-in {
@@ -135,11 +194,11 @@
   to { opacity: 1; }
 }
 @keyframes ob-pop-in {
-  from { opacity: 0; transform: translateY(-2px) scale(0.98); }
+  from { opacity: 0; transform: translateY(-2px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes ob-slide-up {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes ob-pulse {
@@ -147,8 +206,8 @@
   50% { opacity: 0.35; }
 }
 @keyframes ob-shimmer {
-  from { background-position: -200% 0; }
-  to { background-position: 200% 0; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 @keyframes ob-indeterminate {
   0% { transform: translateX(-100%); }
@@ -168,17 +227,20 @@
   }
 
   html {
-    background: var(--ob-bg);
-    color: var(--ob-text);
-    font-family: var(--ob-font-sans);
-    font-size: 13px;
-    line-height: 19px;
+    background: var(--s0);
+    color: var(--t1);
+    font-family: var(--ui);
+    font-size: 12.5px;
+    line-height: 1.5;
+    letter-spacing: -0.004em;
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    font-feature-settings: 'calt' 1, 'kern' 1;
   }
 
   body {
+    background: var(--s0);
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
@@ -196,8 +258,8 @@
   }
 
   ::selection {
-    background: rgba(143, 184, 222, 0.28);
-    color: var(--ob-text);
+    background: var(--acc-wash2);
+    color: var(--t1);
   }
 
   button,
@@ -206,6 +268,7 @@
   select {
     font: inherit;
     color: inherit;
+    letter-spacing: inherit;
   }
 
   button {
@@ -216,51 +279,48 @@
   kbd,
   pre,
   samp {
-    font-family: var(--ob-font-mono);
+    font-family: var(--mono);
   }
 
-  /* Focus: 2px accent ring, 1px offset (keyboard only). */
+  /* Focus: 1 px cold-white outline, 1 px offset (keyboard only). */
   :focus {
     outline: none;
   }
   :focus-visible {
-    outline: 2px solid var(--ob-accent);
+    outline: 1px solid var(--acc);
     outline-offset: 1px;
-    border-radius: var(--ob-radius-ctl);
   }
 
-  /* Thin, dark scrollbars */
+  /* Scrollbars: 6 px, --s4 thumb, no track */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #2b3a47 transparent;
+    scrollbar-color: var(--s4) transparent;
   }
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: #2b3a47;
-    border-radius: 999px;
-    border: 3px solid transparent;
-    background-clip: content-box;
+    background-color: var(--s4);
+    border-radius: var(--r);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: var(--ob-border-strong);
+    background-color: var(--s5);
   }
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
 
   ::placeholder {
-    color: var(--ob-text-3);
+    color: var(--t3);
     opacity: 1;
   }
 
   svg.lucide {
-    stroke-width: 1.75;
+    stroke-width: 1.5;
     flex-shrink: 0;
   }
 }
@@ -287,19 +347,63 @@
   }
 }
 
-/* ───────────────────────────── Utilities ───────────────────────────── */
-@utility ob-section-label {
-  font-family: var(--ob-font-mono);
-  font-size: 11px;
-  line-height: 16px;
+/* ───────────────────────────── Utilities (M13 recipes) ───────────────────────────── */
+
+/* Section / meta label: Chivo Mono 9 px, 500, .22em, uppercase, --t3 (reference .cap). */
+@utility ob-cap {
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 12px;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--ob-text-3);
+  color: var(--t3);
+}
+/* Kept name: same recipe as ob-cap. */
+@utility ob-section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 12px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+/* Column header / small mono label: 8.5 px .15em uppercase --t3 (reference .srchd, thead th). */
+@utility ob-label {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  line-height: 12px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+/* Unit after a number ("MBPS", "GB"). */
+@utility ob-unit {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+/* Mono meta line: 9.5 px --t3 (reference .mn); values inside in <b> get --t2. */
+@utility ob-mn {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 14px;
+  letter-spacing: 0.01em;
+  color: var(--t3);
+}
+/* Mono number: tight tracking, --t1. */
+@utility ob-num {
+  font-family: var(--mono);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
 }
 
 @utility ob-hairline {
-  border-color: var(--ob-border);
+  border-color: var(--rule);
 }
 
 @utility ob-tabular {
@@ -308,29 +412,104 @@
 
 @utility ob-transition {
   transition-property: color, background-color, border-color, opacity, box-shadow, transform;
-  transition-duration: var(--ob-dur-fast);
-  transition-timing-function: var(--ob-ease);
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease);
 }
 
+/* Floating surfaces (menus, popovers, dialogs): ground + 1 px --line + the separation shadow. */
 @utility ob-popover {
-  background: var(--ob-surface-3);
-  border: 1px solid var(--ob-border);
-  box-shadow: var(--ob-shadow-pop);
-  border-radius: 8px;
+  background: var(--s0);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-deep);
+  border-radius: var(--r);
 }
 
+/* Input well: --s1 + 1 px --line (inset, so it never shifts layout). */
+@utility ob-well {
+  background: var(--s1);
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: var(--r);
+}
+
+/* Dense row: 28 px, hover --hov. */
+@utility ob-row {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+@utility ob-row-hover {
+  &:hover {
+    background: var(--hov);
+  }
+}
+/* Selected navigation item (reference .fitem.on): --t1 text and a 2 px --acc bar inset 5 px top and bottom. No fill —
+   the rail stays on the ground; only hover gets --hov. Used by the sidebar and the settings nav. */
+@utility ob-nav-on {
+  position: relative;
+  color: var(--t1);
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 5px;
+    bottom: 5px;
+    width: 2px;
+    background: var(--acc);
+    pointer-events: none;
+  }
+}
+
+/* Selected row in a list or table: acc-wash + 2 px --acc left edge (reference .hrow.on / .tline.on). */
+@utility ob-selected {
+  background: var(--acc-wash);
+  box-shadow: inset 2px 0 0 var(--acc);
+  color: var(--t1);
+}
+
+/* Tag / chip: 1 px --line, mono 8.5 px uppercase .16em (reference .pill). */
+@utility ob-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t1);
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: 1px;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+/* Key cap (reference .key). */
+@utility ob-kbd {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--t1);
+  background: var(--s3);
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: var(--r);
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* Skeleton: a flat tonal step that breathes (no gradient ramps). */
 @utility ob-skeleton {
-  background: linear-gradient(90deg, var(--ob-surface-2) 0%, var(--ob-surface-3) 50%, var(--ob-surface-2) 100%);
-  background-size: 200% 100%;
-  animation: ob-shimmer 1.4s linear infinite;
-  border-radius: var(--ob-radius-ctl);
+  background: var(--s3);
+  animation: ob-pulse 1.4s ease-in-out infinite;
+  border-radius: var(--r);
 }
 
 /* ───────────────────────────── Prose (chat markdown) ───────────────────────────── */
 .ob-prose {
-  font-size: 14.5px;
-  line-height: 1.65;
-  color: var(--ob-text);
+  font-size: 13.5px;
+  line-height: 1.62;
+  letter-spacing: -0.006em;
+  color: var(--t1);
   overflow-wrap: anywhere;
 }
 .ob-prose > :first-child {
@@ -348,125 +527,137 @@
 .ob-prose h4,
 .ob-prose h5,
 .ob-prose h6 {
-  color: var(--ob-text);
+  color: var(--t1);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.028em;
   margin: 1.4em 0 0.5em;
-  line-height: 1.3;
+  line-height: 1.25;
 }
-.ob-prose h1 { font-size: 1.45em; }
-.ob-prose h2 { font-size: 1.25em; }
+.ob-prose h1 { font-size: 1.5em; letter-spacing: -0.04em; }
+.ob-prose h2 { font-size: 1.27em; letter-spacing: -0.035em; }
 .ob-prose h3 { font-size: 1.1em; }
 .ob-prose h4,
-.ob-prose h5,
-.ob-prose h6 { font-size: 1em; }
-.ob-prose h6 { color: var(--ob-text-2); }
-.ob-prose strong { font-weight: 600; color: var(--ob-text); }
+.ob-prose h5 { font-size: 1em; }
+.ob-prose h6 {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+.ob-prose strong { font-weight: 600; color: var(--t1); }
 .ob-prose em { font-style: italic; }
-.ob-prose del { color: var(--ob-text-3); }
+.ob-prose del { color: var(--t3); }
 .ob-prose a {
-  color: var(--ob-accent);
+  color: var(--t1);
   text-decoration: underline;
-  text-decoration-color: rgba(143, 184, 222, 0.35);
-  text-underline-offset: 2px;
+  text-decoration-color: var(--line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
   cursor: pointer;
-  transition: text-decoration-color var(--ob-dur-fast) var(--ob-ease);
+  transition: text-decoration-color var(--dur-fast) var(--ease);
 }
 .ob-prose a:hover {
-  text-decoration-color: var(--ob-accent);
+  text-decoration-color: var(--t1);
 }
 .ob-prose ul,
 .ob-prose ol {
   margin: 0 0 0.75em;
-  padding-left: 1.5em;
+  padding-left: 1.4em;
 }
-.ob-prose ul { list-style: disc; }
+.ob-prose ul { list-style: square; }
 .ob-prose ol { list-style: decimal; }
-.ob-prose li { margin: 0.25em 0; padding-left: 0.2em; }
-.ob-prose li::marker { color: var(--ob-text-3); }
+.ob-prose li { margin: 0.25em 0; padding-left: 0.25em; }
+.ob-prose li::marker { color: var(--t3); font-family: var(--mono); font-size: 0.86em; }
 .ob-prose li > p { margin: 0.25em 0; }
 .ob-prose li > ul,
 .ob-prose li > ol { margin: 0.25em 0; }
-.ob-prose ul.contains-task-list { list-style: none; padding-left: 0.4em; }
-.ob-prose li.task-list-item { display: flex; gap: 0.5em; align-items: baseline; }
+.ob-prose ul.contains-task-list { list-style: none; padding-left: 0.3em; }
+.ob-prose li.task-list-item { display: flex; gap: 0.55em; align-items: baseline; }
 .ob-prose li.task-list-item input[type='checkbox'] {
-  accent-color: var(--ob-accent);
+  accent-color: var(--acc);
   transform: translateY(1px);
 }
 .ob-prose blockquote {
   margin: 0 0 0.75em;
-  padding: 0.1em 0 0.1em 1em;
-  border-left: 2px solid var(--ob-border-strong);
-  color: var(--ob-text-2);
+  padding: 0.05em 0 0.05em 14px;
+  border-left: 1px solid var(--rule);
+  color: var(--t2);
 }
 .ob-prose hr {
   border: 0;
-  border-top: 1px solid var(--ob-border);
+  border-top: 1px solid var(--rule);
   margin: 1.5em 0;
 }
 .ob-prose :not(pre) > code {
-  font-family: var(--ob-font-mono);
+  font-family: var(--mono);
   font-size: 0.86em;
-  background: var(--ob-surface-2);
-  border: 1px solid var(--ob-border);
-  border-radius: 4px;
-  padding: 0.08em 0.36em;
-  color: #d9e4ea;
+  letter-spacing: -0.01em;
+  background: var(--s2);
+  border-radius: var(--r);
+  padding: 0.1em 0.38em;
+  color: var(--t1);
   overflow-wrap: anywhere;
 }
 .ob-prose .ob-table-wrap {
   margin: 0 0 0.9em;
   overflow-x: auto;
-  border: 1px solid var(--ob-border);
-  border-radius: 8px;
 }
 .ob-prose table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.5;
 }
 .ob-prose thead th {
-  background: var(--ob-surface-1);
-  color: var(--ob-text-2);
+  font-family: var(--mono);
+  font-size: 8.5px;
   font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--t3);
   text-align: left;
+  border-bottom: 1px solid var(--rule);
 }
 .ob-prose th,
 .ob-prose td {
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--ob-border);
+  padding: 6.5px 14px 6.5px 0;
   vertical-align: top;
 }
-.ob-prose tbody tr:last-child td { border-bottom: 0; }
-.ob-prose tbody tr:hover td { background: var(--ob-hover); }
-.ob-prose img { max-width: 100%; border-radius: 8px; }
+.ob-prose td {
+  border-bottom: 1px solid var(--rule2);
+  color: var(--t2);
+}
+.ob-prose tbody tr:hover td { background: var(--hov); }
+.ob-prose img { max-width: 100%; border-radius: var(--r); }
 .ob-prose .ob-codeblock { margin: 0 0 0.9em; }
 
 /* Compact variant (tool cards, panels) */
 .ob-prose.ob-prose-compact {
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12.5px;
+  line-height: 1.58;
 }
 
 /* ───────────────────────────── Code blocks ───────────────────────────── */
 .ob-codeblock {
   position: relative;
-  background: var(--ob-code-bg);
-  border: 1px solid var(--ob-border);
-  border-radius: 8px;
+  background: var(--s1);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
   overflow: hidden;
 }
 .ob-code {
   margin: 0;
-  padding: 12px 14px;
-  font-family: var(--ob-font-mono);
-  font-size: 12.5px;
+  padding: 11px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
   line-height: 1.6;
-  color: #d5dee3;
+  letter-spacing: -0.01em;
+  color: var(--t2);
   overflow-x: auto;
   tab-size: 2;
-  font-variant-ligatures: contextual;
+  font-variant-ligatures: none;
 }
 .ob-code.ob-code-wrap {
   white-space: pre-wrap;
@@ -482,10 +673,10 @@
   gap: 16px;
 }
 .ob-code .ob-ln {
-  color: #42525e;
+  color: var(--t3); /* full --t3 (4.95:1), same as the diff gutters */
   text-align: right;
   user-select: none;
   -webkit-user-select: none;
 }
-.ob-code .ob-line-add { background: var(--ob-diff-add); }
-.ob-code .ob-line-del { background: var(--ob-diff-del); }
+.ob-code .ob-line-add { background: var(--diff-add); box-shadow: inset 2px 0 0 var(--ok); }
+.ob-code .ob-line-del { background: var(--diff-del); box-shadow: inset 2px 0 0 var(--err); }

@@ -1,12 +1,12 @@
 // Chat view (SPEC §4.6): header → transcript (messages, tool cards, inline prompts, status, errors) → composer.
 // Owner: ui-chat. Contract used by app/AppShell.tsx: export function ChatView(props: { sessionId: string }).
-import { ArrowDown, Bot, CircleX, ImagePlus, MessageSquareText, RotateCcw, X } from 'lucide-react';
+import { ArrowDown, Bot, CircleX, CornerDownLeft, ImagePlus, MessageSquareText, RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import type { ImageBlock, Message, PermissionRequest, PlanRequest, QuestionRequest, SessionSummary } from '@shared/types';
 import { AppMark } from '@renderer/components/ui/app-mark';
 import { Button, IconButton } from '@renderer/components/ui/button';
 import { ConfirmDialog } from '@renderer/components/ui/dialog';
-import { EmptyState, Spinner } from '@renderer/components/ui/feedback';
+import { EmptyState, Spinner, StatusDot } from '@renderer/components/ui/feedback';
 import { Checkbox } from '@renderer/components/ui/toggles';
 import { Kbd } from '@renderer/components/ui/kbd';
 import { cn } from '@renderer/lib/cn';
@@ -112,11 +112,11 @@ function RunningStatus({ session, entry, waiting }: { session: SessionSummary; e
   }
   const isWaiting = waiting || session.status === 'waiting';
   return (
-    <div className="flex h-7 items-center gap-2.5 text-small text-ob-text-3" data-testid="running-status" aria-live="polite">
-      {isWaiting ? <span className="size-2 shrink-0 animate-ob-pulse rounded-full bg-ob-warning" /> : <Spinner size={13} className="shrink-0 text-ob-accent" />}
-      <span className={cn('min-w-0 truncate', isWaiting ? 'text-ob-warning' : 'text-ob-text-2')}>{isWaiting ? label : `${label}…`}</span>
-      <Elapsed since={since} className="shrink-0 font-mono text-[11px]" />
-      <span className="flex shrink-0 items-center gap-1">
+    <div className="flex h-7 items-center gap-2.5 text-[11.5px] text-t3" data-testid="running-status" aria-live="polite">
+      <StatusDot tone={isWaiting ? 'warning' : 'violet'} pulse size={6} />
+      <span className={cn('min-w-0 truncate tracking-[-0.008em]', isWaiting ? 'text-warn' : 'text-t2')}>{isWaiting ? label : `${label}…`}</span>
+      <Elapsed since={since} className="shrink-0 font-mono text-[10px] text-t2" />
+      <span className="flex shrink-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.12em]">
         <span aria-hidden>·</span>
         <Kbd>Esc</Kbd>
         <span>to stop</span>
@@ -150,11 +150,15 @@ function ErrorBanner({ session, messages }: { session: SessionSummary; messages:
     await resendLast(session.id, last);
   };
   return (
-    <div role="alert" data-testid="error-banner" className="flex items-start gap-3 rounded-[10px] border border-[rgba(240,113,120,0.32)] bg-ob-danger-soft px-3.5 py-2.5 animate-ob-fade-in">
-      <CircleX size={16} aria-hidden className="mt-[2px] shrink-0 text-ob-danger" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-ui font-medium text-ob-text">The last turn failed</span>
-        <span className="ob-selectable break-words font-mono text-[12px] text-ob-text-2">{err?.message ?? 'The model or a tool returned an error.'}</span>
+    <div
+      role="alert"
+      data-testid="error-banner"
+      className="flex items-start gap-3 rounded-[2px] px-3 py-[9px] shadow-[inset_0_0_0_1px_var(--err)] animate-ob-fade-in"
+    >
+      <CircleX size={13} aria-hidden className="mt-[3px] shrink-0 text-err" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-[11.5px] font-medium tracking-[-0.01em] text-err">The last turn failed</span>
+        <span className="ob-selectable break-words font-mono text-[11px] leading-[1.5] tracking-[-0.01em] text-t2">{err?.message ?? 'The model or a tool returned an error.'}</span>
       </div>
       {last ? (
         <Button size="sm" variant="secondary" icon={RotateCcw} onClick={() => void retry()} data-testid="error-retry">
@@ -185,30 +189,35 @@ const SUGGESTIONS = [
 
 function EmptyChat({ session }: { session: SessionSummary }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-5 py-16 text-center" data-testid="chat-empty">
-      <div className="flex size-12 items-center justify-center rounded-[13px] border border-ob-border bg-[radial-gradient(circle_at_30%_20%,rgba(143,184,222,0.16),transparent_70%)]">
-        <AppMark size={26} />
-      </div>
-      <div className="flex flex-col gap-1">
-        <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-ob-text">What should we work on?</h2>
-        <p className="text-ui text-ob-text-3">
-          in <span className="font-mono text-[12px] text-ob-text-2">{basename(session.cwd)}</span> · type <Kbd>/</Kbd> for commands, <Kbd>@</Kbd> to mention files
+    <div className="flex flex-1 flex-col items-center justify-center py-16" data-testid="chat-empty">
+      <div className="flex w-full max-w-[460px] flex-col">
+        <AppMark size={14} />
+        <h2 className="mt-5 text-display font-semibold text-t1">What should we work on?</h2>
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] text-t3">
+          in <span className="font-mono text-[11.5px] tracking-[-0.02em] text-t2">{basename(session.cwd)}</span> · type <Kbd>/</Kbd> for commands, <Kbd>@</Kbd> to
+          mention files
         </p>
-      </div>
-      <div className="flex max-w-[560px] flex-wrap justify-center gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => {
-              setDraft(session.id, s.endsWith('…') ? s.slice(0, -1) : s);
-              focusComposer(session.id);
-            }}
-            className="ob-transition rounded-pill border border-ob-border bg-ob-surface-1 px-3 py-1 text-small text-ob-text-2 hover:border-[#30414f] hover:text-ob-text"
-          >
-            {s}
-          </button>
-        ))}
+        <div className="ob-cap mb-2 mt-8 flex items-center gap-2.5">
+          Start with
+          <span className="h-px flex-1 bg-rule2" aria-hidden />
+        </div>
+        <div className="flex flex-col">
+          {SUGGESTIONS.map((s, i) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setDraft(session.id, s.endsWith('…') ? s.slice(0, -1) : s);
+                focusComposer(session.id);
+              }}
+              className="ob-transition group flex h-7 items-center gap-3 border-b border-rule2 px-1 text-left text-[12px] tracking-[-0.012em] text-t2 hover:bg-hov hover:text-t1"
+            >
+              <span className="w-4 font-mono text-[9.5px] text-t3">{String(i + 1).padStart(2, '0')}</span>
+              <span className="min-w-0 flex-1 truncate">{s}</span>
+              <CornerDownLeft size={12} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -391,7 +400,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
     return (
       <div className="flex h-full items-center justify-center" data-testid="chat-view">
         {loading || !sessionsLoaded ? (
-          <Spinner size={18} className="text-ob-text-3" label="Loading session" />
+          <Spinner size={16} className="text-t3" label="Loading session" />
         ) : (
           <EmptyState icon={MessageSquareText} title="Session not found" description="It may have been deleted." />
         )}
@@ -417,8 +426,8 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       <ChatHeader session={session} disposable={isDisposableSession(session, messages, queuedCount)} />
 
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} className="h-full overflow-y-auto [scrollbar-gutter:stable]" data-testid="transcript" tabIndex={-1}>
-          <div ref={contentRef} className="mx-auto flex min-h-full w-full max-w-[820px] flex-col gap-5 px-6 pb-8 pt-6">
+        <div ref={scrollRef} className="h-full overflow-y-auto [scrollbar-gutter:stable_both-edges]" data-testid="transcript" tabIndex={-1}>
+          <div ref={contentRef} className="mx-auto flex min-h-full w-full max-w-[820px] flex-col gap-6 px-8 pb-10 pt-7">
             {!entry ? (
               error ? (
                 <EmptyState
@@ -433,11 +442,11 @@ export function ChatView({ sessionId }: { sessionId: string }) {
                 />
               ) : (
                 <div className="flex flex-col gap-6 pt-4" aria-busy={loading} aria-label="Loading transcript">
-                  <div className="ob-skeleton ml-auto h-10 w-2/5 rounded-[14px]" />
+                  <div className="ob-skeleton h-10 w-full" />
                   <div className="flex flex-col gap-2">
                     <div className="ob-skeleton h-3.5 w-4/5" />
                     <div className="ob-skeleton h-3.5 w-3/5" />
-                    <div className="ob-skeleton h-9 w-full rounded-[9px]" />
+                    <div className="ob-skeleton mt-2 h-7 w-full" />
                   </div>
                 </div>
               )
@@ -453,21 +462,22 @@ export function ChatView({ sessionId }: { sessionId: string }) {
             type="button"
             onClick={() => scrollToBottom('smooth')}
             data-testid="jump-latest"
-            className="ob-transition absolute bottom-3 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-pill border border-ob-border bg-ob-surface-3 pl-2.5 pr-3 text-small text-ob-text-2 shadow-pop hover:text-ob-text animate-ob-fade-in"
+            className="ob-transition absolute bottom-3 left-1/2 flex h-7 -translate-x-1/2 items-center gap-2 rounded-[2px] bg-s0 px-3 font-mono text-[9px] font-medium uppercase tracking-[0.14em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] hover:bg-s3 hover:text-t1 animate-ob-fade-in"
           >
-            <ArrowDown size={14} aria-hidden />
+            <ArrowDown size={12} aria-hidden />
             Jump to latest
-            {hasNew ? <span className="size-1.5 rounded-full bg-ob-accent" aria-label="New messages" /> : null}
+            {hasNew ? <span className="size-[5px] rounded-full bg-acc" role="img" aria-label="New messages" /> : null}
           </button>
         ) : null}
       </div>
 
-      <div className="shrink-0 px-6 pb-4 pt-1">
-        <div className="mx-auto w-full max-w-[820px]">
+      <div className="shrink-0 px-8 pb-4 pt-1">
+        <div className="mx-auto w-full max-w-[756px]">
           {isSub ? (
-            <div className="flex items-center gap-3 rounded-[12px] border border-ob-border bg-ob-surface-1 px-4 py-3 text-ui text-ob-text-3" data-testid="subagent-footer">
-              <Bot size={15} aria-hidden className="shrink-0 text-ob-violet" />
-              <span className="flex-1">This is a subagent run. It reports back to its parent session.</span>
+            <div className="flex items-center gap-3 border-t border-rule pt-3 text-[11.5px] text-t3" data-testid="subagent-footer">
+              <Bot size={13} aria-hidden className="shrink-0 text-t3" />
+              <span className="ob-cap shrink-0">Subagent</span>
+              <span className="flex-1">This run reports back to its parent session.</span>
               {session.parentSessionId ? (
                 <Button size="sm" variant="secondary" onClick={() => openSession(session.parentSessionId as string)}>
                   Open parent
@@ -481,10 +491,10 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       </div>
 
       {dragging && !isSub ? (
-        <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-[14px] border-2 border-dashed border-[rgba(143,184,222,0.55)] bg-[rgba(11,18,21,0.82)] animate-ob-fade-in">
-          <div className="flex flex-col items-center gap-2 text-ob-text-2">
-            <ImagePlus size={26} aria-hidden className="text-ob-accent" />
-            <span className="text-ui">Drop images to attach</span>
+        <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-[2px] bg-s0/90 shadow-[inset_0_0_0_1px_var(--acc)] animate-ob-fade-in">
+          <div className="flex flex-col items-center gap-3">
+            <ImagePlus size={18} aria-hidden className="text-acc" />
+            <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-acc">Drop images to attach</span>
           </div>
         </div>
       ) : null}
@@ -501,7 +511,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       >
         <div className="flex flex-col gap-3" data-testid="rewind-dialog">
           {rewindTarget ? (
-            <div className="line-clamp-3 rounded-[8px] border border-ob-border bg-ob-surface-2 px-3 py-2 text-small text-ob-text-2">{messageText(rewindTarget) || '(image)'}</div>
+            <div className="line-clamp-3 rounded-[2px] bg-s2 px-3 py-2 text-[12px] tracking-[-0.008em] text-t2 shadow-[inset_2px_0_0_var(--t1)]">{messageText(rewindTarget) || '(image)'}</div>
           ) : null}
           <Checkbox
             checked={restoreFiles}

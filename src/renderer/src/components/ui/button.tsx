@@ -1,4 +1,4 @@
-// Button + IconButton. Owner: ui-foundation.
+// Button + IconButton (M13 recipes: reference .btn / .tbi). Owner: ui-foundation.
 import type { ComponentProps, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@renderer/lib/cn';
@@ -8,23 +8,23 @@ import { Tooltip } from './tooltip';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
+// primary = solid cold-white fill + black text · secondary = 1 px --line outline · ghost = text only ·
+// danger = --err outline + text · danger-solid = --err fill (destructive confirms only).
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-ob-accent text-ob-accent-ink hover:bg-ob-accent-hover active:bg-[#7fa9d1] font-medium',
-  secondary:
-    'bg-ob-surface-2 text-ob-text border border-ob-border hover:bg-ob-surface-3 hover:border-[#2f404e] active:bg-[#263644] font-medium',
-  ghost: 'text-ob-text-2 hover:bg-ob-hover hover:text-ob-text active:bg-ob-press',
-  danger:
-    'bg-ob-danger-soft text-ob-danger border border-[rgba(240,113,120,0.28)] hover:bg-[rgba(240,113,120,0.2)] active:bg-[rgba(240,113,120,0.26)] font-medium',
-  'danger-solid': 'bg-ob-danger text-[#1a0c0d] hover:bg-[#f3868c] active:bg-[#e3666d] font-medium',
+  primary: 'border border-transparent bg-acc font-semibold text-acc-ink hover:bg-acc-hi active:bg-acc-press',
+  secondary: 'border border-line font-medium text-t2 hover:bg-hov hover:text-t1 active:bg-press',
+  ghost: 'border border-transparent font-medium text-t2 hover:bg-hov hover:text-t1 active:bg-press',
+  danger: 'border border-err font-medium text-err hover:bg-err-wash active:bg-err-wash2',
+  'danger-solid': 'border border-transparent bg-err font-semibold text-black hover:bg-err-hi active:bg-err-press',
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-7 px-2.5 text-small gap-1.5 rounded-ctl',
-  md: 'h-8 px-3 text-ui gap-1.5 rounded-ctl',
-  lg: 'h-9 px-4 text-ui gap-2 rounded-[7px]',
+  sm: 'h-6 gap-1.5 px-2.5 text-[11px]',
+  md: 'h-7 gap-[7px] px-[13px] text-[11.5px]',
+  lg: 'h-8 gap-2 px-4 text-[12px]',
 };
 
-const ICON_SIZES: Record<ButtonSize, number> = { sm: 14, md: 15, lg: 16 };
+const ICON_SIZES: Record<ButtonSize, number> = { sm: 11, md: 12, lg: 13 };
 
 export interface ButtonProps extends ComponentProps<'button'> {
   variant?: ButtonVariant;
@@ -66,8 +66,8 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        'ob-transition relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap outline-offset-1',
-        'disabled:pointer-events-none disabled:opacity-45',
+        'ob-transition relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-[2px] tracking-[-0.008em]',
+        'disabled:pointer-events-none disabled:opacity-40',
         VARIANTS[variant],
         SIZES[size],
         fullWidth && 'w-full',
@@ -75,7 +75,7 @@ export function Button({
       )}
       {...rest}
     >
-      {loading ? <Spinner size={iconSize - 2} /> : renderIcon(icon, iconSize)}
+      {loading ? <Spinner size={iconSize} /> : renderIcon(icon, iconSize)}
       {children}
       {renderIcon(iconRight, iconSize)}
     </button>
@@ -85,12 +85,12 @@ export function Button({
 export type IconButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const ICON_BTN_SIZES: Record<IconButtonSize, string> = {
-  xs: 'size-5 rounded-[4px]',
-  sm: 'size-6 rounded-[5px]',
-  md: 'size-7 rounded-ctl',
-  lg: 'size-8 rounded-ctl',
+  xs: 'size-5',
+  sm: 'size-6',
+  md: 'size-7',
+  lg: 'size-8',
 };
-const ICON_BTN_ICON: Record<IconButtonSize, number> = { xs: 12, sm: 14, md: 16, lg: 16 };
+const ICON_BTN_ICON: Record<IconButtonSize, number> = { xs: 12, sm: 14, md: 15, lg: 16 };
 
 export interface IconButtonProps extends Omit<ComponentProps<'button'>, 'children'> {
   /** Required: used as aria-label and tooltip text. */
@@ -98,7 +98,7 @@ export interface IconButtonProps extends Omit<ComponentProps<'button'>, 'childre
   icon: LucideIcon | ReactNode;
   size?: IconButtonSize;
   variant?: 'ghost' | 'secondary' | 'danger' | 'primary';
-  /** Toggled-on look (accent wash). */
+  /** Toggled-on look (lit: --t1 icon on an acc-wash with a hairline frame). */
   active?: boolean;
   shortcut?: string;
   tooltipSide?: 'top' | 'right' | 'bottom' | 'left';
@@ -108,10 +108,10 @@ export interface IconButtonProps extends Omit<ComponentProps<'button'>, 'childre
 }
 
 const ICON_BTN_VARIANTS: Record<NonNullable<IconButtonProps['variant']>, string> = {
-  ghost: 'text-ob-text-3 hover:text-ob-text hover:bg-ob-hover active:bg-ob-press',
-  secondary: 'text-ob-text-2 bg-ob-surface-2 border border-ob-border hover:text-ob-text hover:bg-ob-surface-3',
-  danger: 'text-ob-text-3 hover:text-ob-danger hover:bg-ob-danger-soft',
-  primary: 'bg-ob-accent text-ob-accent-ink hover:bg-ob-accent-hover',
+  ghost: 'text-t3 hover:bg-hov hover:text-t1 active:bg-press',
+  secondary: 'border border-line text-t2 hover:bg-hov hover:text-t1',
+  danger: 'text-t3 hover:bg-err-wash hover:text-err',
+  primary: 'bg-acc text-acc-ink hover:bg-white',
 };
 
 export function IconButton({
@@ -136,11 +136,11 @@ export function IconButton({
       aria-pressed={active === undefined ? undefined : active}
       disabled={disabled || loading}
       className={cn(
-        'ob-transition inline-flex shrink-0 select-none items-center justify-center outline-offset-1',
+        'ob-transition inline-flex shrink-0 select-none items-center justify-center rounded-[2px]',
         'disabled:pointer-events-none disabled:opacity-40',
         ICON_BTN_SIZES[size],
         ICON_BTN_VARIANTS[variant],
-        active && 'bg-ob-accent-soft text-ob-accent hover:bg-ob-accent-soft hover:text-ob-accent',
+        active && 'bg-acc-wash text-t1 shadow-[inset_0_0_0_1px_var(--rule)] hover:bg-acc-wash hover:text-t1',
         className,
       )}
       {...rest}

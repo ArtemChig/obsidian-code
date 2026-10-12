@@ -19,8 +19,8 @@ export {
 export { ConfirmDialog, Dialog, DialogClose, DialogContent, DialogTrigger, type DialogContentProps } from './dialog';
 export { EmptyState, ProgressBar, Skeleton, Spinner, StatusDot, statusTone, type Tone, type StatusDotProps, type ProgressBarProps } from './feedback';
 export { Field, FIELD_BASE, Input, Textarea, type InputProps, type TextareaProps } from './input';
-export { Kbd, Shortcut } from './kbd';
-export { Card, ScrollArea, SectionLabel, Separator, type CardProps } from './layout';
+export { Kbd, Shortcut, shortcutParts } from './kbd';
+export { Card, ScrollArea, SectionLabel, Separator, type CardProps, type SectionLabelProps } from './layout';
 export { Markdown, type MarkdownProps } from './markdown';
 export {
   ContextMenu,
@@ -46,7 +46,7 @@ export {
 } from './menu';
 export { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from './popover';
 export { Select, type SelectGroupDef, type SelectOption, type SelectProps } from './select';
-export { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
+export { Segmented, Tabs, TabsContent, TabsList, TabsTrigger, type SegmentedOption, type SegmentedProps } from './tabs';
 export { LiveDuration, RelativeTime, useNow } from './time';
 export { Toaster, toast, dismissToast, type Toast, type ToastInput, type ToastLevel } from './toast';
 export { Checkbox, Switch, type CheckboxProps, type SwitchProps } from './toggles';

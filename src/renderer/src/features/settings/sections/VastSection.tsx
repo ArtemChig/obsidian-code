@@ -63,7 +63,7 @@ function ApiKey() {
         description={
           <>
             Create a key at{' '}
-            <button type="button" className="inline-flex items-center gap-0.5 text-ob-accent hover:underline" onClick={() => openExternal(VAST_KEYS_URL)}>
+            <button type="button" className="inline-flex items-center gap-0.5 text-t1 underline decoration-line underline-offset-2 hover:decoration-acc" onClick={() => openExternal(VAST_KEYS_URL)}>
               cloud.vast.ai <ArrowUpRight size={11} aria-hidden />
             </button>{' '}
             with permissions: instance read and write, user read and write (to register the app&rsquo;s SSH key), and misc (offer search). The key is encrypted on this PC and never shown again.
@@ -91,7 +91,7 @@ function ApiKey() {
           }
         />
         {testing && !result ? (
-          <div className="mt-2 flex items-center gap-2 text-small text-ob-text-3">
+          <div className="mt-2 flex items-center gap-2 font-mono text-[9.5px] text-t3">
             <Spinner size={12} /> Checking with Vast.ai…
           </div>
         ) : null}
@@ -100,15 +100,15 @@ function ApiKey() {
             role="status"
             data-testid="vast-test-result"
             data-ok={result.ok}
-            className={cn('mt-2 flex items-start gap-2 rounded-ctl border px-3 py-2 text-ui', result.ok ? 'border-[rgba(95,211,154,0.3)] bg-ob-success-soft text-ob-text' : 'border-[rgba(240,113,120,0.3)] bg-ob-danger-soft text-ob-text')}
+            className={cn('mt-2 flex items-start gap-[9px] rounded-[2px] px-3 py-[9px] text-[11.5px] text-t2', result.ok ? 'shadow-[inset_0_0_0_1px_var(--ok-edge)]' : 'shadow-[inset_0_0_0_1px_var(--err)]')}
           >
-            {result.ok ? <CircleCheck size={15} aria-hidden className="mt-0.5 shrink-0 text-ob-success" /> : <CircleAlert size={15} aria-hidden className="mt-0.5 shrink-0 text-ob-danger" />}
+            {result.ok ? <CircleCheck size={13} aria-hidden className="mt-[2px] shrink-0 text-ok" /> : <CircleAlert size={13} aria-hidden className="mt-[2px] shrink-0 text-err" />}
             <span>
               {result.message}
               {result.ok && result.creditBalance != null ? (
                 <>
                   {' '}
-                  — credit <span className="ob-tabular font-mono">{formatMoney(result.creditBalance)}</span>
+                  — credit <span className="ob-tabular font-mono text-t1">{formatMoney(result.creditBalance)}</span>
                 </>
               ) : null}
             </span>
@@ -151,7 +151,7 @@ function BudgetAndSafety() {
       </Row>
       <Row stacked label="When clocking out" description="Destroying is free after it ends but the model downloads again next time. Parking keeps the disk (billed as storage) so the next clock-in on the same machine starts fast.">
         <div className="flex flex-wrap items-center gap-4">
-          <div role="radiogroup" aria-label="Clock-out mode" className="inline-flex h-8 items-center gap-0.5 rounded-[8px] border border-ob-border bg-ob-bg p-[3px]" data-testid="vast-clockout-mode">
+          <div role="radiogroup" aria-label="Clock-out mode" className="inline-flex h-7 items-stretch overflow-hidden rounded-[2px] shadow-[inset_0_0_0_1px_var(--line)]" data-testid="vast-clockout-mode">
             {(['destroy', 'park'] as const).map((m) => (
               <button
                 key={m}
@@ -160,14 +160,14 @@ function BudgetAndSafety() {
                 aria-checked={v.clockOutMode === m}
                 data-testid={`vast-mode-${m}`}
                 onClick={() => v.clockOutMode !== m && void patchVast({ clockOutMode: m })}
-                className={cn('ob-transition h-full rounded-[6px] px-3 text-small font-medium capitalize', v.clockOutMode === m ? 'bg-ob-surface-3 text-ob-text shadow-[0_1px_2px_rgba(0,0,0,0.3)]' : 'text-ob-text-3 hover:text-ob-text-2')}
+                className={cn('ob-transition flex h-full items-center px-[11px] text-[11px] capitalize tracking-[-0.008em] outline-offset-[-2px]', v.clockOutMode === m ? 'bg-acc font-semibold text-acc-ink' : 'text-t3 hover:text-t1', m === 'park' && v.clockOutMode !== m && 'shadow-[inset_1px_0_0_var(--line)]')}
               >
                 {m === 'destroy' ? 'Destroy' : 'Park'}
               </button>
             ))}
           </div>
-          <div className={cn('flex items-center gap-2 text-ui', v.clockOutMode !== 'park' && 'opacity-50')}>
-            <label htmlFor="vast-parkdays" className="text-ob-text-2">
+          <div className="flex items-center gap-2 text-[11.5px]">
+            <label htmlFor="vast-parkdays" className={v.clockOutMode === 'park' ? 'text-t2' : 'text-t3'}>
               Destroy parked instances after
             </label>
             <NumberField id="vast-parkdays" testId="vast-parkdays" value={v.parkMaxDays} min={1} max={30} integer unit="days" width="w-[64px]" disabled={v.clockOutMode !== 'park'} onCommit={(n) => patchVast({ parkMaxDays: n })} />

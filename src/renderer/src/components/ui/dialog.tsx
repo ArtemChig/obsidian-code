@@ -1,4 +1,4 @@
-// Dialog (Radix) + ConfirmDialog. Owner: ui-foundation.
+// Dialog (Radix) + ConfirmDialog. M13: --s0 surface, 1 px --line, separation shadow, hairline footer. Owner: ui-foundation.
 import * as RD from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -28,21 +28,21 @@ export interface DialogContentProps {
 export function DialogContent({ title, description, children, footer, size = 'md', className, bodyClassName, hideClose, onOpenAutoFocus }: DialogContentProps) {
   return (
     <RD.Portal>
-      <RD.Overlay className="fixed inset-0 z-[80] bg-[rgba(4,8,10,0.62)] backdrop-blur-[2px] animate-ob-fade-in" />
+      <RD.Overlay className="fixed inset-0 z-[80] bg-[rgba(0,0,0,0.72)] animate-ob-fade-in" />
       <RD.Content
         onOpenAutoFocus={onOpenAutoFocus}
         className={cn(
           'fixed left-1/2 top-[12vh] z-[81] flex max-h-[76vh] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col',
-          'rounded-[12px] border border-ob-border bg-ob-surface-1 shadow-pop animate-ob-pop-in focus-visible:outline-none',
+          'rounded-[2px] border border-line bg-s0 shadow-deep animate-ob-pop-in focus-visible:outline-none',
           SIZES[size],
           className,
         )}
       >
-        <div className="flex items-start justify-between gap-4 px-5 pb-1 pt-4">
+        <div className="flex items-start justify-between gap-4 px-5 pb-1 pt-[18px]">
           <div className="flex min-w-0 flex-col gap-1">
-            <RD.Title className="text-[15px] font-semibold leading-6 text-ob-text">{title}</RD.Title>
+            <RD.Title className="text-[15px] font-semibold leading-[20px] tracking-[-0.032em] text-t1">{title}</RD.Title>
             {description ? (
-              <RD.Description className="text-ui text-ob-text-3">{description}</RD.Description>
+              <RD.Description className="text-[11.5px] leading-[1.5] text-t3">{description}</RD.Description>
             ) : (
               <RD.Description className="sr-only">{typeof title === 'string' ? title : 'Dialog'}</RD.Description>
             )}
@@ -50,14 +50,14 @@ export function DialogContent({ title, description, children, footer, size = 'md
           {!hideClose ? (
             <RD.Close
               aria-label="Close"
-              className="ob-transition -mr-1.5 -mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-ctl text-ob-text-3 hover:bg-ob-hover hover:text-ob-text"
+              className="ob-transition -mr-2 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-[2px] text-t3 hover:bg-hov hover:text-t1"
             >
-              <X size={16} aria-hidden />
+              <X size={14} aria-hidden />
             </RD.Close>
           ) : null}
         </div>
         {children ? <div className={cn('min-h-0 flex-1 overflow-y-auto px-5 py-3', bodyClassName)}>{children}</div> : null}
-        {footer ? <div className="flex items-center justify-end gap-2 border-t border-ob-border px-5 py-3">{footer}</div> : null}
+        {footer ? <div className="flex h-11 shrink-0 items-center justify-end gap-2 border-t border-rule px-5">{footer}</div> : null}
       </RD.Content>
     </RD.Portal>
   );

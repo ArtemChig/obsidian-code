@@ -68,7 +68,7 @@ export function McpSection() {
   return (
     <Section id="mcp" title="MCP servers" description="Model Context Protocol servers add tools for the agent. They connect when you save, and their tools show up as mcp__server__tool.">
       <Group flush testId="settings-mcp">
-        <div className="p-4">
+        <div className="py-3">
           <JsonEditor<Settings['mcpServers']>
             testId="mcp-json"
             value={servers}
@@ -78,8 +78,8 @@ export function McpSection() {
             onApply={(v) => saveSettings({ mcpServers: v }, 'MCP servers saved')}
             hint={
               <>
-                An object of servers. Local servers use <code className="font-mono text-[11px] text-ob-text-2">command</code> and <code className="font-mono text-[11px] text-ob-text-2">args</code>; remote ones use{' '}
-                <code className="font-mono text-[11px] text-ob-text-2">"type": "http"</code> and a <code className="font-mono text-[11px] text-ob-text-2">url</code>. Every MCP tool asks before it runs. Windows paths need doubled backslashes.
+                An object of servers. Local servers use <code className="font-mono text-[10px] text-t2">command</code> and <code className="font-mono text-[10px] text-t2">args</code>; remote ones use{' '}
+                <code className="font-mono text-[10px] text-t2">"type": "http"</code> and a <code className="font-mono text-[10px] text-t2">url</code>. Every MCP tool asks before it runs. Windows paths need doubled backslashes.
               </>
             }
           />
@@ -97,7 +97,7 @@ export function HooksSection() {
   return (
     <Section id="hooks" title="Hooks" description="Shell commands that run at points in a session. The command receives a JSON payload on stdin; exit code 2 blocks the action and shows stderr to the agent.">
       <Group flush testId="settings-hooks">
-        <div className="p-4">
+        <div className="py-3">
           <JsonEditor<Settings['hooks']>
             testId="hooks-json"
             value={hooks}
@@ -107,9 +107,9 @@ export function HooksSection() {
             onApply={(v) => saveSettings({ hooks: v }, 'Hooks saved')}
             hint={
               <>
-                Events: <code className="font-mono text-[11px] text-ob-text-2">UserPromptSubmit</code>, <code className="font-mono text-[11px] text-ob-text-2">PreToolUse</code> (can block), <code className="font-mono text-[11px] text-ob-text-2">PostToolUse</code>,{' '}
-                <code className="font-mono text-[11px] text-ob-text-2">Stop</code>, <code className="font-mono text-[11px] text-ob-text-2">SessionStart</code>. Each hook: <code className="font-mono text-[11px] text-ob-text-2">command</code>, optional{' '}
-                <code className="font-mono text-[11px] text-ob-text-2">matcher</code> (tool name) and <code className="font-mono text-[11px] text-ob-text-2">timeoutMs</code>.
+                Events: <code className="font-mono text-[10px] text-t2">UserPromptSubmit</code>, <code className="font-mono text-[10px] text-t2">PreToolUse</code> (can block), <code className="font-mono text-[10px] text-t2">PostToolUse</code>,{' '}
+                <code className="font-mono text-[10px] text-t2">Stop</code>, <code className="font-mono text-[10px] text-t2">SessionStart</code>. Each hook: <code className="font-mono text-[10px] text-t2">command</code>, optional{' '}
+                <code className="font-mono text-[10px] text-t2">matcher</code> (tool name) and <code className="font-mono text-[10px] text-t2">timeoutMs</code>.
               </>
             }
           />
@@ -143,7 +143,7 @@ export function MemorySection() {
         </Row>
         <Row stacked label="Your memory file" description="Instructions that apply to every project. Create it if it does not exist yet; changes take effect in the next session.">
           <div className="flex flex-col gap-2.5">
-            <code className="ob-selectable block truncate rounded-ctl border border-ob-border bg-ob-code-bg px-3 py-2 font-mono text-[12px] text-ob-text-2" title={memoryPath} data-testid="memory-path">
+            <code className="ob-selectable ob-well block truncate px-[10px] py-[7px] font-mono text-[10.5px] tracking-[-0.01em] text-t1" title={memoryPath} data-testid="memory-path">
               {memoryPath || 'Unknown (not connected)'}
             </code>
             <div className="flex flex-wrap items-center gap-2">
@@ -164,16 +164,16 @@ export function MemorySection() {
           </div>
         </Row>
         <Row stacked label="Where it looks" description="In order, from the project folder upwards, then your home folder.">
-          <ul className="flex flex-col gap-1.5 text-small text-ob-text-2">
+          <ul className="flex flex-col text-[11.5px] text-t2">
             {['OBSIDIAN.md', 'CLAUDE.md', 'AGENTS.md', '.claude/CLAUDE.md', '~/.obsidian-code/OBSIDIAN.md', settings.importClaudeConfig ? '~/.claude/CLAUDE.md' : null].filter(Boolean).map((f) => (
-              <li key={f as string} className="flex items-center gap-2">
-                <span className="size-1 rounded-full bg-ob-text-3" aria-hidden />
-                <code className="font-mono text-[11.5px]">{f}</code>
+              <li key={f as string} className="flex h-7 items-center gap-[9px] border-b border-rule2 last:border-b-0">
+                <span className="size-1 rounded-full bg-t3" aria-hidden />
+                <code className="font-mono text-[10.5px] tracking-[-0.01em] text-t1">{f}</code>
               </li>
             ))}
           </ul>
-          <p className="mt-2.5 text-small text-ob-text-3">
-            Start a message with <code className="font-mono text-[11px] text-ob-text-2">#</code> to add a note to the project's memory file.
+          <p className="mt-2.5 text-[11px] text-t3">
+            Start a message with <code className="font-mono text-[10px] text-t2">#</code> to add a note to the project's memory file.
           </p>
         </Row>
       </Group>
@@ -210,7 +210,7 @@ export function ShellSection() {
           />
         </Row>
         <Row label="Detected" description="What “Automatic” resolves to on this PC.">
-          <code className="ob-selectable max-w-[320px] truncate font-mono text-[11.5px] text-ob-text-2" title={detected} data-testid="shell-detected">
+          <code className="ob-selectable max-w-[320px] truncate font-mono text-[10.5px] tracking-[-0.01em] text-t2" title={detected} data-testid="shell-detected">
             {detected ?? 'unknown'}
           </code>
         </Row>
@@ -296,12 +296,12 @@ export function AboutSection() {
   return (
     <Section id="about" title="About" description="Obsidian Code runs open-weight models on this PC, on a GPU you rent by the hour, or on any OpenAI-compatible endpoint.">
       <Group testId="settings-about">
-        <div className="flex items-center gap-4 px-4 py-4">
+        <div className="flex items-center gap-4 py-4">
           <AppMark size={40} />
           <div className="flex flex-col gap-0.5">
-            <span className="text-[15px] font-semibold text-ob-text">Obsidian Code</span>
-            <span className="text-small text-ob-text-3">
-              Version <span className="font-mono text-ob-text-2" data-testid="about-version">{system?.version ?? '—'}</span>
+            <span className="text-[15px] font-semibold tracking-[-0.032em] text-t1">Obsidian Code</span>
+            <span className="text-[11px] text-t3">
+              Version <span className="font-mono text-t1" data-testid="about-version">{system?.version ?? '—'}</span>
             </span>
           </div>
           <span className="flex-1" />
@@ -310,14 +310,14 @@ export function AboutSection() {
           </Badge>
         </div>
         {rows.map(([k, v]) => (
-          <div key={k} className="flex items-center justify-between gap-6 px-4 py-2.5">
-            <span className="text-ui text-ob-text-3">{k}</span>
+          <div key={k} className="flex h-8 items-center justify-between gap-6">
+            <span className="text-[11.5px] text-t3">{k}</span>
             <span className="flex min-w-0 items-center gap-1.5">
-              <code className="ob-selectable truncate font-mono text-[12px] text-ob-text-2" title={v} data-testid={`about-row-${k.toLowerCase().replace(/\s+/g, '-')}`}>
+              <code className="ob-selectable truncate font-mono text-[10.5px] tracking-[-0.02em] text-t1" title={v} data-testid={`about-row-${k.toLowerCase().replace(/\s+/g, '-')}`}>
                 {v ?? '—'}
               </code>
               {v && (k === 'Data folder' || k === 'Home folder') ? (
-                <button type="button" aria-label={`Copy ${k.toLowerCase()}`} className="ob-transition flex size-6 shrink-0 items-center justify-center rounded text-ob-text-3 hover:bg-ob-hover hover:text-ob-text" onClick={() => copy(v, k)}>
+                <button type="button" aria-label={`Copy ${k.toLowerCase()}`} className="ob-transition flex size-6 shrink-0 items-center justify-center rounded-[2px] text-t3 hover:bg-hov hover:text-t1" onClick={() => copy(v, k)}>
                   <Copy size={12} aria-hidden />
                 </button>
               ) : null}

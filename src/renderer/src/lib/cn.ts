@@ -4,10 +4,10 @@
 // Owner: ui-foundation. Unit-tested in tests/unit/ui-foundation/cn.test.ts.
 import { clsx, type ClassValue } from 'clsx';
 
-const TEXT_SIZES = new Set(['meta', 'small', 'ui', 'prose', 'lead', 'title', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl']);
+const TEXT_SIZES = new Set(['cap', 'micro', 'meta', 'small', 'ui', 'prose', 'lead', 'title', 'display', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl']);
 const DISPLAY = new Set(['block', 'inline-block', 'inline', 'flex', 'inline-flex', 'grid', 'inline-grid', 'hidden', 'contents', 'table', 'flow-root']);
 const POSITION = new Set(['static', 'fixed', 'absolute', 'relative', 'sticky']);
-const FONT_FAMILY = new Set(['mono', 'sans', 'serif']);
+const FONT_FAMILY = new Set(['mono', 'sans', 'serif', 'ui']);
 const BORDER_STYLE = new Set(['solid', 'dashed', 'dotted', 'double', 'none', 'hidden']);
 
 // Ordered so longer prefixes match first.

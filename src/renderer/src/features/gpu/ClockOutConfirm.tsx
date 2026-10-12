@@ -31,13 +31,14 @@ export function GpuClockOutConfirm() {
       }}
     >
       {running.length ? (
-        <ul className="flex flex-col gap-1 text-ui text-ob-text-2" data-testid="gpu-confirm-sessions">
+        <ul className="flex flex-col border-t border-rule2 text-[12px] tracking-[-0.012em] text-t1" data-testid="gpu-confirm-sessions">
           {running.slice(0, 5).map((t, i) => (
-            <li key={i} className="truncate">
-              · {t}
+            <li key={i} className="flex h-7 items-center gap-[9px] border-b border-rule2">
+              <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-live" />
+              <span className="truncate">{t}</span>
             </li>
           ))}
-          {running.length > 5 ? <li className="text-ob-text-3">and {running.length - 5} more</li> : null}
+          {running.length > 5 ? <li className="flex h-7 items-center font-mono text-[10px] text-t3">and {running.length - 5} more</li> : null}
         </ul>
       ) : null}
     </ConfirmDialog>
