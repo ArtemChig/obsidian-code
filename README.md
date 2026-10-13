@@ -109,6 +109,64 @@ default and always respects the budget.
 **Activity:** everything running across all sessions in one place: sessions, subagents, background shells,
 scheduled runs and the GPU. It also lists anything waiting for your answer, with Stop and Open buttons.
 
+## Engines: Obsidian and Claude Code
+
+Every session runs on one **engine**:
+
+- **Obsidian** (default): the app's own agent loop, with a compact prompt and tool set tuned for local models.
+- **Claude Code**: the real Claude Code harness (Anthropic's Agent SDK 0.3.296, which bundles Claude Code 2.1.296)
+  running inside the app. You get its shell and tool set (Read, Edit, Write, Bash, Grep, Glob, WebFetch, TodoWrite,
+  subagents via the Agent tool, skills, slash commands, hooks, plan mode, questions, permissions, compaction), but
+  **every model request goes to your own model**: the session's local `llama-server` or Vast.ai GPU. There is no
+  Anthropic account, login, telemetry or update check. The app talks to Claude Code through a small local relay that
+  only forwards to the session's endpoint (it also keeps the endpoint's API key out of Claude Code's environment).
+
+**How to switch:** use the engine selector in the composer (per session, only while the session is idle; the
+transcript carries over), choose a default for new sessions in **Settings → Engine**, or pick it in the quick start on
+the Home screen. Claude Code needs an endpoint that serves the Anthropic Messages API (`/v1/messages`); the local
+`llama-server` does. Switching a session back to Obsidian works the same way.
+
+**Lean or full prompt** (Settings → Engine):
+
+| | System prompt | First turn (prompt tokens) |
+|---|---|---|
+| **Lean** (default) | Claude Code's tools and loop with the app's compact prompt: 614 tokens, no refusal or content-policy language | about 17.6k |
+| **Full** | Claude Code's own preset prompt: 1,329 tokens, includes Anthropic's refusal guidance | about 18.3k |
+
+The prompt is dominated by Claude Code's tool definitions (about 15k tokens) and its context block (about 2k), so
+**Full is only about 4% heavier than Lean**; the real difference is behaviour. Measured on the local GPU: a cold first
+turn takes 30–80 s before the first token, and the following turns reuse the prompt cache (first token in 2–10 s).
+The Obsidian engine starts with about 4.4k tokens. Use Claude Code when you want its harness, and Obsidian when speed
+matters.
+
+**What differs from stock Claude Code:**
+
+- **Web search** is the app's own `web_search` tool (DuckDuckGo by default; Brave, Tavily and SearXNG under
+  Settings → Web search). Claude Code's built-in WebSearch is an Anthropic server-side tool and is switched off.
+  WebFetch works as usual; the page summary is written by your model.
+- **Scheduled tasks** use the app's scheduler (they survive restarts, unlike Claude Code's session-only cron).
+- **Subagents** (Agent tool) run in the foreground by default, so a local GPU handles one request at a time and the
+  report comes back as the tool result. A call that explicitly asks for the background is respected.
+- **Isolated config:** Claude Code runs with its own config folder, `%APPDATA%\obsidian-code\claude-code`, so it never
+  sees credentials. Your `~/.claude` skills, agents, commands and `CLAUDE.md` are copied in (switch off with
+  *Import ~/.claude* in Settings → Engine); `settings.json`, hooks and plugins are never imported. A project's
+  `.claude` settings, hooks and skills load only for trusted folders (Settings → Permissions).
+- **Plan mode** rejects every change (the model may only write Claude Code's own plan file), as in the Obsidian engine.
+- **Tool calls written as text:** open-weight models occasionally write a tool call as plain text that `llama-server`
+  does not recognise; the relay turns it back into a real tool call, so the turn continues instead of ending.
+- **Cost:** `/cost` shows token usage and "local model, not billed" instead of the dollar guess Claude Code makes for
+  unknown models. The `/` menu lists Claude Code's own commands for these sessions.
+
+**Not officially supported:** Anthropic does not support non-Claude models behind Claude Code. Claude Code is built and
+tuned for Claude models; open-weight models follow its tool conventions less reliably (for example they sometimes
+skip the todo list or answer without using a tool). The Agent SDK and Claude Code versions are pinned and the
+auto-updater is off, so a newer Claude Code can change behaviour only when you update the app.
+
+**Check it yourself:** `scripts/net-audit.ps1` samples the outbound TCP connections of the core and all its child
+processes while `npx tsx scripts/e2e-real.ts --engine claude-code 9 14` runs a subagent and `/compact`. Only loopback
+(relay and `llama-server`) appears; with a web-tool scenario it adds just the sites that were fetched
+(`docs/e2e-real-results.md`).
+
 ## Speed notes
 
 - **Local (RTX 3070 Ti):** about 20 tok/s generation. The first message of a session takes about 4–5 s before the
@@ -124,7 +182,8 @@ npm run core         # headless core (prints its ws:// URL)
 npm run dev:web      # UI in a browser: http://localhost:5173/?core=<url>  (or ?demo=1)
 npm run typecheck && npm test
 npm run e2e          # Playwright (UI + real-app tests)
-npx tsx scripts/e2e-real.ts            # 15 agent scenarios against the local model
+npx tsx scripts/e2e-real.ts            # 15 agent scenarios against the local model (--engine claude-code for that engine)
+powershell -File scripts/net-audit.ps1 -Out audit.jsonl   # outbound-TCP audit while an e2e run is going
 npm run dist         # Windows installer + portable exe → release/
 ```
 

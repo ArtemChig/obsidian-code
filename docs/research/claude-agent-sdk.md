@@ -193,3 +193,49 @@ SDK always prepends "You are a Claude agent, built on Anthropic's Claude Agent S
 * Claude Code's own file checkpointing (`enableFileCheckpointing`/`rewindFiles`) is unused; the app's checkpoints cover
   Edit/Write/MultiEdit/NotebookEdit but not files changed by Bash commands.
 * `~/.claude/settings.json` (hooks, permissions, env) and plugins are deliberately not imported.
+
+## Real-model e2e findings (scripts/e2e-real.ts --engine claude-code, 2026-10-13)
+
+The harness records `/v1/messages` too (Anthropic SSE: usage, stop reason, first token) next to `/v1/chat/completions`.
+Scenarios 1, 2, 3, 5, 7, 8, 9, 11, 12 and 14 (`/cost` + `/compact`) pass; results are in `docs/e2e-real-results.md`. Bugs
+found and fixed, each with a regression test in `tests/unit/engine`:
+
+* **Subagents started in the background.** Claude Code 2.1.296's Agent tool runs agents asynchronously by default ("Async
+  agent launched … you will be notified"). On the single local GPU that meant two model requests at once and a model that
+  polled with `SendMessage` (a 220 s run; the shared server saw 2 concurrent requests). The `PreToolUse` hook now sets
+  `run_in_background: false` when the call does not say; an explicit `true`/`false` is kept (4 requests, 80–120 s, never
+  more than one request at a time). `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` would also disable background Bash, so it is
+  not used.
+* **Plan file listed as a changed file.** In plan mode Claude Code writes the plan with `Write` to
+  `<config dir>/plans/<slug>.md`; the translator recorded it in the Changes panel. `recordChange` now ignores files inside
+  `<dataDir>/claude-code` (the Write card is still shown).
+* **`/cost` repeated after `/compact`.** `/cost` arrives as a synthetic assistant message (`model: '<synthetic>'`,
+  `local_command_source`); after `/compact` Claude Code emits the same message again (new ids) following
+  `compact_boundary`. Those are dropped for the rest of the turn.
+* **`/cost` showed a dollar price** ("Total cost: $0.0365 (costs may be inaccurate due to usage of unknown models)"):
+  Claude Code prices unknown models like Sonnet. The text is rewritten to "$0.00 (local model, not billed)" and the
+  per-model amounts are removed.
+* **Plan mode could be bypassed.** When a model called `Write`/`Edit` on a project file in plan mode, Claude Code asked
+  `canUseTool`; the engine treated the app's "plan mode" denial as "ask the user" and the edit ran after one click (seen
+  in the e2e: the file was changed before `ExitPlanMode`). Plan-mode denials are now returned as denials (the app's
+  plan-mode message), except for the plan file under `<config dir>/plans`.
+* **Tool calls written as text.** In 3 of about 14 todo-scenario runs the first turn came back as `<TodoWrite><parameter=todos>[...]</parameter></function></tool_call>` (one tag per line)
+  (the tool name as the tag, no `<tool_call><function=` wrapper): llama.cpp's parser leaves it as text, the turn ends with
+  `end_turn` and the call is shown as the answer. `engine/recover.ts` (in the relay) holds back only text blocks that start
+  with a tool-call opener, parses them with the app's fallback parser (`llm/textToolCalls.ts`, now also accepting the
+  tool-name tag) and emits `tool_use` blocks with `stop_reason: tool_use`; anything else is forwarded unchanged.
+* Model variance, not a bug: in about half of the runs the model does the three file steps of the todo scenario without
+  calling TodoWrite although the user asked for a todo list (with or without the user's `~/.claude` config imported; a
+  stronger line in the lean prompt did not change the rate, so it was not kept). The Obsidian engine, with 12 tools
+  instead of Claude Code's 26, passes this scenario every time.
+
+### Network audit (`scripts/net-audit.ps1`)
+
+Samples `netstat -ano -p tcp` every 0.3 s for the core's process and all descendants (claude.exe, git, bash, ...), and
+records each distinct (process, remote address, port). Run alongside a subagent + `/compact` scenario (159 s, 223
+samples): `claude.exe` → one loopback port (the relay), `node.exe` → loopback (relay, the recording proxy,
+`llama-server` on :8080): **0 remote endpoints**. A web scenario (WebSearch + WebFetch) adds exactly two: `node.exe` →
+`52.149.246.39:443` (duckduckgo.com, the app's `web_search` tool) and `claude.exe` → `208.80.154.224:443`
+(en.wikipedia.org, the WebFetch target); `api.anthropic.com` / `claude.ai` (160.79.104.10) never appear. The WebFetch
+page summary (a 30k-token request) went to the local model. Limits: TCP only; a connection that opens and closes between
+two samples is missed (the spike's CONNECT-logging `HTTPS_PROXY` covers that).
