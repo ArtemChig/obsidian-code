@@ -239,6 +239,58 @@ describe('failure injection: the instance is destroyed every time', () => {
     expect(h.manager.history()[0].endReason).toBe('error');
   });
 
+  // Live v1.0.2 run: instance #55738463 kept answering "All configured authentication methods failed" for 5 min.
+  it('SSH key not on the machine (attach before running was lost) → the key is attached again once it runs → ready', async () => {
+    h = await createHarness({ sshAuth: 'attached-only' });
+    h.vast.fail.attachLostBeforeRunning = true;
+    await h.manager.start();
+    await h.manager.clockIn({ profileId: 'light', modelId: TEST_MODEL });
+    expect(await h.manager.waitUntilReady(10_000)).toBe(true);
+    const id = h.manager.status().instanceId!;
+    const attaches = h.vast.requests.filter((r) => r.method === 'POST' && r.path === `/api/v0/instances/${id}/ssh/`);
+    expect(attaches.length).toBeGreaterThanOrEqual(2); // right after create (lost) + once it runs
+    expect(h.vast.instances.get(id)!.attachedKeys.length).toBeGreaterThanOrEqual(1);
+    expect(h.vast.destroyed).toHaveLength(0);
+    await h.manager.clockOut();
+    await expectAllDestroyed(h);
+  });
+
+  it('a machine that keeps rejecting the SSH key is given up early, its container log saved, destroyed, and the next offer is used', async () => {
+    h = await createHarness({ sshRejectFirst: 1 });
+    await h.manager.start();
+    await h.manager.clockIn({ profileId: 'light', modelId: TEST_MODEL });
+    expect(await h.manager.waitUntilReady(15_000)).toBe(true);
+    // first machine: destroyed after the auth give-up (well before the 1.5 s connect timeout), key re-attached meanwhile
+    expect(h.vast.destroyed).toHaveLength(1);
+    const first = h.vast.destroyed[0];
+    const reattaches = h.vast.requests.filter((r) => r.method === 'POST' && r.path === `/api/v0/instances/${first}/ssh/`);
+    expect(reattaches.length).toBeGreaterThanOrEqual(3); // after create, when running, and at least one retry
+    expect(h.manager.status().instanceId).not.toBe(first);
+    const hist = h.manager.history();
+    expect(hist.find((r) => r.instanceId === first)?.endReason).toBe('error');
+    expect(h.notifications.some((n) => n.title === 'GPU machine unreachable' && /rejecting the app's SSH key/.test(n.body))).toBe(true);
+    // the evidence of the failed machine: the Vast container log (no SSH sections)
+    const logs = readdirSync(path.join(h.dataDir, 'logs')).filter((f) => f.startsWith(`gpu-${first}-`));
+    expect(logs).toHaveLength(1);
+    const text = readFileSync(path.join(h.dataDir, 'logs', logs[0]), 'utf8');
+    expect(text).toContain('Vast container log (SSH was not connected)');
+    expect(text).not.toContain('===== status.json');
+    expect(text).toContain(`log of ${first}`); // what the mock's request_logs result URL serves
+    await h.manager.clockOut();
+    await expectAllDestroyed(h);
+  });
+
+  it('SSH unreachable on every machine → two machines tried, both destroyed, error with the SSH cause', async () => {
+    h = await createHarness({ sshUnreachable: true, timings: { sshConnectTimeoutMs: 300 } });
+    await h.manager.start();
+    await h.manager.clockIn({ profileId: 'light', modelId: TEST_MODEL });
+    expect(await h.manager.waitUntilReady(10_000)).toBe(false);
+    expect(h.manager.status().lastError).toMatch(/SSH/);
+    expect(h.vast.destroyed).toHaveLength(2);
+    expect(h.manager.history().filter((r) => r.endReason === 'error')).toHaveLength(2);
+    await expectAllDestroyed(h);
+  });
+
   it('download error → destroyed, error', async () => {
     h = await createHarness({ scenario: { failDownload: true } });
     await h.manager.start();

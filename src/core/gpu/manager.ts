@@ -25,14 +25,14 @@ import type { CatalogModel, GpuOffer, GpuPhase, GpuProfile, GpuServerMode, GpuSe
 import {
   catalogModels, defaultModelForProfile, diskGbFor, estimateWarmupCost, experimentalFallback, getCatalogModel, CATALOG,
 } from './catalog';
-import { evidenceCommand, formatFailureLog, latestFailureLog, parseEvidence, redactSecrets, saveFailureLog } from './failure-log';
+import { CONTAINER_LOG_SECTION, evidenceCommand, formatFailureLog, latestFailureLog, parseEvidence, redactSecrets, saveFailureLog } from './failure-log';
 import { GpuLedger, costFor, round4, type ActiveInstance, type ParkedInstance } from './ledger';
 import { defaultProfiles, findProfile } from './profiles';
 import {
   bootMaxMinutesFor, buildInstanceEnv, loadServerScripts, parseEnvFile, parseServerStatus, renderConfigSh, shQuote,
   type ServerScripts, type ServerStatus,
 } from './server-scripts';
-import { LocalTunnel, SshConnection, ensureAppKey } from './ssh';
+import { LocalTunnel, SshConnection, ensureAppKey, isSshAuthError } from './ssh';
 import {
   APP_LABEL, VastClient, VastError, buildOfferQuery, instanceIsDead, instanceIsGone, instanceIsRunning, offerTotalVramGb,
   sshTargets, toGpuOffer, type VastInstance, type VastRawOffer,
@@ -84,6 +84,10 @@ export interface GpuTimings {
   reconcileRetryMs: number;
   /** Upper bound for fetching the failure evidence (logs, nvidia-smi) over SSH before a destroy. */
   evidenceTimeoutMs: number;
+  /** While the instance rejects the app key: attach it to the instance again this often (Vast API). */
+  sshKeyReattachMs: number;
+  /** The instance keeps rejecting the app key this long (re-attached meanwhile): give up on that machine. */
+  sshAuthGiveUpMs: number;
 }
 
 export const DEFAULT_TIMINGS: GpuTimings = {
@@ -119,6 +123,8 @@ export const DEFAULT_TIMINGS: GpuTimings = {
   parkCheckMs: 15 * 60_000,
   reconcileRetryMs: 15_000,
   evidenceTimeoutMs: 20_000,
+  sshKeyReattachMs: 45_000,
+  sshAuthGiveUpMs: 150_000,
 };
 
 export const DEFAULT_VAST_SETTINGS: Settings['vast'] = {
@@ -156,6 +162,8 @@ const STEP_DEFS: { id: GpuPhase; label: string }[] = [
 const STEP_INDEX = new Map(STEP_DEFS.map((s, i) => [s.id, i]));
 
 class BootError extends Error {}
+/** SSH never came up on a freshly rented machine (unreachable, or it kept rejecting the app key): try another offer. */
+class SshUnreachableError extends Error {}
 class AbortedError extends Error {
   constructor() {
     super('aborted');
@@ -1087,8 +1095,22 @@ export class GpuManagerImpl implements GpuManager {
       if (!this.fitsBudget(model, offer)) continue;
       const r = await this.rentAndBoot(offer, profile, model, diskGb, scripts, signal);
       if (r.kind === 'ok') {
-        await this.bringUp(r.inst, model, scripts, signal);
-        return;
+        try {
+          await this.bringUp(r.inst, model, scripts, signal);
+          return;
+        } catch (err) {
+          // SSH never came up on this machine (live: a host that kept rejecting the app key for 5 min). That is the
+          // machine's problem, not the model's: keep its log, destroy it and rent the next offer (counts as a boot failure).
+          if (!(err instanceof SshUnreachableError) || signal.aborted) throw err;
+          const id = r.inst.id;
+          this.setMessage(`${errMsg(err)} Saving its log, destroying instance #${id} and trying another GPU…`);
+          await this.captureEvidence(errMsg(err));
+          await this.destroyActive('error');
+          this.notify('GPU machine unreachable', `${errMsg(err)} Instance #${id} was destroyed; trying another GPU.`, 'warning');
+          lastErr = err;
+          bootFailures++;
+          continue;
+        }
       }
       lastErr = r.err;
       if (r.kind === 'create_failed') createFailures++;
@@ -1331,6 +1353,8 @@ export class GpuManagerImpl implements GpuManager {
 
   private async bringUp(inst: VastInstance, model: CatalogModel, scripts: ServerScripts | null, signal: AbortSignal, connectTimeoutMs = this.t.sshConnectTimeoutMs): Promise<void> {
     this.setPhase('connecting', `Connecting to instance #${inst.id} over SSH…`);
+    // The attach right after create can come before the container exists; attach the key again now that it runs.
+    await this.attachAppKey(inst.id);
     await this.connectSsh(inst, signal, connectTimeoutMs);
     this.startHeartbeat();
     if (!this.serverApiKey) await this.recoverServerKey();
@@ -1463,6 +1487,25 @@ export class GpuManagerImpl implements GpuManager {
     if (!this.serverApiKey) throw new Error('Could not recover the GPU server API key from the instance.');
   }
 
+  /** POST the app's public key to the instance (Vast adds it to the container's authorized_keys). Never throws. */
+  private async attachAppKey(instanceId: number): Promise<void> {
+    const appKey = ensureAppKey(this.ctx.secrets);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        this.vast.attachSshKey(instanceId, appKey.publicKey),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, 15_000);
+          timer.unref?.();
+        }),
+      ]);
+    } catch {
+      /* best effort: the connect loop retries it while the key is rejected */
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   private async connectSsh(inst: VastInstance, signal: AbortSignal, timeoutMs: number): Promise<void> {
     const appKey = ensureAppKey(this.ctx.secrets);
     const conn = new SshConnection({
@@ -1474,6 +1517,9 @@ export class GpuManagerImpl implements GpuManager {
     const deadline = this.now() + timeoutMs;
     let current = inst;
     let lastErr: unknown = null;
+    // sshd answers but rejects the app key: re-attach the key now and then; give up on the machine if that persists.
+    let authFailSince: number | null = null;
+    let lastAttach = this.now();
     for (;;) {
       this.checkAbort(signal);
       const targets = sshTargets(current);
@@ -1491,13 +1537,25 @@ export class GpuManagerImpl implements GpuManager {
           return;
         } catch (err) {
           lastErr = err;
+          if (isSshAuthError(err)) authFailSince ??= this.now();
+          else authFailSince = null;
         }
+      }
+      if (authFailSince !== null && this.now() - authFailSince >= this.t.sshAuthGiveUpMs) {
+        conn.end();
+        throw new SshUnreachableError(
+          `Instance #${inst.id} kept rejecting the app's SSH key for ${Math.max(1, Math.round((this.now() - authFailSince) / 60_000))} min although it was attached again (${errMsg(lastErr)}).`,
+        );
       }
       if (this.now() >= deadline) {
         conn.end();
-        throw new Error(`Could not reach the instance over SSH within ${Math.round(timeoutMs / 60_000)} min (${errMsg(lastErr ?? 'no SSH endpoint')}).`);
+        throw new SshUnreachableError(`Could not reach the instance over SSH within ${Math.round(timeoutMs / 60_000)} min (${errMsg(lastErr ?? 'no SSH endpoint')}).`);
       }
-      this.setMessage(`Waiting for SSH on instance #${inst.id}…`);
+      if (authFailSince !== null && this.now() - lastAttach >= this.t.sshKeyReattachMs) {
+        lastAttach = this.now();
+        this.setMessage(`Instance #${inst.id} rejects the app's SSH key; attaching it again…`);
+        await this.attachAppKey(inst.id);
+      } else this.setMessage(authFailSince !== null ? `Instance #${inst.id} does not accept the app's SSH key yet; retrying…` : `Waiting for SSH on instance #${inst.id}…`);
       await this.sleep(this.t.sshRetryMs, signal);
       try {
         const fresh = await this.vast.getInstance(inst.id, signal);
@@ -1861,18 +1919,36 @@ export class GpuManagerImpl implements GpuManager {
   private async captureEvidence(reason: string): Promise<string | null> {
     const a = this.active;
     const ssh = this.ssh;
-    if (!a || !ssh?.isConnected()) return null;
+    if (!a) return null;
+    // Without SSH (it never came up) the container's stdout/stderr from the Vast API is the only evidence: onstart,
+    // Vast's own sshd/key setup and the bootstrap's early output.
+    const viaSsh = !!ssh?.isConnected();
+    if (!viaSsh && !this.vast.hasKey()) return null;
     const budget = Math.max(200, this.t.evidenceTimeoutMs);
     const seq = ++this.evidenceSeq;
     let timer: NodeJS.Timeout | undefined;
     try {
+      const fetchEvidence: Promise<{ out: string; sections?: Map<string, string>; note?: string }> = viaSsh
+        ? ssh!.exec(evidenceCommand(), { timeoutMs: budget }).then(
+            (x) => ({ out: x.stdout }),
+            (err: unknown) => ({ out: '', note: `SSH exec failed: ${errMsg(err)}` }),
+          )
+        : this.vast.requestLogs(a.instanceId, 300).then(
+            (text) => ({ out: '', sections: new Map([[CONTAINER_LOG_SECTION.id, text]]), note: 'SSH was not connected: Vast container log only' }),
+            (err: unknown) => ({ out: '', sections: new Map([[CONTAINER_LOG_SECTION.id, '']]), note: `SSH was not connected; the Vast container log request failed: ${errMsg(err)}` }),
+          );
       const r = await Promise.race([
-        ssh.exec(evidenceCommand(), { timeoutMs: budget }).then(
-          (x) => ({ out: x.stdout, note: undefined as string | undefined }),
-          (err: unknown) => ({ out: '', note: `SSH exec failed: ${errMsg(err)}` }),
-        ),
-        new Promise<{ out: string; note: string }>((resolve) => {
-          timer = setTimeout(() => resolve({ out: '', note: `the instance did not answer within ${Math.round(budget / 1000)} s` }), budget);
+        fetchEvidence,
+        new Promise<{ out: string; sections?: Map<string, string>; note: string }>((resolve) => {
+          timer = setTimeout(
+            () =>
+              resolve({
+                out: '',
+                sections: viaSsh ? undefined : new Map([[CONTAINER_LOG_SECTION.id, '']]),
+                note: viaSsh ? `the instance did not answer within ${Math.round(budget / 1000)} s` : `the Vast container log did not arrive within ${Math.round(budget / 1000)} s`,
+              }),
+            budget,
+          );
           timer.unref?.();
         }),
       ]);
@@ -1881,7 +1957,7 @@ export class GpuManagerImpl implements GpuManager {
       const text = redactSecrets(
         formatFailureLog(
           { reason, instanceId: a.instanceId, capturedAt: at, gpu: `${a.numGpus}x ${a.gpuName}`, modelId: a.modelId, profileId: a.profileId, image: vs.image, phase: this.phase, note: r.note },
-          parseEvidence(r.out),
+          r.sections ?? parseEvidence(r.out),
         ),
         this.knownSecrets(a),
       );
@@ -2044,8 +2120,9 @@ export class GpuManagerImpl implements GpuManager {
     const a = this.active;
     this.setPhase('stopping', a ? `Stopping GPU instance #${a.instanceId}…` : 'Stopping…');
     this.stopHeartbeat();
-    if (opts.error && a && this.ssh?.isConnected()) {
-      // The instance's logs die with it: save them first (time-boxed; never blocks the destroy for long).
+    if (opts.error && a) {
+      // The instance's logs die with it: save them first (time-boxed; never blocks the destroy for long). Without SSH
+      // the Vast container log is saved instead.
       this.setMessage(`Saving the server log of instance #${a.instanceId} before destroying it…`);
       await this.captureEvidence(opts.error);
     }

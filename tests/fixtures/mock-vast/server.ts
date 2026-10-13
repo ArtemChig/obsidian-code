@@ -166,6 +166,8 @@ export class MockVast {
     getAlwaysNull: false,
     /** Create answers without instance_api_key. */
     noInstanceKey: false,
+    /** POST /instances/{id}/ssh/ answers success but drops the key while the instance is not running yet. */
+    attachLostBeforeRunning: false,
   };
   private server: http.Server | null = null;
   private nextId = 9_000_001;
@@ -413,7 +415,7 @@ export class MockVast {
     if (attachM && method === 'POST') {
       const inst = this.instances.get(Number(attachM[1]));
       if (!inst) return this.send(res, 404, { success: false, error: 'not_found', msg: 'no such instance' });
-      inst.attachedKeys.push(String((body as { ssh_key?: string })?.ssh_key ?? ''));
+      if (!(this.fail.attachLostBeforeRunning && inst.actual_status !== 'running')) inst.attachedKeys.push(String((body as { ssh_key?: string })?.ssh_key ?? ''));
       return this.send(res, 200, { success: true, msg: 'attached' });
     }
 

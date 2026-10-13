@@ -21,6 +21,9 @@ export const EVIDENCE_SECTIONS: readonly { id: string; title: string; cmd: strin
   { id: 'nvidia-smi', title: 'nvidia-smi', cmd: 'timeout 10 nvidia-smi 2>&1' },
 ];
 
+/** When SSH never came up: the container's stdout/stderr fetched through the Vast API (PUT /instances/request_logs). */
+export const CONTAINER_LOG_SECTION = { id: 'container.log', title: 'Vast container log (SSH was not connected)' } as const;
+
 /** One SSH exec that prints every section, each preceded by `EVIDENCE_MARK<id>` on its own line. */
 export function evidenceCommand(): string {
   return EVIDENCE_SECTIONS.map((s) => `echo ${EVIDENCE_MARK}${s.id}; ${s.cmd}`).join('; ');
@@ -70,9 +73,17 @@ export function formatFailureLog(meta: FailureMeta, sections: Map<string, string
   if (meta.phase) lines.push(`App phase: ${meta.phase}`);
   if (meta.note) lines.push(`Note:      ${meta.note}`);
   lines.push('');
-  for (const s of EVIDENCE_SECTIONS) {
-    const body = sections.get(s.id);
-    lines.push(`===== ${s.title} =====`, body && body.trim() ? body : '(empty or not available)', '');
+  // Container-log-only evidence (SSH never connected): the SSH sections would all be empty noise.
+  const containerOnly = sections.has(CONTAINER_LOG_SECTION.id) && EVIDENCE_SECTIONS.every((s) => !sections.has(s.id));
+  if (!containerOnly) {
+    for (const s of EVIDENCE_SECTIONS) {
+      const body = sections.get(s.id);
+      lines.push(`===== ${s.title} =====`, body && body.trim() ? body : '(empty or not available)', '');
+    }
+  }
+  if (sections.has(CONTAINER_LOG_SECTION.id)) {
+    const body = sections.get(CONTAINER_LOG_SECTION.id);
+    lines.push(`===== ${CONTAINER_LOG_SECTION.title} =====`, body && body.trim() ? body : '(empty or not available)', '');
   }
   return lines.join('\n');
 }

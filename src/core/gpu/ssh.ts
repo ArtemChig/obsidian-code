@@ -50,6 +50,12 @@ export function ensureAppKey(secrets: SecretStore): AppKey {
 
 export interface ExecResult { code: number | null; stdout: string; stderr: string }
 
+/** The server answered but rejected the app key (ssh2: "All configured authentication methods failed"). */
+export function isSshAuthError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /authentication methods failed|permission denied \(publickey/i.test(msg);
+}
+
 export interface SshConnectionOptions {
   privateKey: string;
   readyTimeoutMs?: number;
@@ -83,6 +89,7 @@ export class SshConnection {
   async connect(targets: SshTarget[], signal?: AbortSignal): Promise<SshTarget> {
     if (targets.length === 0) throw new Error('The instance has no SSH endpoint yet.');
     let lastErr: unknown = null;
+    let authErr: Error | null = null;
     for (const t of targets) {
       if (signal?.aborted) throw signal.reason ?? new Error('aborted');
       try {
@@ -90,8 +97,11 @@ export class SshConnection {
         return t;
       } catch (err) {
         lastErr = err;
+        // A reachable sshd that rejects the key says more than another target's timeout: report that one.
+        if (err instanceof Error && isSshAuthError(err)) authErr ??= err;
       }
     }
+    if (authErr) throw authErr;
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 

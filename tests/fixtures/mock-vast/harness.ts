@@ -49,6 +49,8 @@ export const FAST_TIMINGS: Partial<GpuTimings> = {
   parkCheckMs: 100,
   reconcileRetryMs: 50,
   evidenceTimeoutMs: 1500,
+  sshKeyReattachMs: 100,
+  sshAuthGiveUpMs: 600,
 };
 
 export interface HarnessOptions {
@@ -60,6 +62,10 @@ export interface HarnessOptions {
   secrets?: Record<string, string>;
   noKey?: boolean;
   sshUnreachable?: boolean;
+  /** 'attached-only': the box ignores the account keys and accepts only keys attached to the instance (POST /instances/{id}/ssh/). */
+  sshAuth?: 'normal' | 'attached-only';
+  /** The first N instances reject every key (sshd up, key never accepted). */
+  sshRejectFirst?: number;
   now?: () => number;
 }
 
@@ -94,10 +100,13 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   const boxes = new Map<number, FakeBox>();
   const vast = new MockVast(opts.vast);
   const deadPort = await closedPort();
+  let boxCount = 0;
   vast.provision = async (inst, reason) => {
     let box = boxes.get(inst.id);
     if (!box) {
-      box = new FakeBox(inst.id, { ...(opts.scenario ?? {}) }, () => [...vast.sshKeys.map((k) => k.key), ...inst.attachedKeys]);
+      const rejectAll = ++boxCount <= (opts.sshRejectFirst ?? 0);
+      const keys = () => (rejectAll ? [] : opts.sshAuth === 'attached-only' ? [...inst.attachedKeys] : [...vast.sshKeys.map((k) => k.key), ...inst.attachedKeys]);
+      box = new FakeBox(inst.id, { ...(opts.scenario ?? {}) }, keys);
       boxes.set(inst.id, box);
       await box.start();
     }
