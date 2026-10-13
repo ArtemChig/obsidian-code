@@ -1,15 +1,23 @@
-// Settings: Web search, MCP, Hooks, Memory & import, Shell, Context, General, About. Owner: ui-views.
-import { Copy, ExternalLink, FolderOpen } from 'lucide-react';
+// Settings: Web search, MCP, Hooks, Memory & import, Shell, Context, General, About & updates. Owner: ui-views.
+import { Copy, Download, ExternalLink, FolderOpen, RefreshCw } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import type { Settings } from '@shared/types';
+import { UPDATE_TOKEN_SECRET, updateVersion, type UpdateSnapshot, type UpdateTokenSource } from '@shared/updates';
+import { useStartUpdate } from '@renderer/app/UpdateButton';
 import { AppMark } from '@renderer/components/ui/app-mark';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
+import { Spinner, StatusDot } from '@renderer/components/ui/feedback';
+import { Markdown } from '@renderer/components/ui/markdown';
 import { Select } from '@renderer/components/ui/select';
+import { RelativeTime } from '@renderer/components/ui/time';
 import { Switch } from '@renderer/components/ui/toggles';
-import { canRevealFiles, isElectron, openPath, pickFolder, showItemInFolder } from '@renderer/lib/bridge';
+import { canRevealFiles, isElectron, openExternal, openPath, pickFolder, showItemInFolder } from '@renderer/lib/bridge';
+import { formatBytes } from '@renderer/lib/format';
 import { useConnection } from '@renderer/state/connection';
 import { useSettings } from '@renderer/state/settings';
 import { toast } from '@renderer/state/toasts';
+import { checkForUpdates, useUpdates } from '@renderer/state/updates';
 import { Group, JsonEditor, NumberField, Row, SecretField, Section, TextField, patchSearch, saveSettings } from '../components';
 import { HOOKS_EXAMPLE, MCP_EXAMPLE, validateHooks, validateMcpServers, validateUrl } from '../validate';
 
@@ -283,32 +291,200 @@ export function GeneralSection() {
 
 // ───────────────────────────── About ─────────────────────────────
 
+const TOKEN_SOURCE_LABEL: Record<UpdateTokenSource, string> = {
+  gh: 'Using GitHub CLI login',
+  secret: 'Using saved token',
+  none: 'No token',
+  'not-needed': 'Test feed (no token needed)',
+};
+
+/** The updater state as one line: a status glyph + text (the label of the Updates status row). */
+function UpdateStatusLine({ snap }: { snap: UpdateSnapshot }) {
+  const st = snap.state;
+  const line = (glyph: ReactNode, text: ReactNode, cls = 'text-t1') => (
+    <span className={`flex items-start gap-2 ${cls}`} data-testid="updates-state" data-status={st.status}>
+      <span className="flex h-[19px] w-[11px] shrink-0 items-center justify-center">{glyph}</span>
+      <span className="min-w-0">{text}</span>
+    </span>
+  );
+  const mono = (v: string) => <span className="font-mono tracking-[-0.02em]">{v}</span>;
+  switch (st.status) {
+    case 'idle':
+      return line(<StatusDot tone="neutral" size={6} />, 'Not checked yet', 'text-t2');
+    case 'checking':
+      return line(<Spinner size={11} />, 'Checking for updates…', 'text-t2');
+    case 'not-available':
+      return line(<StatusDot tone="success" size={6} />, 'Up to date');
+    case 'available':
+      return line(<StatusDot tone="accent" size={6} />, <>Version {mono(st.version)} is available</>);
+    case 'downloading':
+      return line(
+        <StatusDot tone="violet" size={6} pulse />,
+        <>
+          Downloading {mono(st.version)} <span className="ob-tabular font-mono text-t2">{Math.floor(st.percent)}%</span>
+          {st.bytesPerSecond > 0 ? <span className="font-mono text-t3"> · {formatBytes(st.bytesPerSecond)}/s</span> : null}
+        </>,
+      );
+    case 'downloaded':
+    case 'installing':
+      return line(<Spinner size={11} />, <>Installing {mono(st.version)} — the app restarts by itself</>);
+    case 'error':
+      return line(
+        <StatusDot tone="danger" size={6} />,
+        <span role="alert">
+          <span className="text-err">{st.during === 'check' ? 'Update check failed' : st.during === 'download' ? 'Download failed' : 'Install failed'}</span>
+          <span className="block text-[11.5px] font-normal leading-[1.45] text-t2">{st.message}</span>
+        </span>,
+      );
+    case 'unsupported':
+      return line(<StatusDot tone="neutral" size={6} />, <>Automatic updates are off: {st.reason}</>, 'text-t2');
+  }
+}
+
+/** Settings → About & updates: state, Check now, the offered release (notes + GitHub link), token source and token. */
+function UpdatesGroup() {
+  const snap = useUpdates((s) => s.snapshot);
+  const source = useUpdates((s) => s.source);
+  const { start, dialog } = useStartUpdate();
+  const [checking, setChecking] = useState(false);
+
+  if (!snap) {
+    return (
+      <Group title="Updates" testId="settings-updates">
+        <Row label="Automatic updates" description="Updates are installed by the desktop app. This browser window has no updater." />
+      </Group>
+    );
+  }
+  const st = snap.state;
+  const unsupported = st.status === 'unsupported';
+  const busy = st.status === 'checking' || st.status === 'downloading' || st.status === 'downloaded' || st.status === 'installing';
+  const offered = updateVersion(st);
+  const notes = st.status === 'available' ? st.releaseNotes : null;
+  const check = async () => {
+    setChecking(true);
+    await checkForUpdates();
+    setChecking(false);
+  };
+
+  return (
+    <Group
+      title="Updates"
+      testId="settings-updates"
+      actions={
+        unsupported ? null : (
+          <Button variant="secondary" size="sm" icon={RefreshCw} loading={checking || st.status === 'checking'} disabled={busy} data-testid="updates-check" onClick={() => void check()}>
+            Check now
+          </Button>
+        )
+      }
+    >
+      <Row
+        label={<UpdateStatusLine snap={snap} />}
+        testId="updates-status"
+        description={
+          <span className="flex flex-wrap items-center gap-x-3 pl-[19px]">
+            <span>
+              Current version <span className="font-mono text-t1">{snap.currentVersion}</span>
+            </span>
+            {snap.lastCheckedAt ? (
+              <span>
+                Last checked <RelativeTime ts={snap.lastCheckedAt} ago className="font-mono text-t2" />
+              </span>
+            ) : null}
+            {source === 'demo' ? <span className="text-warn">demo data</span> : null}
+          </span>
+        }
+      >
+        {st.status === 'available' ? (
+          <Button variant="primary" icon={Download} data-testid="updates-install" onClick={start}>
+            Update &amp; restart
+          </Button>
+        ) : null}
+      </Row>
+
+      {offered && st.status === 'available' ? (
+        <Row
+          stacked
+          label={`What's new in ${offered}`}
+          testId="updates-notes"
+          description={
+            st.releaseDate ? (
+              <span>
+                Released <RelativeTime ts={Date.parse(st.releaseDate)} ago className="font-mono text-t2" />
+              </span>
+            ) : undefined
+          }
+        >
+          {notes ? <Markdown text={notes} compact /> : <p className="text-[11.5px] text-t3">No release notes.</p>}
+          {snap.releaseUrl ? (
+            <div className="pt-2">
+              <Button variant="ghost" size="sm" icon={ExternalLink} data-testid="updates-release-link" onClick={() => openExternal(snap.releaseUrl!)}>
+                View release on GitHub
+              </Button>
+            </div>
+          ) : null}
+        </Row>
+      ) : null}
+
+      {!unsupported ? (
+        <>
+          <Row
+            label="GitHub access"
+            testId="updates-token-source"
+            description={
+              snap.tokenSource === 'none'
+                ? `${snap.tokenNote ? `${snap.tokenNote}. ` : ''}Sign in with the GitHub CLI (gh auth login) or paste a token below.`
+                : snap.tokenSource === null
+                  ? 'Checked at the next update check.'
+                  : 'Releases live in a private GitHub repository, so update checks need read access to it.'
+            }
+          >
+            <Badge tone={snap.tokenSource === 'none' ? 'danger' : snap.tokenSource ? 'success' : 'neutral'} data-testid="updates-token-badge">
+              {snap.tokenSource ? TOKEN_SOURCE_LABEL[snap.tokenSource] : 'Unknown'}
+            </Badge>
+          </Row>
+          {snap.tokenSource !== 'not-needed' ? (
+            <Row
+              stacked
+              label="Update token (optional)"
+              description="A fine-grained GitHub token with read-only Contents access to ArtemChig/obsidian-code. Only needed when the GitHub CLI is not signed in on this PC; a saved token is used first."
+            >
+              <SecretField name={UPDATE_TOKEN_SECRET} testId="secret-update-token" placeholder="github_pat_…" onChanged={() => void checkForUpdates()} />
+            </Row>
+          ) : null}
+        </>
+      ) : null}
+      {dialog}
+    </Group>
+  );
+}
+
 export function AboutSection() {
   const system = useSettings((s) => s.system);
   const mode = useConnection((c) => c.mode);
   const rows: [string, string | undefined][] = [
-    ['Version', system?.version],
     ['Platform', system?.platform],
     ['Data folder', system?.dataDir],
     ['Home folder', system?.homeDir],
     ['Shell', system?.shell],
   ];
   return (
-    <Section id="about" title="About" description="Obsidian Code runs open-weight models on this PC, on a GPU you rent by the hour, or on any OpenAI-compatible endpoint.">
-      <Group testId="settings-about">
-        <div className="flex items-center gap-4 py-4">
-          <AppMark size={40} />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[15px] font-semibold tracking-[-0.032em] text-t1">Obsidian Code</span>
-            <span className="text-[11px] text-t3">
-              Version <span className="font-mono text-t1" data-testid="about-version">{system?.version ?? '—'}</span>
-            </span>
-          </div>
-          <span className="flex-1" />
-          <Badge tone={mode === 'demo' ? 'warning' : 'neutral'} mono>
-            {mode === 'demo' ? 'demo data' : system?.electron ? 'desktop' : 'browser'}
-          </Badge>
+    <Section id="about" title="About & updates" description="Obsidian Code runs open-weight models on this PC, on a GPU you rent by the hour, or on any OpenAI-compatible endpoint.">
+      <div className="flex items-center gap-4 border-b border-rule2 py-4">
+        <AppMark size={40} />
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[15px] font-semibold tracking-[-0.032em] text-t1">Obsidian Code</span>
+          <span className="text-[11px] text-t3">
+            Version <span className="font-mono text-t1" data-testid="about-version">{system?.version ?? '—'}</span>
+          </span>
         </div>
+        <span className="flex-1" />
+        <Badge tone={mode === 'demo' ? 'warning' : 'neutral'} mono>
+          {mode === 'demo' ? 'demo data' : system?.electron ? 'desktop' : 'browser'}
+        </Badge>
+      </div>
+      <UpdatesGroup />
+      <Group title="This installation" testId="settings-about">
         {rows.map(([k, v]) => (
           <div key={k} className="flex h-8 items-center justify-between gap-6">
             <span className="text-[11.5px] text-t3">{k}</span>

@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.web-tests.json",
     "test": "vitest run",
     "e2e": "playwright test",
-    "dist": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --win --publish never",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -22,6 +23,7 @@
     "@vscode/ripgrep": "^1.18.0",
     "croner": "^10.0.1",
     "diff": "^9.0.0",
+    "electron-updater": "^6.8.10",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
     "linkedom": "^0.18.13",

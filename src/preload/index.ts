@@ -15,6 +15,9 @@ function readCoreUrl(): string | null {
 
 type PickFolderOptions = { defaultPath?: string; title?: string };
 
+/** Mirrors UpdateSnapshot in src/shared/updates.ts (the preload stays dependency-free, so it is not imported). */
+type UpdateSnapshot = Record<string, unknown> & { state: { status: string } };
+
 const api = {
   coreUrl: readCoreUrl(),
   platform: process.platform as string,
@@ -50,6 +53,22 @@ const api = {
     return () => {
       ipcRenderer.removeListener('obsidian:openSession', listener);
     };
+  },
+  /** Auto-update (src/main/updater.ts). update() = download, graceful quit, install and restart. */
+  updates: {
+    getState: (): Promise<UpdateSnapshot | null> => ipcRenderer.invoke('obsidian:updates:getState') as Promise<UpdateSnapshot | null>,
+    check: (): Promise<UpdateSnapshot | null> => ipcRenderer.invoke('obsidian:updates:check') as Promise<UpdateSnapshot | null>,
+    update: (): Promise<UpdateSnapshot | null> => ipcRenderer.invoke('obsidian:updates:update') as Promise<UpdateSnapshot | null>,
+    /** Subscribe to state changes. Returns an unsubscribe function. */
+    onState(cb: (s: UpdateSnapshot) => void): () => void {
+      const listener = (_e: unknown, s: unknown): void => {
+        if (s && typeof s === 'object') cb(s as UpdateSnapshot);
+      };
+      ipcRenderer.on('obsidian:updates:state', listener);
+      return () => {
+        ipcRenderer.removeListener('obsidian:updates:state', listener);
+      };
+    },
   },
   /** Window controls (the title bar uses the native Windows controls overlay; these are for custom UI). */
   window: {

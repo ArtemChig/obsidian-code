@@ -39,7 +39,7 @@ export const SETTINGS_SECTIONS: NavItem[] = [
   { id: 'shell', label: 'Shell', icon: Terminal, group: 'Agent', keywords: 'bash powershell git cmd' },
   { id: 'memory', label: 'Memory & import', icon: Brain, group: 'System', keywords: 'claude.md instructions skills import' },
   { id: 'general', label: 'General', icon: SlidersHorizontal, group: 'System', keywords: 'folder notifications startup appearance' },
-  { id: 'about', label: 'About', icon: Info, group: 'System', keywords: 'version platform data folder' },
+  { id: 'about', label: 'About & updates', icon: Info, group: 'System', keywords: 'version platform data folder update upgrade release github token changelog' },
 ];
 
 /** Other areas call openSettings('vast') etc.; accept a few aliases. */
@@ -57,6 +57,8 @@ const ALIASES: Record<string, SettingsSectionId> = {
   startup: 'general',
   appearance: 'general',
   version: 'about',
+  update: 'about',
+  updates: 'about',
 };
 
 export function resolveSection(raw: string | null | undefined): SettingsSectionId {

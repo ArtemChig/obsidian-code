@@ -1,6 +1,7 @@
 // Typed, defensive access to the Electron preload bridge (window.obsidian). Owner: ui-foundation.
 // In browser mode (npm run dev:web) window.obsidian is undefined and every helper degrades gracefully.
 // The platform agent owns the preload; this file only declares the OPTIONAL methods the renderer may use.
+import type { UpdateSnapshot } from '@shared/updates';
 
 export interface BridgeApi {
   coreUrl: string | null;
@@ -10,6 +11,13 @@ export interface BridgeApi {
   showItemInFolder?: (path: string) => unknown;
   openExternal?: (url: string) => Promise<unknown> | unknown;
   onOpenSession?: (cb: (sessionId: string) => void) => () => void;
+  /** Auto-update (see ObsidianUpdatesBridge in env.d.ts); absent in browser mode. */
+  updates?: {
+    getState: () => Promise<UpdateSnapshot | null>;
+    check: () => Promise<UpdateSnapshot | null>;
+    update: () => Promise<UpdateSnapshot | null>;
+    onState: (cb: (s: UpdateSnapshot) => void) => () => void;
+  };
   window?: {
     minimize?: () => void;
     maximize?: () => void;
