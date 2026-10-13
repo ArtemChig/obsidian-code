@@ -1,7 +1,7 @@
 {
   "name": "obsidian-code",
   "productName": "Obsidian Code",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "A private desktop Claude Code-style agent app for open-weight models (local llama-server, Vast.ai GPUs, any OpenAI-compatible endpoint).",
   "author": "Obsidian Code",
