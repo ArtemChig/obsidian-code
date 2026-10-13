@@ -1,0 +1,12 @@
+[
+  {
+    "toolName": "mcp__obsidian__echo_upper",
+    "input": {
+      "text": "abc"
+    },
+    "mcpServer": {
+      "name": "obsidian",
+      "source": "sdk"
+    }
+  }
+]

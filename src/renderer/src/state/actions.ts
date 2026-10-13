@@ -4,6 +4,7 @@
 import type { RpcResult } from '@shared/protocol';
 import type {
   Block,
+  EngineId,
   ImageBlock,
   ModelRef,
   PermissionDecision,
@@ -94,6 +95,8 @@ export interface CreateSessionOptions {
   title?: string;
   model?: ModelRef | null;
   permissionMode?: PermissionMode;
+  /** Agent engine; omitted = settings.engine.default. */
+  engine?: EngineId;
   /** Open it right away (default true). */
   open?: boolean;
 }
@@ -106,6 +109,7 @@ export async function createSession(opts: CreateSessionOptions = {}): Promise<Se
       title: opts.title,
       model: opts.model,
       permissionMode: opts.permissionMode,
+      engine: opts.engine,
     });
     upsert(s);
     if (opts.open !== false) openSession(s.id);
@@ -289,6 +293,20 @@ export async function setSessionModel(sessionId: string, model: ModelRef): Promi
   } catch (err) {
     if (prev) upsert(prev);
     return fail('Could not switch the model', err);
+  }
+}
+
+export async function setEngine(sessionId: string, engine: EngineId): Promise<SessionSummary | null> {
+  const prev = useSessions.getState().sessions[sessionId];
+  if (prev?.engine === engine || (!prev?.engine && engine === 'builtin')) return prev ?? null;
+  if (prev) upsert({ ...prev, engine });
+  try {
+    const s = await rpc.request('chat.setEngine', { sessionId, engine });
+    upsert(s);
+    return s;
+  } catch (err) {
+    if (prev) upsert(prev);
+    return fail('Could not switch the engine', err);
   }
 }
 

@@ -124,7 +124,7 @@ async function changeFolder(session: SessionSummary, disposable: boolean): Promi
   // Sessions cannot move between folders (tools, memory and checkpoints are rooted at cwd), so a new folder means a
   // new session with the same model and mode. A provably empty session is replaced instead of left behind (see
   // isDisposableSession: an unloaded transcript is never treated as empty).
-  const next = await createSession({ cwd: picked, model: session.model, permissionMode: session.permissionMode });
+  const next = await createSession({ cwd: picked, model: session.model, permissionMode: session.permissionMode, engine: session.engine });
   if (next && disposable) void deleteSession(session.id);
 }
 
@@ -158,6 +158,15 @@ export function ChatHeader({ session, disposable }: { session: SessionSummary; d
         <Badge tone="accent" variant="outline" className="shrink-0">
           Scheduled
         </Badge>
+      ) : null}
+      {session.engine === 'claude-code' ? (
+        <Tooltip content="Engine: the Claude Code harness runs this session on its model (switch in the composer toolbar)">
+          <span className="flex shrink-0" data-testid="engine-tag">
+            <Badge tone="neutral" variant="outline">
+              Claude Code
+            </Badge>
+          </span>
+        </Tooltip>
       ) : null}
       {session.permissionMode === 'bypassPermissions' ? (
         <Tooltip content="Bypass permissions: every tool runs without asking. Shift+Tab or the mode menu to change.">

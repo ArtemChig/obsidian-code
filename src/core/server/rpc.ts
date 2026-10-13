@@ -5,7 +5,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { RpcMethod, RpcMethods, RpcParams, RpcResult } from '../../shared/protocol';
-import type { ModelRef, PermissionMode, Session, SessionSummary, Settings, ToolUseBlock } from '../../shared/types';
+import type { EngineId, ModelRef, PermissionMode, Session, SessionSummary, Settings, ToolUseBlock } from '../../shared/types';
 import type { CoreContext } from '../contracts';
 import { toSummary } from '../store/sessions';
 import { listDir, readTextFile, searchFiles } from './files';
@@ -73,6 +73,10 @@ function mode(v: unknown, key = 'mode'): PermissionMode {
     throw new RpcError(`Invalid params: "${key}" must be one of ${PERMISSION_MODES.join(', ')}`, 'invalid_params');
   }
   return v as PermissionMode;
+}
+function engineId(v: unknown, key = 'engine'): EngineId {
+  if (v !== 'builtin' && v !== 'claude-code') throw new RpcError(`Invalid params: "${key}" must be one of builtin, claude-code`, 'invalid_params');
+  return v;
 }
 function modelRef(v: unknown, key = 'model'): ModelRef {
   const o = v as Obj | null;
@@ -176,6 +180,7 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
       const title = optStr(p, 'title')?.trim();
       const model = p.model === undefined || p.model === null ? pickDefaultModel() : modelRef(p.model);
       const permissionMode = p.permissionMode === undefined ? settings.defaultPermissionMode : mode(p.permissionMode, 'permissionMode');
+      const engine = p.engine === undefined || p.engine === null ? (settings.engine?.default ?? 'builtin') : engineId(p.engine);
       const session = ctx.sessions.create({
         cwd,
         title: title || 'New session',
@@ -183,6 +188,7 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
         model,
         permissionMode,
         thinking: settings.thinkingByDefault,
+        engine,
       });
       const sum = toSummary(session);
       ctx.bus.emit('session.created', sum);
@@ -219,6 +225,7 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
         model: src.model,
         permissionMode: src.permissionMode,
         thinking: src.thinking,
+        engine: src.engine,
         usage: { ...src.usage },
       });
       fork.messages = structuredClone(messages).map((m) => ({
@@ -302,6 +309,21 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
         s.model = ref;
       });
     },
+    'chat.setEngine': (params) => {
+      const p = obj(params);
+      const sessionId = reqStr(p, 'sessionId');
+      getSession(sessionId);
+      const engine = engineId(p.engine);
+      if (!ctx.agent.setEngine) {
+        if (engine !== 'builtin') throw new RpcError('Only the built-in engine is available.', 'invalid_params');
+        return mutate(sessionId, (s) => { s.engine = engine; });
+      }
+      try {
+        return ctx.agent.setEngine(sessionId, engine);
+      } catch (e) {
+        throw new RpcError(e instanceof Error ? e.message : String(e), 'conflict');
+      }
+    },
     'chat.setThinking': (params) => {
       const p = obj(params);
       const thinking = reqBool(p, 'thinking');
@@ -319,7 +341,12 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
     'chat.pending': (params) => ctx.agent.pending(optStr(obj(params), 'sessionId')),
 
     // ── workspace helpers
-    'commands.list': (params) => ctx.ext.slashCommands(reqStr(obj(params), 'cwd')),
+    'commands.list': (params) => {
+      const p = obj(params);
+      const cwd = reqStr(p, 'cwd');
+      const sessionId = optStr(p, 'sessionId');
+      return ctx.agent.commands ? ctx.agent.commands(cwd, sessionId) : ctx.ext.slashCommands(cwd);
+    },
     'skills.list': (params) => ctx.ext.skills(reqStr(obj(params), 'cwd')),
     'agents.list': (params) => ctx.ext.agentTypes(reqStr(obj(params), 'cwd')),
     'files.list': (params) => {
@@ -342,6 +369,9 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
     // ── models
     'models.list': () => ({ providers: ctx.models.providers(), models: ctx.models.models() }),
     'models.refresh': () => ctx.models.refresh(),
+    'engines.list': async () => (ctx.agent.engines
+      ? ctx.agent.engines()
+      : [{ id: 'builtin' as const, label: 'Obsidian', available: true, detail: 'The app\'s own agent loop.' }]),
 
     // ── gpu
     'gpu.status': () => ctx.gpu.status(),

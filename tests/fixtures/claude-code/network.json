@@ -1,0 +1,194 @@
+[
+  {
+    "probe": "preset",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "tools",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "tools",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "tools",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "ask",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "ask",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "plan",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "plan",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "plan",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "plan",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "todo",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "todo",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "mcp",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "mcp",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "webfetch",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "webfetch",
+    "kind": "egress",
+    "target": "example.com:443",
+    "blocked": false
+  },
+  {
+    "probe": "webfetch",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "auxiliary"
+  },
+  {
+    "probe": "webfetch",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "interrupt",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "interrupt",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "plain",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "task",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "task",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "subagent"
+  },
+  {
+    "probe": "task",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "task",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "subagent"
+  },
+  {
+    "probe": "task",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "task",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "subagent"
+  },
+  {
+    "probe": "task",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "resume",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "resume",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  },
+  {
+    "probe": "resume",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "compaction"
+  },
+  {
+    "probe": "resume",
+    "kind": "model",
+    "target": "POST /v1/messages?beta=true",
+    "cls": "main"
+  }
+]

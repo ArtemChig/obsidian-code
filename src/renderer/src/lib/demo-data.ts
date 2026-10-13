@@ -2,6 +2,7 @@
 // Feature areas extend it from their own folders via registerDemoData()/registerDemoHandler() (see lib/demo.ts).
 import type { RpcResult } from '@shared/protocol';
 import type {
+  EngineInfo,
   ActivityItem,
   AgentTypeInfo,
   CatalogModel,
@@ -162,6 +163,8 @@ export const DEMO_SETTINGS: Settings = {
   },
   search: { provider: 'duckduckgo' },
   permissions: { allow: ['Bash(npm test:*)', 'Bash(git status:*)', 'WebFetch(domain:docs.vast.ai)'], deny: ['Bash(rm -rf:*)'] },
+  trustedFolders: [],
+  projectAllow: {},
   hooks: {},
   mcpServers: {},
   importClaudeConfig: true,
@@ -170,7 +173,17 @@ export const DEMO_SETTINGS: Settings = {
   autoCompactPercent: 80,
   notifications: true,
   launchAtLogin: false,
+  engine: {
+    default: 'builtin',
+    claudeCode: { executable: 'auto', systemPrompt: 'lean', importUserClaudeConfig: true, extraEnv: {} },
+  },
 };
+
+/** engines.list in demo mode. */
+export const DEMO_ENGINES: EngineInfo[] = [
+  { id: 'builtin', label: 'Obsidian', available: true, detail: "The app's own agent loop (compact prompt and tools for local models)." },
+  { id: 'claude-code', label: 'Claude Code', available: true, detail: 'Claude Code 2.1.296 — bundled with Agent SDK 0.3.296' },
+];
 
 function steps(phase: GpuStatus['phase']): GpuStatus['steps'] {
   const order: { id: GpuStatus['phase']; label: string }[] = [
@@ -369,6 +382,7 @@ export function createDemoData(now: number = Date.now()): DemoData {
       id: 's-sse',
       title: 'Add WebSocket reconnect backoff',
       cwd: DEMO_PROJECT,
+      engine: 'claude-code',
       createdAt: now - 40 * MIN,
       updatedAt: now - 20_000,
       status: 'running',

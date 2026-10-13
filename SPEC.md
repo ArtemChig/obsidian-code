@@ -143,6 +143,16 @@ Scripts: `dev` (electron-vite dev) · `dev:web` (vite renderer only) · `core` (
 * Mock LLM server (`tests/fixtures/mock-llm/server.ts`): scripted SSE responses incl. reasoning_content, tool_calls
   (native and `<tool_call>` text form), usage; used by unit tests for the loop.
 
+### 4.1b Engines (src/core/engine) — the real Claude Code harness as a second engine
+* `ctx.agent` is the `EngineRouter` (`src/core/engine/index.ts`): every AgentManager call dispatches by
+  `session.engine` (`'builtin'` = the loop above, shown as "Obsidian"; `'claude-code'`; missing = builtin; new sessions
+  get `settings.engine.default`). RPC: `engines.list`, `chat.setEngine` (idle only; transcript carries over),
+  `sessions.create {engine}`, `commands.list {sessionId}` (Claude Code's own commands for claude-code sessions).
+* `claude-code` runs Claude Code (Agent SDK → bundled `claude.exe`) on the session's endpoint through the local shim
+  (`engine/shim.ts`); zero Anthropic traffic, no login; isolated `CLAUDE_CONFIG_DIR=<dataDir>/claude-code`. Its SDK
+  messages are translated into the existing CoreEvents; permissions/questions/plans use the existing requests.
+  Details, measurements and gotchas: `docs/research/claude-agent-sdk.md`.
+
 ### 4.2 Tools (tools) — Claude Code parity, model-facing names exactly:
 `Read` (offset/limit, line numbers `cat -n` style, images → ToolResultPayload.images, PDFs → text if possible, notebooks),
 `Write`, `Edit` (old_string/new_string/replace_all, uniqueness check, read-before-edit), `MultiEdit`, `Glob`, `Grep`

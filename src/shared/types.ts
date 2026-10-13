@@ -411,8 +411,11 @@ export interface Settings {
     claudeCode: {
       /** 'auto' = SDK-bundled Claude Code; or an absolute path to a claude executable. */
       executable: string;
-      /** 'claude_code' = Claude Code's own full system prompt (exact harness behaviour, ~large);
-       *  'lean' = Claude Code tools/loop with the app's compact system prompt (much faster on the local GPU). */
+      /** 'claude_code' = Claude Code's own preset system prompt (its exact behaviour rules, incl. Anthropic's
+       *  security-refusal guidance; 1.3k tokens for a non-Claude model); 'lean' (default) = Claude Code's tools/loop
+       *  with the app's compact prompt (0.6k tokens, no refusal/content-policy language). Either way the tool
+       *  definitions (~15k tokens) and Claude Code's context block (~2k) dominate: first turn ~17.6k vs ~18.3k
+       *  prompt tokens, so 'lean' is NOT meaningfully faster — measured in docs/research/claude-agent-sdk.md. */
       systemPrompt: 'claude_code' | 'lean';
       /** Copy skills/agents/commands/CLAUDE.md from ~/.claude into the engine's isolated config dir. */
       importUserClaudeConfig: boolean;

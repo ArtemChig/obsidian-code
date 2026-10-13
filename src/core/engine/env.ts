@@ -1,14 +1,17 @@
 // Claude Code process environment + executable resolution for the claude-code engine (and scripts/claude-code-spike.ts).
 // See docs/research/claude-agent-sdk.md for why each variable is set.
 
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 /** Inherited variables that would redirect, re-authenticate or reconfigure the child Claude Code process. */
 const STRIP_PREFIXES = ['ANTHROPIC_', 'CLAUDE_CODE_', 'CLAUDE_AGENT_SDK_', 'AWS_BEARER_TOKEN_BEDROCK'];
-const STRIP_EXACT = new Set(['CLAUDECODE', 'CLAUDE_CONFIG_DIR', 'ELECTRON_RUN_AS_NODE', 'MAX_THINKING_TOKENS', 'API_TIMEOUT_MS', 'DISABLE_AUTOUPDATER']);
+const STRIP_EXACT = new Set([
+  'CLAUDECODE', 'CLAUDE_CONFIG_DIR', 'ELECTRON_RUN_AS_NODE', 'MAX_THINKING_TOKENS', 'API_TIMEOUT_MS', 'API_FORCE_IDLE_TIMEOUT',
+  'CLAUDE_STREAM_IDLE_TIMEOUT_MS', 'CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS', 'CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE',
+]);
 
 export interface ClaudeEnvInput {
   baseEnv: NodeJS.ProcessEnv;
@@ -19,6 +22,8 @@ export interface ClaudeEnvInput {
   model: string;
   contextLength: number;
   configDir: string;
+  /** settings.autoCompactPercent → CLAUDE_AUTOCOMPACT_PCT_OVERRIDE (Claude Code only lets it lower its default). */
+  autoCompactPercent?: number;
   extraEnv?: Record<string, string>;
   appVersion?: string;
 }
@@ -50,6 +55,8 @@ export function buildClaudeEnv(o: ClaudeEnvInput): Record<string, string | undef
     ANTHROPIC_DEFAULT_HAIKU_MODEL: o.model,
     ANTHROPIC_SMALL_FAST_MODEL: o.model,
     CLAUDE_CODE_SUBAGENT_MODEL: o.model,
+    // agent definitions / Task calls may name 'opus', 'sonnet' or a full Claude id: every subagent runs on the session model
+    CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1',
     CLAUDE_CODE_ATTRIBUTION_HEADER: '0',
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1',
@@ -60,11 +67,35 @@ export function buildClaudeEnv(o: ClaudeEnvInput): Record<string, string | undef
     // slow local prefill: llama.cpp sends no bytes until the first token, so the 5-minute body idle watchdog must be off
     API_TIMEOUT_MS: '1800000',
     API_FORCE_IDLE_TIMEOUT: '0',
+    // event- and byte-level stream watchdogs (300 s default through a custom base URL): a 30k-token prefill at
+    // ~70 tok/s is silent for minutes; 30 min is the cap
+    CLAUDE_STREAM_IDLE_TIMEOUT_MS: '1800000',
     DISABLE_TELEMETRY: '1',
     DISABLE_ERROR_REPORTING: '1',
     DISABLE_AUTOUPDATER: '1',
+    DISABLE_UPDATES: '1',
+    DISABLE_GROWTHBOOK: '1',
+    DISABLE_COST_WARNINGS: '1',
+    // no Anthropic account exists here: hide the account/marketplace commands and claude.ai connectors
+    DISABLE_LOGIN_COMMAND: '1',
+    DISABLE_LOGOUT_COMMAND: '1',
+    DISABLE_UPGRADE_COMMAND: '1',
+    DISABLE_EXTRA_USAGE_COMMAND: '1',
+    DISABLE_FEEDBACK_COMMAND: '1',
+    DISABLE_INSTALL_GITHUB_APP_COMMAND: '1',
+    ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
+    CLAUDE_CODE_DISABLE_ARTIFACT: '1',
+    CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: '1',
+    // todo tools are only offered to recognised Claude models unless forced; the legacy TodoWrite maps 1:1 onto the
+    // app's todo list (the newer TaskCreate/TaskUpdate/TaskList set does not)
+    CLAUDE_CODE_ENABLE_TODO_TOOLS: '1',
+    CLAUDE_CODE_ENABLE_TASKS: '0',
+    // session-only cron tools (~1.9k prompt tokens) are replaced by the app's persistent scheduler (mcp__obsidian__schedule_task)
+    CLAUDE_CODE_DISABLE_CRON: '1',
     CLAUDE_AGENT_SDK_CLIENT_APP: `obsidian-code/${o.appVersion ?? '0.1.0'}`,
   });
+  const pct = Math.round(o.autoCompactPercent ?? 0);
+  if (pct >= 1 && pct <= 100) env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE = String(pct);
   for (const [k, v] of Object.entries(o.extraEnv ?? {})) {
     if (typeof k === 'string' && k.trim() && typeof v === 'string') env[k.trim()] = v;
   }
@@ -96,8 +127,20 @@ function isFile(p: string): boolean {
   try { return statSync(p).isFile(); } catch { return false; }
 }
 
-function readJson(req: NodeJS.Require, id: string): Record<string, unknown> | null {
-  try { return req(id) as Record<string, unknown>; } catch { return null; }
+/** package.json of an installed package (the SDK's "exports" map does not expose ./package.json). */
+function readPackageJson(req: NodeJS.Require, name: string): Record<string, unknown> | null {
+  try {
+    let dir = dirname(req.resolve(name));
+    for (let i = 0; i < 4; i++) {
+      const p = join(dir, 'package.json');
+      if (isFile(p)) {
+        const pkg = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;
+        if (pkg.name === name) return pkg;
+      }
+      dir = dirname(dir);
+    }
+  } catch { /* not installed */ }
+  return null;
 }
 
 /** The installed Claude Code CLI (native installer location, then PATH). */
@@ -115,7 +158,7 @@ export function findInstalledClaude(env: NodeJS.ProcessEnv = process.env): strin
  */
 export function resolveClaudeExecutable(setting: string | undefined): ExecutableInfo {
   const req = nodeRequire();
-  const sdkPkg = readJson(req, '@anthropic-ai/claude-agent-sdk/package.json');
+  const sdkPkg = readPackageJson(req, '@anthropic-ai/claude-agent-sdk');
   const sdkVersion = typeof sdkPkg?.version === 'string' ? sdkPkg.version : undefined;
   const value = (setting ?? 'auto').trim();
   if (value && value !== 'auto') {

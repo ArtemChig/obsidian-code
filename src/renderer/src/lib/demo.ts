@@ -23,7 +23,7 @@ import type {
   Todo,
   ToolUseBlock,
 } from '@shared/types';
-import { createDemoData, demoGpuSteps, type DemoData } from './demo-data';
+import { createDemoData, DEMO_ENGINES, demoGpuSteps, type DemoData } from './demo-data';
 import {
   EventHub,
   RpcError,
@@ -364,6 +364,7 @@ export class DemoTransport implements RpcTransport {
         model: p.model ?? this.data.settings.defaultModel,
         permissionMode: p.permissionMode ?? this.data.settings.defaultPermissionMode,
         thinking: this.data.settings.thinkingByDefault,
+        engine: p.engine ?? this.data.settings.engine?.default ?? 'builtin',
         usage: { inputTokens: 0, outputTokens: 0, lastPromptTokens: 0, requests: 0 },
         messages: [],
         todos: [],
@@ -467,6 +468,10 @@ export class DemoTransport implements RpcTransport {
     'chat.setPermissionMode': (p) => this.updateSession(p.sessionId, { permissionMode: p.mode }),
     'chat.setModel': (p) => this.updateSession(p.sessionId, { model: p.model }),
     'chat.setThinking': (p) => this.updateSession(p.sessionId, { thinking: p.thinking }),
+    'chat.setEngine': (p) => {
+      if (this.session(p.sessionId).status === 'running') throw new Error('Wait for the current turn to finish (or stop it) before switching engines.');
+      return this.updateSession(p.sessionId, { engine: p.engine });
+    },
     'chat.rewind': (p) => {
       const s = this.session(p.sessionId);
       const idx = s.messages.findIndex((m) => m.id === p.atMessageId);
@@ -527,6 +532,7 @@ export class DemoTransport implements RpcTransport {
 
     // models
     'models.list': () => ({ providers: this.data.providers, models: this.data.models }),
+    'engines.list': () => DEMO_ENGINES,
     'models.refresh': async () => {
       await this.sleep(600);
       const r = { providers: this.data.providers, models: this.data.models };

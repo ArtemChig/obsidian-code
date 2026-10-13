@@ -1,0 +1,24 @@
+[
+  {
+    "toolName": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Which color do you prefer?",
+          "header": "Color",
+          "options": [
+            {
+              "label": "Red",
+              "description": "The color red"
+            },
+            {
+              "label": "Blue",
+              "description": "The color blue"
+            }
+          ],
+          "multiSelect": false
+        }
+      ]
+    }
+  }
+]

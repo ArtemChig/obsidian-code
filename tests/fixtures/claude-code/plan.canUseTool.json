@@ -1,0 +1,10 @@
+[
+  {
+    "toolName": "ExitPlanMode",
+    "input": {
+      "allowedPrompts": [],
+      "plan": "Use the Write tool to create `plan.txt` in the working directory with the content \"hi\".\n",
+      "planFilePath": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-spike-M7SMFv\\plans\\plan-how-to-create-soft-anchor.md"
+    }
+  }
+]

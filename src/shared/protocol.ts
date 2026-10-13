@@ -46,7 +46,8 @@ export interface RpcMethods {
   'chat.pending': { params: { sessionId?: string }; result: { permissions: PermissionRequest[]; questions: QuestionRequest[]; plans: PlanRequest[] } };
 
   // ── workspace helpers
-  'commands.list': { params: { cwd: string }; result: SlashCommandInfo[] };
+  /** sessionId (optional): list the commands of that session's engine (Claude Code's own list for claude-code). */
+  'commands.list': { params: { cwd: string; sessionId?: string }; result: SlashCommandInfo[] };
   'skills.list': { params: { cwd: string }; result: SkillInfo[] };
   'agents.list': { params: { cwd: string }; result: AgentTypeInfo[] };
   'files.list': { params: { cwd: string; dir?: string }; result: { name: string; path: string; isDir: boolean; size?: number }[] };

@@ -219,6 +219,14 @@ export interface AgentManager {
   runHeadless(opts: { sessionId: string; prompt: string }): Promise<{ ok: boolean; finalText: string }>;
   isRunning(sessionId: string): boolean;
   fileDiff(sessionId: string, path: string): Promise<{ before: string; after: string }>;
+  /** Agent harnesses and their availability (implemented by the engine router, src/core/engine). */
+  engines?(): Promise<import('../shared/types').EngineInfo[]>;
+  /** Switch an idle session's engine; the transcript carries over. */
+  setEngine?(sessionId: string, engine: import('../shared/types').EngineId): SessionSummary;
+  /** Slash commands for the composer palette, by the session's engine. */
+  commands?(cwd: string, sessionId?: string): Promise<SlashCommandInfo[]>;
+  /** Stop engine processes (core shutdown). */
+  dispose?(): void;
 }
 
 // ───────────────────────────── GPU (src/core/gpu) ─────────────────────────────

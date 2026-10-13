@@ -1,0 +1,9 @@
+[
+  {
+    "totalMs": 45516,
+    "ttftMs": 44193,
+    "promptTokens": 13985,
+    "inputTokens": 13985,
+    "outputTokens": 23
+  }
+]

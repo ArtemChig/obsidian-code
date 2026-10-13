@@ -10,7 +10,8 @@ import { Tooltip } from '@renderer/components/ui/tooltip';
 import { cn } from '@renderer/lib/cn';
 import { basename, dirname, truncate } from '@renderer/lib/format';
 import { rpc } from '@renderer/lib/rpc';
-import { sendMessage, setPermissionMode, setSessionModel, setThinking, withdrawQueued } from '@renderer/state/actions';
+import { sendMessage, setEngine, setPermissionMode, setSessionModel, setThinking, withdrawQueued } from '@renderer/state/actions';
+import { EngineSelector } from './EngineSelector';
 import { useModelInfo, useQueued } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { fuzzyRank } from '../lib/fuzzy';
@@ -28,20 +29,22 @@ import type { ImageBlock } from '@shared/types';
 
 const commandCache = new Map<string, { at: number; list: SlashCommandInfo[] }>();
 
-function useCommands(cwd: string, wanted: boolean): SlashCommandInfo[] {
-  const [list, setList] = useState<SlashCommandInfo[]>(() => commandCache.get(cwd)?.list ?? []);
+function useCommands(cwd: string, wanted: boolean, sessionId: string, engine: string): SlashCommandInfo[] {
+  // claude-code sessions list Claude Code's own commands (per session); the app's list is per folder
+  const key = engine === 'claude-code' ? `cc:${sessionId}` : cwd;
+  const [list, setList] = useState<SlashCommandInfo[]>(() => commandCache.get(key)?.list ?? []);
   useEffect(() => {
     if (!wanted) return;
-    const hit = commandCache.get(cwd);
+    const hit = commandCache.get(key);
     if (hit && Date.now() - hit.at < 30_000) {
       setList(hit.list);
       return;
     }
     let alive = true;
     rpc
-      .request('commands.list', { cwd })
+      .request('commands.list', engine === 'claude-code' ? { cwd, sessionId } : { cwd })
       .then((r) => {
-        commandCache.set(cwd, { at: Date.now(), list: r });
+        commandCache.set(key, { at: Date.now(), list: r });
         if (alive) setList(r);
       })
       .catch(() => {
@@ -50,7 +53,7 @@ function useCommands(cwd: string, wanted: boolean): SlashCommandInfo[] {
     return () => {
       alive = false;
     };
-  }, [cwd, wanted]);
+  }, [cwd, wanted, key, engine, sessionId]);
   return list;
 }
 
@@ -163,7 +166,7 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
     return t;
   }, [text, caret, dismissedAt, focused]);
 
-  const commands = useCommands(session.cwd, trigger?.kind === 'slash' || text.startsWith('/'));
+  const commands = useCommands(session.cwd, trigger?.kind === 'slash' || text.startsWith('/'), sessionId, session.engine ?? 'builtin');
   const slashItems = useMemo(() => {
     if (trigger?.kind !== 'slash') return [];
     return fuzzyRank(commands, trigger.query, (c) => [c.name, c.description]).slice(0, 40);
@@ -502,6 +505,9 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
               </ToolbarValue>
             </button>
           </Tooltip>
+          {session.kind !== 'subagent' ? (
+            <EngineSelector value={session.engine ?? 'builtin'} disabled={running} onChange={(e) => void setEngine(sessionId, e)} />
+          ) : null}
           <span className="flex-1" />
           <ModelPicker value={session.model} onChange={(m) => void setSessionModel(sessionId, m)} />
           {running ? (

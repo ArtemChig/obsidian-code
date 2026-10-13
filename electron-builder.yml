@@ -18,10 +18,13 @@ files:
   - "!**/node_modules/*/{test,__tests__,tests,example,examples}/**"
 
 # Native binaries and files read via fs at runtime must live outside the asar archive:
-# ripgrep's rg.exe (spawned by the Grep tool) and resources/** (bootstrap script, icons; the main process points
+# ripgrep's rg.exe (spawned by the Grep tool), the Claude Code binary the Agent SDK ships per platform
+# (@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe, spawned by the claude-code engine; src/core/engine/env.ts maps
+# app.asar → app.asar.unpacked) and resources/** (bootstrap script, icons; the main process points
 # OBSIDIAN_RESOURCES_DIR at app.asar.unpacked/resources when packaged).
 asarUnpack:
   - node_modules/@vscode/ripgrep*/**
+  - node_modules/@anthropic-ai/claude-agent-sdk-*/**
   - resources/**
 
 extraResources:

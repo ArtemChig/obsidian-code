@@ -45,6 +45,7 @@ export function defaultSettings(): Settings {
     },
     search: { provider: 'duckduckgo' }, permissions: { allow: [], deny: [] }, trustedFolders: [], projectAllow: {}, hooks: {}, mcpServers: {}, importClaudeConfig: false,
     shell: 'auto', maxToolOutputChars: 30000, autoCompactPercent: 80, notifications: false, launchAtLogin: false,
+    engine: { default: 'builtin', claudeCode: { executable: 'auto', systemPrompt: 'lean', importUserClaudeConfig: false, extraEnv: {} } },
   };
 }
 

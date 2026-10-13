@@ -1,5 +1,5 @@
 // Settings view: sections nav + one section at a time. Changes save through settings.update; secrets are write-only. Owner: ui-views.
-import { Braces, Brain, Cpu, Globe, Info, Plug, Search, ShieldCheck, SlidersHorizontal, Terminal, Webhook, Boxes, type LucideIcon } from 'lucide-react';
+import { Braces, Brain, Cpu, Globe, Info, Plug, Search, ShieldCheck, SlidersHorizontal, SquareTerminal, Terminal, Webhook, Boxes, type LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@renderer/components/ui/feedback';
 import { Input } from '@renderer/components/ui/input';
@@ -9,12 +9,13 @@ import { useSettings } from '@renderer/state/settings';
 import { useUi } from '@renderer/state/ui';
 import { SettingsHeaderSlot } from './components';
 import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from './core-missing';
+import { EngineSection } from './sections/EngineSection';
 import { ModelsSection } from './sections/ModelsSection';
 import { AboutSection, ContextSection, GeneralSection, HooksSection, McpSection, MemorySection, SearchSection, ShellSection } from './sections/OtherSections';
 import { PermissionsSection } from './sections/PermissionsSection';
 import { VastSection } from './sections/VastSection';
 
-export type SettingsSectionId = 'models' | 'vast' | 'permissions' | 'search' | 'mcp' | 'hooks' | 'memory' | 'shell' | 'context' | 'general' | 'about';
+export type SettingsSectionId = 'models' | 'vast' | 'engine' | 'permissions' | 'search' | 'mcp' | 'hooks' | 'memory' | 'shell' | 'context' | 'general' | 'about';
 
 /** Nav groups (reference .s6-nav: mono cap group labels). */
 const NAV_GROUPS = ['Models', 'Agent', 'System'] as const;
@@ -32,6 +33,7 @@ export const SETTINGS_SECTIONS: NavItem[] = [
   { id: 'models', label: 'Models & providers', icon: Boxes, group: 'Models', keywords: 'llama local endpoint openai provider api key default model' },
   { id: 'vast', label: 'Vast.ai', icon: Cpu, group: 'Models', keywords: 'gpu rent budget idle heartbeat park profiles api key clock' },
   { id: 'context', label: 'Context', icon: Braces, group: 'Models', keywords: 'compact tokens window output trim' },
+  { id: 'engine', label: 'Engine', icon: SquareTerminal, group: 'Agent', keywords: 'claude code harness agent sdk executable system prompt lean full import env' },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck, group: 'Agent', keywords: 'allow deny rules mode bypass plan' },
   { id: 'search', label: 'Web search', icon: Globe, group: 'Agent', keywords: 'searxng brave tavily websearch webfetch' },
   { id: 'mcp', label: 'MCP servers', icon: Plug, group: 'Agent', keywords: 'model context protocol tools json' },
@@ -48,6 +50,9 @@ const ALIASES: Record<string, SettingsSectionId> = {
   model: 'models',
   gpu: 'vast',
   'vast.ai': 'vast',
+  engines: 'engine',
+  'claude-code': 'engine',
+  claude: 'engine',
   permission: 'permissions',
   websearch: 'search',
   'web-search': 'search',
@@ -72,6 +77,8 @@ function SectionBody({ id }: { id: SettingsSectionId }) {
       return <ModelsSection />;
     case 'vast':
       return <VastSection />;
+    case 'engine':
+      return <EngineSection />;
     case 'permissions':
       return <PermissionsSection />;
     case 'search':
