@@ -4,6 +4,10 @@ Every change to Obsidian Code ships as a release (`npm run release`), and the in
 UPDATE button. Version rule: patch (last number) = small fix · minor (second) = feature or bigger change ·
 major (first) = redesign or giant change.
 
+## v1.0.4 — 2026-10-13
+
+- Updates download faster and cleaner: the app no longer tries (and fails) a partial download first for this private repository; it fetches the installer directly.
+
 ## v1.0.3 — 2026-10-13
 
 - Fixed: a clock-in failed when the rented machine never accepted the app's SSH key. The app now attaches the key again once the machine runs, gives up on a machine that keeps refusing it after about 2.5 minutes, destroys it and rents the next GPU automatically.
