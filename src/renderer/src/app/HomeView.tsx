@@ -279,7 +279,7 @@ function GpuCard() {
   const phase = status?.phase ?? 'off';
   const on = phase !== 'off' && phase !== 'error';
   const budget = status?.monthlyBudget ?? 0;
-  const month = (status?.monthCost ?? 0) + (on ? cost : 0);
+  const month = (status?.monthCost ?? 0) + (on ? Math.max(0, cost - (status?.sessionCost ?? 0)) : 0);
   const ratio = budget > 0 ? month / budget : 0;
   return (
     <section aria-label="GPU" data-testid="home-gpu-card" className="border-b border-rule2 pb-4">

@@ -170,6 +170,8 @@ export const DEMO_SETTINGS: Settings = {
   autoCompactPercent: 80,
   notifications: true,
   launchAtLogin: false,
+  trustedFolders: [],
+  projectAllow: {},
 };
 
 function steps(phase: GpuStatus['phase']): GpuStatus['steps'] {

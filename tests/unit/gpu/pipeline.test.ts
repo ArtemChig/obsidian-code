@@ -186,6 +186,30 @@ describe('failure injection: the instance is destroyed every time', () => {
     await expectAllDestroyed(h);
   });
 
+  it('asks Vast for a RUNNING instance (target_state) — omitting it leaves the instance stopped forever', async () => {
+    h = await createHarness();
+    await h.manager.start();
+    await h.manager.clockIn({ profileId: 'light', modelId: TEST_MODEL });
+    expect(await h.manager.waitUntilReady(10_000)).toBe(true);
+    const create = h.vast.requests.find((r) => r.method === 'PUT' && /\/asks\/\d+\/$/.test(r.path));
+    expect((create?.body as { target_state?: string } | undefined)?.target_state).toBe('running');
+    await h.manager.clockOut();
+    await expectAllDestroyed(h);
+  });
+
+  it('an instance Vast created STOPPED is destroyed quickly and the next offer reaches ready', async () => {
+    h = await createHarness();
+    h.vast.fail.createStoppedTimes = 1;
+    await h.manager.start();
+    await h.manager.clockIn({ profileId: 'light', modelId: TEST_MODEL });
+    expect(await h.manager.waitUntilReady(10_000)).toBe(true);
+    expect(h.vast.destroyed).toHaveLength(1);
+    expect(h.vast.instances.size).toBe(1);
+    expect(h.manager.history().some((r) => r.endReason === 'error')).toBe(true);
+    await h.manager.clockOut();
+    await expectAllDestroyed(h);
+  });
+
   it('ambiguous create (500 but created) → the stray instance is found and destroyed', async () => {
     h = await createHarness();
     h.vast.fail.createAmbiguousTimes = 1;

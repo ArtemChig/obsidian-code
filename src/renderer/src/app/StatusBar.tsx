@@ -75,7 +75,7 @@ export function StatusBar() {
   const phase = gpu?.phase ?? 'off';
   const gpuOn = phase !== 'off' && phase !== 'error';
   const budget = gpu?.monthlyBudget ?? 0;
-  const month = (gpu?.monthCost ?? 0) + (gpuOn ? cost : 0);
+  const month = (gpu?.monthCost ?? 0) + (gpuOn ? Math.max(0, cost - (gpu?.sessionCost ?? 0)) : 0);
   const overBudget = budget > 0 && month / budget > 0.9;
 
   return (

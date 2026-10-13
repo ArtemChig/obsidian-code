@@ -716,8 +716,7 @@ export class GpuManagerImpl implements GpuManager {
       const u = await this.vast.currentUser();
       this.creditBalance = u.creditBalance;
       this.emit();
-      const credit = u.creditBalance !== undefined ? ` Credit: $${u.creditBalance.toFixed(2)}.` : '';
-      return { ok: true, message: `Key works${u.email ? ` (${u.email})` : ''}.${credit}`, creditBalance: u.creditBalance };
+      return { ok: true, message: `Key works${u.email ? ` (${u.email})` : ''}.`, creditBalance: u.creditBalance };
     } catch (err) {
       return { ok: false, message: errMsg(err) };
     }
@@ -1113,6 +1112,8 @@ export class GpuManagerImpl implements GpuManager {
         onstart: scripts.onstart,
         env,
         cancel_unavail: true,
+        // Vast's docs give no default: without this the instance can be created STOPPED and never boot.
+        target_state: 'running',
       });
     } catch (err) {
       if (err instanceof VastError && err.isAuth) throw err;
@@ -1263,6 +1264,7 @@ export class GpuManagerImpl implements GpuManager {
 
   private async waitRunning(id: number, signal: AbortSignal, timeoutMs: number): Promise<VastInstance> {
     const deadline = this.now() + timeoutMs;
+    let stoppedPolls = 0;
     for (;;) {
       this.checkAbort(signal);
       let inst: VastInstance | null | undefined;
@@ -1276,6 +1278,10 @@ export class GpuManagerImpl implements GpuManager {
       if (inst === null || (inst && instanceIsGone(inst))) throw new BootError(`Instance #${id} disappeared while booting.`);
       if (inst) {
         if (instanceIsRunning(inst) && sshTargets(inst).length > 0) return inst;
+        stoppedPolls = inst.intended_status === 'stopped' && !instanceIsRunning(inst) ? stoppedPolls + 1 : 0;
+        if (stoppedPolls >= 2) {
+          throw new BootError(`Vast created instance #${id} in a stopped state (the machine could not start it — usually its GPU was just taken).`);
+        }
         if (instanceIsDead(inst)) throw new BootError(`Instance #${id} failed to start (${inst.actual_status ?? 'unknown'}${inst.status_msg ? `: ${inst.status_msg}` : ''}).`);
         const s = inst.actual_status ?? 'provisioning';
         this.setMessage(`Waiting for instance #${id}: ${s === 'loading' ? 'pulling the server image (not billed)' : s}…`);
