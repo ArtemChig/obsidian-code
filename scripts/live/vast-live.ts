@@ -10,6 +10,15 @@
 //            (<= 25 min), record serverMode/droppedFeatures, create a session on the vast model in a temp folder, send
 //            "Reply with exactly: pong" and a Bash tool turn (node -v, runs on this PC), measure TTFT / decode speed,
 //            screenshots, clock out, verify that nothing is left running.
+//   final    the user's acceptance test (budget $3.00, reserve $0.80, campaign file campaign-final.json): update test,
+//            Settings → Engine check (Claude Code available, lean prompt), move everything except PLAN.md out of
+//            calculator-test (into the run's out dir — nothing is deleted), net-audit of the app's process tree, clock in
+//            Light (default model), a claude-code session (acceptEdits, thinking on) in calculator-test, one prompt
+//            "Read PLAN.md … carry out the whole plan", permissions auto-allowed inside the folder (logged), questions
+//            answered with the first option, plans approved; waits for idle (<= 45 min, hard limit 50 min from the
+//            clock-in), independent Orlando weather readings (wttr.in, api.weather.gov) during the run, clock out, then
+//            screenshots (transcript top/middle/end, a thinking block, the Read/web/Write/Edit/Bash/todo cards) and the
+//            Markdown export into calculator-test/_evidence. Checks: scripts/live/final-checks.ts.
 //
 // How it drives the app
 //   * Closes the user's running Obsidian Code gracefully first (taskkill without /F, waits for the exit; /F only when it
@@ -28,14 +37,16 @@
 //
 // Output: scripts/live/out/<runId>/ (driver.log, main.log, screenshots, result.json, server/failure logs). Gitignored.
 
-import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { type ChildProcess, execFileSync, spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { pathToFileURL } from 'node:url';
+import { _electron as electron, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 import WebSocket from 'ws';
 import type { CoreEventName, CoreEvents, RpcMethod, RpcParams, RpcResult } from '../../src/shared/protocol';
-import type { GpuStatus, Message, Settings, ToolUseBlock } from '../../src/shared/types';
+import type { GpuStatus, Message, PermissionRequest, PlanRequest, QuestionRequest, Session, Settings, Todo, ToolUseBlock } from '../../src/shared/types';
 
 // ───────────────────────────── config ─────────────────────────────
 
@@ -45,11 +56,10 @@ const IMAGE = 'Obsidian Code.exe';
 const DATA_DIR = path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'obsidian-code');
 const LEDGER_FILE = path.join(DATA_DIR, 'kv', 'gpu-ledger.json');
 const OUT_ROOT = path.join(REPO, 'scripts', 'live', 'out');
-const CAMPAIGN_FILE = path.join(OUT_ROOT, 'campaign.json');
+const CAMPAIGN_FILE = path.join(OUT_ROOT, process.argv[2] === 'final' ? 'campaign-final.json' : 'campaign.json');
 
 const PROFILE_ID = 'light';
 const MODEL_ID = 'qwen38-27b-uncensored-hauhau-q5kp';
-const RESERVE_USD = 0.6;
 const MIN_CREDIT_USD = 19;
 const READY_TIMEOUT_MS = 25 * 60_000;
 const POLL_MS = 5000;
@@ -60,8 +70,20 @@ function arg(name: string): string | undefined {
   return i > 0 ? process.argv[i + 1] : undefined;
 }
 const SCENARIO = process.argv[2] ?? 'status';
-const BUDGET_USD = Number(arg('budget') ?? '2.50');
+const IS_FINAL = SCENARIO === 'final';
+/** Phase 2 (the final acceptance test) has its own budget, reserve and campaign start (scripts/live/out/campaign-final.json). */
+const BUDGET_USD = Number(arg('budget') ?? (IS_FINAL ? '3.00' : '2.50'));
+const RESERVE_USD = IS_FINAL ? 0.8 : 0.6;
 const NO_UPDATE = process.argv.includes('--no-update');
+
+// ── final scenario (the user's acceptance test): the model on the Vast GPU builds a small app from a plan on this PC
+const FINAL_DIR = process.env.OC_FINAL_DIR ?? 'E:\\programming projects\\Dedicated LLM\\calculator-test';
+const EVIDENCE_DIR = path.join(FINAL_DIR, '_evidence');
+const FINAL_PROMPT =
+  'Read PLAN.md in this folder and carry out the whole plan. Keep a todo list, use web search for the weather, write all the files, run the tests and fix until they all pass.';
+const FINAL_TURN_MS = 45 * 60_000;
+/** Never let the model touch these (the user's app repo, the GPU of the local llama-server, ...). */
+const FINAL_FORBIDDEN = [/Dedicated LLM[\\/]+obsidian-code(?![-\w])/i];
 
 const runId = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-') + `-${SCENARIO}`;
 const OUT = path.join(OUT_ROOT, runId);
@@ -457,7 +479,17 @@ process.on('SIGINT', () => void abortRun('SIGINT', 130));
 process.on('SIGTERM', () => void abortRun('SIGTERM', 143));
 process.on('uncaughtException', (e) => void abortRun(`uncaught exception: ${e.stack ?? e.message}`, 1));
 process.on('unhandledRejection', (e) => void abortRun(`unhandled rejection: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`, 1));
-setTimeout(() => void abortRun(`run exceeded the hard limit of ${RUN_HARD_LIMIT_MS / 60_000} min`, 1), RUN_HARD_LIMIT_MS).unref();
+/** Hard limit: 50 min from the driver start; the final scenario re-arms it at the clock-in (GPU time is what costs). */
+let hardLimitTimer: NodeJS.Timeout | null = null;
+let hardLimitAt = 0;
+function armHardLimit(ms: number, what: string): void {
+  if (hardLimitTimer) clearTimeout(hardLimitTimer);
+  hardLimitAt = Date.now() + ms;
+  hardLimitTimer = setTimeout(() => void abortRun(`run exceeded the hard limit of ${ms / 60_000} min (${what})`, 1), ms);
+  hardLimitTimer.unref();
+}
+// the final scenario gets 10 more minutes before the clock-in (update + launch), then 50 min from the clock-in
+armHardLimit(IS_FINAL ? RUN_HARD_LIMIT_MS + 10 * 60_000 : RUN_HARD_LIMIT_MS, IS_FINAL ? 'before the clock-in' : 'driver start');
 
 // ───────────────────────────── evidence ─────────────────────────────
 
@@ -715,11 +747,8 @@ async function runTurn(h: AppHandle, sessionId: string, prompt: string, timeoutM
 
 // ───────────────────────────── phase 1 ─────────────────────────────
 
-async function phase1(h: AppHandle): Promise<boolean> {
-  const rpc = h.rpc;
-  const p1: Record<string, unknown> = {};
-  result.phase1 = p1;
-
+/** Clock-out mode 'destroy', clock out on quit, the monthly budget never above 25 (only ever lowered). */
+async function settingsSanity(rpc: Rpc, p1: Record<string, unknown>): Promise<Settings> {
   step('settings sanity');
   let settings = await rpc.call('settings.get', {});
   const v = settings.vast;
@@ -737,7 +766,11 @@ async function phase1(h: AppHandle): Promise<boolean> {
   log(`settings: ${JSON.stringify(p1.settings)}`);
   if (sv.clockOutMode !== 'destroy' || !sv.clockOutOnQuit) throw new Error('settings sanity failed');
   if (sv.monthlyBudget !== 25) log(`note: monthlyBudget is ${sv.monthlyBudget} (not raised)`);
+  return settings;
+}
 
+/** GPU off and clean, Vast key ok, credit >= MIN_CREDIT_USD, campaign spend + reserve <= budget. Throws otherwise. */
+async function preflight(rpc: Rpc, p1: Record<string, unknown>): Promise<void> {
   step('pre-flight: GPU off, budget, credit');
   const pre = await ensureNothingRunning(rpc, 'pre-flight');
   if (!pre.ok) throw new Error(`GPU not clean before clock-in: ${pre.detail}`);
@@ -749,12 +782,17 @@ async function phase1(h: AppHandle): Promise<boolean> {
   if (!key.ok) throw new Error(`Vast key check failed: ${key.message}`);
   if (credit < MIN_CREDIT_USD) throw new Error(`BUDGET STOP: Vast credit $${credit.toFixed(2)} < $${MIN_CREDIT_USD}`);
   if (spend + RESERVE_USD > BUDGET_USD) throw new Error(`BUDGET STOP: campaign spend $${spend.toFixed(4)} + $${RESERVE_USD} reserve > $${BUDGET_USD}`);
+}
 
+/** Clock in and wait for 'ready' (<= READY_TIMEOUT_MS) with the budget watched. Returns the ready status, or null. */
+async function clockInReady(h: AppHandle, p1: Record<string, unknown>, modelId: string): Promise<GpuStatus | null> {
+  const rpc = h.rpc;
   await gotoGpuView(h.page);
   await shot(h.page, '20-gpu-before');
 
-  step(`clock in ${PROFILE_ID} / ${MODEL_ID}`);
+  step(`clock in ${PROFILE_ID} / ${modelId}`);
   const tClock = Date.now();
+  if (IS_FINAL) armHardLimit(RUN_HARD_LIMIT_MS, 'from the clock-in');
   const phases: { phase: string; atSec: number; message: string }[] = [];
   p1.phases = phases;
   let lastPhase = '';
@@ -771,7 +809,7 @@ async function phase1(h: AppHandle): Promise<boolean> {
   safety.gpuMayBeOn = true;
   let outcome: 'ready' | 'error' | 'timeout' | 'budget' = 'timeout';
   try {
-    const st0 = await rpc.call('gpu.clockIn', { profileId: PROFILE_ID, modelId: MODEL_ID }, 120_000);
+    const st0 = await rpc.call('gpu.clockIn', { profileId: PROFILE_ID, modelId }, 120_000);
     log(`clockIn → ${fmtStatus(st0)}`);
     while (Date.now() - tClock < READY_TIMEOUT_MS) {
       await sleep(POLL_MS);
@@ -819,7 +857,7 @@ async function phase1(h: AppHandle): Promise<boolean> {
     await gotoGpuView(h.page);
     await shot(h.page, '39-gpu-failed');
     await collectEvidence(h, 'clockin-failed');
-    return false;
+    return null;
   }
 
   step('ready');
@@ -829,6 +867,17 @@ async function phase1(h: AppHandle): Promise<boolean> {
   await shot(h.page, '40-gpu-ready');
   // Always keep the live server log (in a safe mode it starts with the failed full-config attempts).
   await collectEvidence(h, ready.serverMode && ready.serverMode !== 'full' ? 'ready-safe-mode' : 'ready');
+  return ready;
+}
+
+async function phase1(h: AppHandle): Promise<boolean> {
+  const rpc = h.rpc;
+  const p1: Record<string, unknown> = {};
+  result.phase1 = p1;
+  await settingsSanity(rpc, p1);
+  await preflight(rpc, p1);
+  const ready = await clockInReady(h, p1, MODEL_ID);
+  if (!ready) return false;
 
   step('chat session on the vast model');
   const models = await rpc.call('models.list', {});
@@ -870,6 +919,603 @@ async function phase1(h: AppHandle): Promise<boolean> {
   return pongOk && toolOk;
 }
 
+// ───────────────────────────── final scenario ─────────────────────────────
+
+function insideDir(dir: string, p: string): boolean {
+  const base = path.resolve(dir).toLowerCase();
+  const target = path.resolve(dir, p).toLowerCase();
+  const rel = path.relative(base, target);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function sha256(file: string): string {
+  return createHash('sha256').update(readFileSync(file)).digest('hex');
+}
+
+/** Everything in the test folder except PLAN.md moves into this run's out dir (nothing is deleted); _evidence is recreated. */
+function prepareFinalDir(f: Record<string, unknown>): void {
+  step(`prepare ${FINAL_DIR}`);
+  const plan = path.join(FINAL_DIR, 'PLAN.md');
+  if (!existsSync(plan)) throw new Error(`PLAN.md not found in ${FINAL_DIR}`);
+  const archive = path.join(OUT, 'previous-calculator-test');
+  const moved: string[] = [];
+  for (const name of readdirSync(FINAL_DIR)) {
+    if (name === 'PLAN.md') continue;
+    mkdirSync(archive, { recursive: true });
+    renameSync(path.join(FINAL_DIR, name), path.join(archive, name));
+    moved.push(name);
+  }
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  f.planSha256Before = sha256(plan);
+  f.movedToArchive = moved;
+  log(`test folder ready: only PLAN.md (sha256 ${String(f.planSha256Before).slice(0, 12)}…) + empty _evidence${moved.length ? `; moved ${moved.join(', ')} → ${archive}` : ''}`);
+}
+
+/** Split a shell command into words (quotes respected) — enough to find the paths a deletion names. */
+function shellWords(cmd: string): string[] {
+  const out: string[] = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  for (let m = re.exec(cmd); m; m = re.exec(cmd)) out.push(m[1] ?? m[2] ?? m[3] ?? '');
+  return out;
+}
+
+function asWindowsPath(p: string): string | null {
+  if (/^[A-Za-z]:[\\/]/.test(p)) return p;
+  const msys = /^\/([A-Za-z])(\/.*)?$/.exec(p);
+  if (msys) return `${msys[1].toUpperCase()}:${(msys[2] ?? '/').replace(/\//g, '\\')}`;
+  if (p.startsWith('~')) return path.join(os.homedir(), p.slice(1));
+  if (/^\/[^/\s]+\//.test(p)) return p; // other absolute POSIX paths (/tmp/x …): outside the folder
+  return null;
+}
+
+/**
+ * Permission policy of the final run: allow everything the plan needs (Bash/PowerShell for node, web tools, edits in
+ * the folder) but never edits outside the test folder, deletions outside it, PLAN.md changes, process kills, the
+ * user's other projects or the local llama-server/Hearth.
+ */
+function finalPermission(toolName: string, input: Record<string, unknown>): { ok: boolean; why: string } {
+  const blob = JSON.stringify(input);
+  if (FINAL_FORBIDDEN.some((re) => re.test(blob))) return { ok: false, why: 'it touches a protected folder' };
+  const file = String(input.file_path ?? input.notebook_path ?? '');
+  if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(toolName) && file) {
+    if (!insideDir(FINAL_DIR, file)) return { ok: false, why: `edits are only allowed inside ${FINAL_DIR}` };
+    if (path.basename(file).toLowerCase() === 'plan.md') return { ok: false, why: 'PLAN.md is the user\'s plan and must not be changed' };
+  }
+  if (toolName === 'Bash' || toolName === 'PowerShell') {
+    const cmd = String(input.command ?? '');
+    if (/\b(taskkill|Stop-Process|kill|pkill|shutdown|Restart-Computer|diskpart|git\s+push|npm\s+publish|Set-ItemProperty)\b/i.test(cmd) || /\breg(\.exe)?\s+(add|delete)\b/i.test(cmd) || /llama-server|hearth/i.test(cmd)) {
+      return { ok: false, why: 'process control, registry, publishing and the local model server are off limits' };
+    }
+    if (/(^|[\s;&|(])(rm|rmdir|del|erase|rd|Remove-Item|ri|mv|move|Move-Item)(\s|$)/i.test(cmd)) {
+      if (/plan\.md/i.test(cmd)) return { ok: false, why: 'PLAN.md must not be removed or moved' };
+      const outside = shellWords(cmd).filter((w) => w.includes('..') || (asWindowsPath(w) !== null && !insideDir(FINAL_DIR, asWindowsPath(w) as string)));
+      if (outside.length) return { ok: false, why: `deleting or moving outside the project folder (${outside.join(', ')})` };
+    }
+  }
+  return { ok: true, why: '' };
+}
+
+const WEATHER_FILE = () => path.join(EVIDENCE_DIR, 'weather-reference.json');
+
+/** An independent reading of the current Orlando weather (the driver's own fetches — not the app's process tree). */
+async function weatherReading(tag: string): Promise<Record<string, unknown>> {
+  const r: Record<string, unknown> = { tag, at: new Date().toISOString() };
+  try {
+    const res = await fetch('https://wttr.in/Orlando?format=j1', { headers: { 'User-Agent': 'curl/8.9.1', Accept: 'application/json' }, signal: AbortSignal.timeout(25_000) });
+    const j = (await res.json()) as { current_condition?: { temp_F: string; weatherDesc?: { value: string }[]; localObsDateTime?: string; observation_time?: string }[] };
+    const c = j.current_condition?.[0];
+    r.wttr = c ? { url: 'https://wttr.in/Orlando?format=j1', tempF: Number(c.temp_F), conditions: c.weatherDesc?.[0]?.value?.trim(), localObsDateTime: c.localObsDateTime, observationTimeUtc: c.observation_time } : { error: `HTTP ${res.status}: no current_condition` };
+  } catch (e) {
+    r.wttr = { error: errMsg(e) };
+  }
+  try {
+    const url = 'https://api.weather.gov/stations/KMCO/observations/latest';
+    const res = await fetch(url, { headers: { 'User-Agent': 'obsidian-code-live-test', Accept: 'application/geo+json' }, signal: AbortSignal.timeout(25_000) });
+    const j = (await res.json()) as { properties?: { timestamp?: string; textDescription?: string; temperature?: { value: number | null } } };
+    const p = j.properties;
+    const c = p?.temperature?.value;
+    r.nws = p ? { url, station: 'KMCO (Orlando International Airport)', tempF: typeof c === 'number' ? Math.round((c * 9) / 5 + 32) : null, tempC: c ?? null, conditions: p.textDescription, timestamp: p.timestamp } : { error: `HTTP ${res.status}` };
+  } catch (e) {
+    r.nws = { error: errMsg(e) };
+  }
+  let all: unknown[] = [];
+  try {
+    all = JSON.parse(readFileSync(WEATHER_FILE(), 'utf8')) as unknown[];
+  } catch {
+    all = [];
+  }
+  all.push(r);
+  try {
+    writeFileSync(WEATHER_FILE(), JSON.stringify(all, null, 2));
+  } catch (e) {
+    log(`could not write the weather reference: ${errMsg(e)}`);
+  }
+  const w = r.wttr as { tempF?: number; conditions?: string } | undefined;
+  const n = r.nws as { tempF?: number; conditions?: string } | undefined;
+  log(`[weather ${tag}] wttr.in ${w?.tempF ?? '?'}°F ${w?.conditions ?? ''} | NWS KMCO ${n?.tempF ?? '?'}°F ${n?.conditions ?? ''}`);
+  return r;
+}
+
+// ── net audit of the app's process tree (scripts/net-audit.ps1)
+
+let netAudit: { proc: ChildProcess; file: string; exited: Promise<void> } | null = null;
+
+function startNetAudit(): void {
+  const file = path.join(OUT, 'net-audit.jsonl');
+  // root = the installed app's main process (the core runs in it); its children: claude.exe, shells, renderer/GPU/network
+  const proc = spawn(
+    'powershell',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(REPO, 'scripts', 'net-audit.ps1'), '-Out', file, '-RootName', IMAGE, '-Match', '.', '-Exclude', '[-]-type=', '-IntervalMs', '300', '-MaxSeconds', '5400'],
+    { stdio: 'ignore', windowsHide: true },
+  );
+  const exited = new Promise<void>((r) => proc.once('exit', () => r()));
+  netAudit = { proc, file, exited };
+  log(`net audit started (pid ${proc.pid}) → ${file}`);
+}
+
+/** After the app has exited the audit sees no root and writes its summary; wait for that, then copy it to _evidence. */
+async function finishNetAudit(): Promise<void> {
+  if (!netAudit) return;
+  const done = await Promise.race([netAudit.exited.then(() => true), sleep(30_000).then(() => false)]);
+  if (!done) {
+    log('net audit did not finish within 30 s after the app exited; stopping it');
+    netAudit.proc.kill();
+  }
+  try {
+    copyFileSync(netAudit.file, path.join(EVIDENCE_DIR, 'net-audit.jsonl'));
+    log(`net audit → ${path.join(EVIDENCE_DIR, 'net-audit.jsonl')}`);
+  } catch (e) {
+    log(`could not copy the net audit: ${errMsg(e)}`);
+  }
+  netAudit = null;
+}
+
+// ── the long turn
+
+interface FinalTurn extends TurnMetrics {
+  questions: { at: string; questions: string[]; answers: Record<string, string> }[];
+  plans: { at: string; plan: string }[];
+  todos: Todo[];
+  todoUpdates: number;
+  heartbeat: string[];
+  stoppedFor?: string;
+}
+
+async function runFinalTurn(h: AppHandle, sessionId: string, prompt: string, timeoutMs: number): Promise<FinalTurn> {
+  const m: FinalTurn = { prompt, sentAt: 0, assistantMessages: [], tools: [], permissions: [], questions: [], plans: [], todos: [], todoUpdates: 0, heartbeat: [] };
+  const byId = new Map<string, TurnMetrics['assistantMessages'][number]>();
+  const answered = new Set<string>();
+  const offs: (() => void)[] = [];
+  let status = 'running';
+  let sawRunning = false;
+  const toolStart = new Map<string, number>();
+
+  const onPermission = (p: PermissionRequest) => {
+    if (p.sessionId !== sessionId || answered.has(p.requestId)) return;
+    answered.add(p.requestId);
+    const d = finalPermission(p.toolName, p.input);
+    m.permissions.push({ toolName: p.toolName, title: p.title, decision: d.ok ? 'allow' : `deny: ${d.why}` });
+    log(`  permission ${p.toolName} "${p.title}" → ${d.ok ? 'allow' : `DENY (${d.why})`}`);
+    void h.rpc
+      .call('chat.respondPermission', d.ok ? { requestId: p.requestId, decision: 'allow' } : { requestId: p.requestId, decision: 'deny', message: `Not allowed in this test: ${d.why}. Stay inside the project folder.` })
+      .catch((e) => log(`  respondPermission failed: ${errMsg(e)}`));
+  };
+  const onQuestion = (q: QuestionRequest) => {
+    if (q.sessionId !== sessionId || answered.has(q.requestId)) return;
+    answered.add(q.requestId);
+    const answers = Object.fromEntries(q.questions.map((x) => [x.question, x.options[0]?.label ?? 'Yes']));
+    m.questions.push({ at: new Date().toISOString(), questions: q.questions.map((x) => x.question), answers });
+    log(`  question(s) ${JSON.stringify(q.questions.map((x) => x.question))} → first option ${JSON.stringify(answers)}`);
+    void h.rpc.call('chat.answerQuestion', { requestId: q.requestId, answers }).catch((e) => log(`  answerQuestion failed: ${errMsg(e)}`));
+  };
+  const onPlan = (p: PlanRequest) => {
+    if (p.sessionId !== sessionId || answered.has(p.requestId)) return;
+    answered.add(p.requestId);
+    m.plans.push({ at: new Date().toISOString(), plan: p.plan.slice(0, 4000) });
+    log(`  plan (${p.plan.length} chars) → approve (acceptEdits)`);
+    void h.rpc.call('chat.respondPlan', { requestId: p.requestId, approve: true, mode: 'acceptEdits' }).catch((e) => log(`  respondPlan failed: ${errMsg(e)}`));
+  };
+
+  offs.push(
+    h.rpc.on('message.added', (d) => {
+      if (d.sessionId !== sessionId || d.message.role !== 'assistant') return;
+      const e = { id: d.message.id };
+      byId.set(e.id, e);
+      m.assistantMessages.push(e);
+    }),
+    h.rpc.on('message.delta', (d) => {
+      if (d.sessionId !== sessionId) return;
+      const e = byId.get(d.messageId);
+      const now = Date.now();
+      if (e && !e.firstDeltaAt) e.firstDeltaAt = now;
+      if (!m.firstTokenAt) {
+        m.firstTokenAt = now;
+        m.ttftMs = now - m.sentAt;
+        log(`  first token after ${m.ttftMs} ms (${d.blockType})`);
+      }
+    }),
+    h.rpc.on('message.completed', (d) => {
+      if (d.sessionId !== sessionId) return;
+      const e = byId.get(d.messageId);
+      if (!e) return;
+      e.completedAt = Date.now();
+      e.meta = d.meta;
+      const ct = d.meta?.completionTokens;
+      if (ct && e.firstDeltaAt && e.completedAt > e.firstDeltaAt) e.decodeTokPerSec = Math.round((ct / ((e.completedAt - e.firstDeltaAt) / 1000)) * 10) / 10;
+      log(`  assistant message done: prompt ${d.meta?.promptTokens ?? '?'} tok, out ${ct ?? '?'} tok${e.decodeTokPerSec ? `, ${e.decodeTokPerSec} tok/s` : ''}`);
+    }),
+    h.rpc.on('tool.updated', (d) => {
+      if (d.sessionId !== sessionId) return;
+      const t: ToolUseBlock = d.tool;
+      if (t.status === 'running' && !toolStart.has(t.id)) {
+        toolStart.set(t.id, Date.now());
+        log(`  tool ${t.name} started: ${JSON.stringify(t.input).slice(0, 160)}`);
+      }
+      if (['done', 'error', 'denied', 'interrupted'].includes(t.status) && !m.tools.some((x) => (x as { id?: string }).id === t.id)) {
+        m.tools.push({ id: t.id, name: t.name, status: t.status, input: t.input, result: t.result?.content?.slice(0, 1500) } as TurnMetrics['tools'][number]);
+        log(`  tool ${t.name} ${t.status}: ${JSON.stringify(t.input).slice(0, 140)} → ${(t.result?.content ?? '').slice(0, 160).replace(/\s+/g, ' ')}`);
+      }
+    }),
+    h.rpc.on('todos.updated', (d) => {
+      if (d.sessionId !== sessionId) return;
+      m.todos = d.todos;
+      m.todoUpdates++;
+      const done = d.todos.filter((x) => x.status === 'completed').length;
+      log(`  todos: ${done}/${d.todos.length} done${d.todos.find((x) => x.status === 'in_progress') ? ` — now: ${d.todos.find((x) => x.status === 'in_progress')?.content}` : ''}`);
+    }),
+    h.rpc.on('permission.requested', onPermission),
+    h.rpc.on('question.requested', onQuestion),
+    h.rpc.on('plan.requested', onPlan),
+    h.rpc.on('session.updated', (s) => {
+      if (s.id !== sessionId) return;
+      if (s.status !== status) log(`  session status → ${s.status}`);
+      status = s.status;
+      if (s.status === 'running') sawRunning = true;
+    }),
+    h.rpc.on('error', (e) => {
+      if (e.sessionId === sessionId) {
+        m.error = e.message;
+        log(`  session error: ${e.message}`);
+      }
+    }),
+  );
+  try {
+    m.sentAt = Date.now();
+    log(`> ${prompt}`);
+    await h.rpc.call('chat.send', { sessionId, text: prompt });
+    const end = Date.now() + timeoutMs;
+    let nextBeat = Date.now() + 60_000;
+    let nextSweep = Date.now() + 20_000;
+    let nextShot = Date.now() + 5 * 60_000;
+    let idleSince = 0;
+    for (;;) {
+      await sleep(1000);
+      if (h.isExited()) throw new Error('the app exited during the turn');
+      const now = Date.now();
+      if (now >= nextSweep) {
+        nextSweep = now + 20_000;
+        // safety net: anything pending that the listeners missed
+        const pend = await h.rpc.call('chat.pending', { sessionId }).catch(() => null);
+        for (const p of pend?.permissions ?? []) onPermission(p);
+        for (const q of pend?.questions ?? []) onQuestion(q);
+        for (const p of pend?.plans ?? []) onPlan(p);
+        const s = await h.rpc.call('sessions.get', { id: sessionId }).catch(() => null);
+        if (s) status = s.status;
+      }
+      if (now >= nextBeat) {
+        nextBeat = now + 60_000;
+        const g = await h.rpc.call('gpu.status', {});
+        const spend = campaignSpend(g.sessionCost).spend;
+        const beat = `${Math.round((now - m.sentAt) / 1000)}s status=${status} msgs=${m.assistantMessages.length} tools=${m.tools.length} todos=${m.todos.filter((x) => x.status === 'completed').length}/${m.todos.length} gpu=${g.phase} session $${g.sessionCost.toFixed(4)} campaign $${spend.toFixed(4)}`;
+        m.heartbeat.push(beat);
+        log(`[turn] ${beat}`);
+        if (spend > BUDGET_USD) {
+          m.stoppedFor = `BUDGET STOP: campaign spend $${spend.toFixed(4)} > $${BUDGET_USD}`;
+          log(m.stoppedFor);
+          await h.rpc.call('chat.interrupt', { sessionId }).catch(() => undefined);
+          break;
+        }
+        if (g.phase !== 'ready') {
+          m.stoppedFor = `the GPU left 'ready' during the turn: ${fmtStatus(g)}`;
+          log(m.stoppedFor);
+          await h.rpc.call('chat.interrupt', { sessionId }).catch(() => undefined);
+          break;
+        }
+      }
+      if (now >= nextShot) {
+        nextShot = now + 5 * 60_000;
+        await shot(h.page, `60-progress-${Math.round((now - m.sentAt) / 60_000)}min`);
+      }
+      // done = idle (or error) for 20 s in a row — Claude Code can start a follow-up turn on its own right after a result
+      if ((sawRunning || now - m.sentAt > 5000) && (status === 'idle' || status === 'error')) {
+        idleSince ||= now;
+        if (now - idleSince >= 20_000) {
+          const s = await h.rpc.call('sessions.get', { id: sessionId });
+          if (s.status === 'idle' || s.status === 'error') {
+            status = s.status;
+            break;
+          }
+          idleSince = 0;
+        }
+      } else idleSince = 0;
+      if (now > end) {
+        m.error = `turn timed out after ${Math.round(timeoutMs / 60_000)} min`;
+        log(m.error);
+        await h.rpc.call('chat.interrupt', { sessionId }).catch(() => undefined);
+        break;
+      }
+    }
+    m.doneAt = Date.now();
+    const s = await h.rpc.call('sessions.get', { id: sessionId });
+    const last = [...s.messages].reverse().find((x) => x.role === 'assistant');
+    m.finalText = last?.blocks
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { text: string }).text)
+      .join('')
+      .trim();
+    log(`< ${JSON.stringify(m.finalText ?? '').slice(0, 600)} (session ${s.status}, ${Math.round((m.doneAt - m.sentAt) / 1000)} s)`);
+  } finally {
+    for (const off of offs) off();
+  }
+  return m;
+}
+
+// ── evidence
+
+async function evidenceShot(page: Page, name: string, shots: string[]): Promise<void> {
+  try {
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, name) });
+    shots.push(name);
+  } catch (e) {
+    log(`evidence screenshot ${name} failed: ${errMsg(e)}`);
+  }
+}
+
+interface ScrollBox { scrollTop: number; scrollHeight: number; clientHeight: number }
+
+async function scrollTranscript(page: Page, frac: number): Promise<void> {
+  await page.evaluate((f) => {
+    const el = (globalThis as unknown as { document: { querySelector(s: string): ScrollBox | null } }).document.querySelector('[data-testid=transcript]');
+    if (el) el.scrollTop = f * (el.scrollHeight - el.clientHeight);
+  }, frac);
+  await sleep(600);
+}
+
+/** Bring a transcript element to the top of the view (with a little context above it). */
+async function showElement(page: Page, loc: Locator): Promise<void> {
+  await loc.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.evaluate(() => {
+    const el = (globalThis as unknown as { document: { querySelector(s: string): ScrollBox | null } }).document.querySelector('[data-testid=transcript]');
+    if (el) el.scrollTop = Math.max(0, el.scrollTop - 90);
+  });
+  await sleep(500);
+}
+
+async function openSessionInUi(page: Page, title: string): Promise<void> {
+  try {
+    await page.locator(`[data-testid=session-row][title="${title.replace(/"/g, '\\"')}"]`).first().click({ timeout: 10_000 });
+  } catch (e) {
+    log(`could not open the session in the UI: ${errMsg(e)}`);
+  }
+  await sleep(1000);
+}
+
+async function settingsEngineShot(h: AppHandle, shots: string[]): Promise<void> {
+  try {
+    await h.page.getByTestId('status-version').click({ timeout: 5000 });
+    await h.page.getByTestId('settings-nav-engine').click({ timeout: 5000 });
+    await sleep(1200);
+    await evidenceShot(h.page, '01-settings-engine.png', shots);
+    await h.page.getByTestId('nav-home').click({ timeout: 5000 }).catch(() => undefined);
+  } catch (e) {
+    log(`Settings → Engine screenshot failed: ${errMsg(e)}`);
+  }
+}
+
+async function finalEvidence(h: AppHandle, sess: Session, title: string, f: Record<string, unknown>): Promise<void> {
+  step('evidence: screenshots + Markdown export');
+  const page = h.page;
+  const shots: string[] = (f.evidenceShots as string[] | undefined) ?? [];
+  f.evidenceShots = shots;
+  // a roomier window for the evidence; restored afterwards (the app remembers its window bounds)
+  const before = await h.app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    const r = { bounds: w.getBounds(), maximized: w.isMaximized() };
+    if (r.maximized) w.unmaximize();
+    w.setBounds({ x: r.bounds.x, y: r.bounds.y, width: Math.max(r.bounds.width, 1480), height: Math.max(r.bounds.height, 980) });
+    return r;
+  });
+  try {
+    await sleep(800);
+    await openSessionInUi(page, title);
+    await page.locator('[data-testid=msg-assistant]').first().waitFor({ timeout: 20_000 });
+    for (let i = 0; i < 20; i++) {
+      const more = page.getByTestId('show-earlier');
+      if (!(await more.count())) break;
+      await more.click();
+      await sleep(400);
+    }
+    await scrollTranscript(page, 0);
+    await evidenceShot(page, '10-transcript-top.png', shots);
+    await scrollTranscript(page, 0.5);
+    await evidenceShot(page, '11-transcript-middle.png', shots);
+    await scrollTranscript(page, 1);
+    await evidenceShot(page, '12-transcript-end.png', shots);
+
+    const thinking = page.locator('[data-testid=thinking-block]');
+    f.thinkingBlocksInUi = await thinking.count();
+    if ((f.thinkingBlocksInUi as number) > 0) {
+      // the first thinking block with real content
+      let pick = thinking.first();
+      for (let i = 0; i < Math.min(8, f.thinkingBlocksInUi as number); i++) {
+        const t = thinking.nth(i);
+        const label = (await t.innerText()).trim();
+        if (/thought for/i.test(label)) {
+          pick = t;
+          break;
+        }
+      }
+      await showElement(page, pick);
+      await pick.locator('button').first().click();
+      await sleep(600);
+      await showElement(page, pick);
+      await evidenceShot(page, '20-thinking-expanded.png', shots);
+    } else log('no thinking block in the transcript');
+
+    const card = (tool: string) => page.locator(`[data-testid=tool-card][data-tool="${tool}"]`);
+    const cards: { name: string; loc: Locator }[] = [
+      { name: '30-card-read-plan.png', loc: card('Read').filter({ hasText: /PLAN\.md/i }).first() },
+      { name: '31-card-web-search.png', loc: card('WebSearch').first() },
+      { name: '32-card-web-fetch.png', loc: card('WebFetch').first() },
+      { name: '33-card-write.png', loc: card('Write').first() },
+      { name: '34-card-edit.png', loc: card('Edit').first() },
+      { name: '35-card-bash-node-test.png', loc: page.locator('[data-testid=tool-card][data-tool="Bash"], [data-testid=tool-card][data-tool="PowerShell"]').filter({ hasText: /node\s+--test/ }).last() },
+      { name: '36-card-todos.png', loc: card('TodoWrite').last() },
+    ];
+    const found: Record<string, boolean> = {};
+    for (const c of cards) {
+      found[c.name] = (await c.loc.count()) > 0;
+      if (!found[c.name]) {
+        log(`no tool card for ${c.name}`);
+        continue;
+      }
+      await showElement(page, c.loc);
+      const btn = c.loc.locator('button[aria-expanded]').first();
+      if ((await btn.getAttribute('aria-expanded')) === 'false' && !(await btn.isDisabled())) {
+        await btn.click();
+        await sleep(700);
+      }
+      await showElement(page, c.loc);
+      await evidenceShot(page, c.name, shots);
+    }
+    f.toolCardsFound = found;
+    await scrollTranscript(page, 1);
+  } catch (e) {
+    log(`evidence screenshots failed: ${errMsg(e)}`);
+  }
+
+  // Markdown export through the app's own Session → Export as Markdown (the download is routed into _evidence)
+  const md = path.join(EVIDENCE_DIR, 'transcript.md');
+  try {
+    await h.app.evaluate(({ BrowserWindow }, target) => {
+      const w = BrowserWindow.getAllWindows()[0];
+      w.webContents.session.once('will-download', (_e, item) => item.setSavePath(target));
+    }, md);
+    await page.getByTestId('menu-session').click({ timeout: 5000 });
+    await page.getByRole('menuitem', { name: /Export as Markdown/ }).click({ timeout: 5000 });
+    for (let i = 0; i < 30 && !existsSync(md); i++) await sleep(500);
+    f.transcriptExport = existsSync(md) ? 'app menu Session → Export as Markdown' : 'missing';
+  } catch (e) {
+    log(`Export as Markdown via the menu failed: ${errMsg(e)}`);
+    await page.keyboard.press('Escape').catch(() => undefined);
+  }
+  if (!existsSync(md)) {
+    // same function the app uses (src/renderer/src/features/chat/lib/export.ts)
+    const mod = (await import(pathToFileURL(path.join(REPO, 'src', 'renderer', 'src', 'features', 'chat', 'lib', 'export.ts')).href)) as { transcriptMarkdown(s: Session, m: Message[]): string };
+    writeFileSync(md, mod.transcriptMarkdown(sess, sess.messages));
+    f.transcriptExport = 'transcriptMarkdown() fallback (menu export did not produce a file)';
+  }
+  log(`transcript export: ${f.transcriptExport}`);
+
+  await h.app
+    .evaluate(({ BrowserWindow }, r) => {
+      const w = BrowserWindow.getAllWindows()[0];
+      w.setBounds(r.bounds);
+      if (r.maximized) w.maximize();
+    }, before)
+    .catch(() => undefined);
+}
+
+async function finalScenario(h: AppHandle): Promise<boolean> {
+  const rpc = h.rpc;
+  const f: Record<string, unknown> = { phaseStart: new Date(campaignStart()).toISOString(), budget: BUDGET_USD, reserve: RESERVE_USD };
+  result.final = f;
+  const shots: string[] = [];
+  f.evidenceShots = shots;
+
+  prepareFinalDir(f);
+
+  step('Settings → Engine: Claude Code available, lean prompt');
+  const engines = await rpc.call('engines.list', {});
+  const ccInfo = engines.find((e) => e.id === 'claude-code');
+  const settings0 = await rpc.call('settings.get', {});
+  const engineSettings = (settings0 as unknown as { engine?: { default?: string; claudeCode?: { systemPrompt?: string; executable?: string } } }).engine;
+  f.engine = { claudeCode: ccInfo ?? null, systemPrompt: engineSettings?.claudeCode?.systemPrompt ?? null, executable: engineSettings?.claudeCode?.executable ?? null, defaultEngine: engineSettings?.default ?? null };
+  log(`engines: ${JSON.stringify(engines)}; claudeCode.systemPrompt=${engineSettings?.claudeCode?.systemPrompt}`);
+  await settingsEngineShot(h, shots);
+  if (!ccInfo?.available) throw new Error(`the Claude Code engine is not available: ${ccInfo?.detail ?? 'not listed'}`);
+  if (engineSettings?.claudeCode?.systemPrompt !== 'lean') log(`NOTE: the Claude Code system prompt is "${engineSettings?.claudeCode?.systemPrompt}", not lean`);
+
+  const settings = await settingsSanity(rpc, f);
+  await preflight(rpc, f);
+  const light = settings.vast.profiles.find((p) => p.id === PROFILE_ID);
+  const modelId = light?.defaultModelId ?? MODEL_ID;
+
+  startNetAudit();
+  const ready = await clockInReady(h, f, modelId);
+  if (!ready) return false;
+  await weatherReading('gpu-ready');
+
+  step('claude-code session in the test folder');
+  const title = `Orlando Calc — final live test ${runId.slice(0, 13)}`;
+  let sess = await rpc.call('sessions.create', { cwd: FINAL_DIR, title, model: { provider: 'vast', model: ready.modelId ?? modelId }, permissionMode: 'acceptEdits', engine: 'claude-code' });
+  if (!sess.thinking) sess = await rpc.call('chat.setThinking', { sessionId: sess.id, thinking: true });
+  log(`session ${sess.id}: engine ${sess.engine} mode ${sess.permissionMode} thinking ${sess.thinking} model ${JSON.stringify(sess.model)}`);
+  f.session = { id: sess.id, title, cwd: FINAL_DIR, engine: sess.engine, permissionMode: sess.permissionMode, thinking: sess.thinking, model: sess.model };
+  if (sess.engine !== 'claude-code') throw new Error(`session engine is ${sess.engine}`);
+  await openSessionInUi(h.page, title);
+  await shot(h.page, '55-session-empty');
+
+  step('the final prompt');
+  const turnMs = Math.min(FINAL_TURN_MS, hardLimitAt - Date.now() - 5 * 60_000);
+  log(`turn budget ${Math.round(turnMs / 60_000)} min (hard limit at ${new Date(hardLimitAt).toISOString()})`);
+  const t = await runFinalTurn(h, sess.id, FINAL_PROMPT, turnMs);
+  f.turn = t;
+  await shot(h.page, '70-turn-done');
+  await weatherReading('turn-done');
+  const g = await rpc.call('gpu.status', {});
+  f.sessionCostBeforeClockOut = g.sessionCost;
+  saveResult();
+
+  // the GPU is not needed for the evidence: clock out first (money)
+  step('clock out (before the evidence)');
+  const clean = await ensureNothingRunning(rpc, 'final turn finished');
+  f.clockOut = clean;
+  if (clean.ok) safety.gpuMayBeOn = false;
+
+  const full = await rpc.call('sessions.get', { id: sess.id });
+  writeFileSync(path.join(EVIDENCE_DIR, 'session.json'), JSON.stringify(full, null, 2));
+  await finalEvidence(h, full, title, f);
+  f.planSha256After = sha256(path.join(FINAL_DIR, 'PLAN.md'));
+  f.planUnchanged = f.planSha256After === f.planSha256Before;
+  f.filesAfter = readdirSync(FINAL_DIR);
+  log(`folder now: ${(f.filesAfter as string[]).join(', ')}; PLAN.md unchanged: ${f.planUnchanged}`);
+  const summary = {
+    runId,
+    session: f.session,
+    instance: f.instance,
+    ready: f.ready,
+    turnSeconds: t.doneAt && t.sentAt ? Math.round((t.doneAt - t.sentAt) / 1000) : null,
+    ttftMs: t.ttftMs,
+    assistantMessages: t.assistantMessages.length,
+    tools: t.tools.map((x) => `${x.name} ${x.status}: ${JSON.stringify(x.input).slice(0, 160)}`),
+    permissions: t.permissions,
+    questions: t.questions,
+    plans: t.plans.length,
+    todos: t.todos,
+    error: t.error ?? null,
+    stoppedFor: t.stoppedFor ?? null,
+    finalText: t.finalText,
+    sessionCostBeforeClockOut: f.sessionCostBeforeClockOut,
+    clockOut: f.clockOut,
+    planUnchanged: f.planUnchanged,
+    evidence: shots,
+  };
+  writeFileSync(path.join(EVIDENCE_DIR, 'run-summary.json'), JSON.stringify(summary, null, 2));
+  saveResult();
+  return !t.error && !t.stoppedFor && clean.ok && !!t.finalText;
+}
+
 // ───────────────────────────── main ─────────────────────────────
 
 async function main(): Promise<number> {
@@ -882,7 +1528,7 @@ async function main(): Promise<number> {
   let h: AppHandle | null = null;
   let ok = false;
   try {
-    if ((SCENARIO === 'update' || SCENARIO === 'phase1') && !NO_UPDATE) h = await updateTest();
+    if ((SCENARIO === 'update' || SCENARIO === 'phase1' || SCENARIO === 'final') && !NO_UPDATE) h = await updateTest();
     else h = await launchApp('installed app');
     result.appVersion = (await h.rpc.call('system.info', {})).version;
 
@@ -906,6 +1552,41 @@ async function main(): Promise<number> {
       case 'phase1':
         ok = await phase1(h);
         break;
+      case 'final':
+        ok = await finalScenario(h);
+        break;
+      case 'evidence-dry': {
+        // no GPU: exercise the final scenario's evidence code on the newest existing session (OC_FINAL_DIR = a scratch folder)
+        if (!process.env.OC_FINAL_DIR) throw new Error('evidence-dry needs OC_FINAL_DIR (a scratch folder, never the real test folder)');
+        mkdirSync(EVIDENCE_DIR, { recursive: true });
+        const samples: [string, Record<string, unknown>][] = [
+          ['Bash', { command: 'node --test' }],
+          ['Bash', { command: 'rm -f calc.test.js' }],
+          ['Bash', { command: 'rm -rf /e/programming\\ projects' }],
+          ['Bash', { command: 'rm -rf "E:\\programming projects\\Dedicated LLM\\oc-hotfix"' }],
+          ['Bash', { command: `rm -f "${FINAL_DIR}\\old.js"` }],
+          ['Bash', { command: 'del ..\\x.txt' }],
+          ['Bash', { command: 'taskkill /IM llama-server.exe' }],
+          ['Write', { file_path: path.join(FINAL_DIR, 'index.html') }],
+          ['Write', { file_path: path.join(FINAL_DIR, 'PLAN.md') }],
+          ['Write', { file_path: 'C:\\Windows\\x.txt' }],
+          ['WebFetch', { url: 'https://wttr.in/Orlando' }],
+        ];
+        result.permissionSamples = samples.map(([n, i]) => `${n} ${JSON.stringify(i)} → ${JSON.stringify(finalPermission(n, i))}`);
+        for (const s of result.permissionSamples as string[]) log(`policy: ${s}`);
+        await weatherReading('dry');
+        startNetAudit();
+        const list = await h.rpc.call('sessions.list', {});
+        const pick = [...list].filter((s) => s.kind === 'chat').sort((a, b) => (b.engine === 'claude-code' ? 1 : 0) - (a.engine === 'claude-code' ? 1 : 0) || b.updatedAt - a.updatedAt)[0];
+        if (!pick) throw new Error('no session to use');
+        const full = await h.rpc.call('sessions.get', { id: pick.id });
+        log(`using session "${pick.title}" (${pick.engine}, ${full.messages.length} messages)`);
+        const fr: Record<string, unknown> = {};
+        result.final = fr;
+        await finalEvidence(h, full, pick.title, fr);
+        ok = existsSync(path.join(EVIDENCE_DIR, 'transcript.md'));
+        break;
+      }
       default:
         throw new Error(`unknown scenario ${SCENARIO}`);
     }
@@ -936,12 +1617,23 @@ async function main(): Promise<number> {
       }
       await closeApp(h);
     }
+    await finishNetAudit();
     const s = campaignSpend();
     result.campaignSpendAfter = s.spend;
+    result.campaignRecords = s.records.map((r) => ({ instanceId: r.instanceId, gpu: r.gpuName, pricePerHour: r.pricePerHour, startedAt: new Date(r.startedAt).toISOString(), endedAt: r.endedAt ? new Date(r.endedAt).toISOString() : null, cost: r.cost, endReason: r.endReason }));
     result.ok = ok;
     result.finishedAt = new Date().toISOString();
     saveResult();
     log(`campaign spend now $${s.spend.toFixed(4)} (${s.records.length} record(s) since the campaign start). Result: ${ok ? 'PASS' : 'FAIL'} → ${path.join(OUT, 'result.json')}`);
+    if (IS_FINAL && existsSync(EVIDENCE_DIR)) {
+      for (const f of ['driver.log', 'result.json']) {
+        try {
+          copyFileSync(path.join(OUT, f), path.join(EVIDENCE_DIR, f === 'driver.log' ? 'driver.log.txt' : 'driver-result.json'));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
   return ok ? 0 : 1;
 }

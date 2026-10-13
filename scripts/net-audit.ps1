@@ -1,9 +1,12 @@
 # Outbound-TCP audit for the claude-code engine (zero-Anthropic-traffic proof).
 #
 #   powershell -NoProfile -File scripts/net-audit.ps1 -Out audit.jsonl [-Match 'e2e-real\.ts'] [-IntervalMs 400]
+#   installed app (the core runs in the Electron main process):
+#   powershell -NoProfile -File scripts/net-audit.ps1 -Out audit.jsonl -RootName 'Obsidian Code.exe' -Match '.' -Exclude '--type='
 #
-# Every tick it finds the root process(es) whose command line matches -Match (e.g. the core started by
-# scripts/e2e-real.ts), collects ALL their descendants (the bundled claude.exe, shells, subagent children ...) and reads
+# Every tick it finds the root process(es) named -RootName (default node.exe) whose command line matches -Match and not
+# -Exclude (e.g. the core started by scripts/e2e-real.ts, or the installed app's main process — its renderer/GPU/network
+# children carry --type=), collects ALL their descendants (the bundled claude.exe, shells, subagent children ...) and reads
 # `netstat -ano -p tcp` for connections owned by those PIDs. Each distinct (process, remote address, port) is written
 # once to -Out as a JSON line; a summary line is added when the roots are gone. Loopback peers (127.0.0.0/8, ::1) are
 # flagged; everything else must be a site a web tool fetched on purpose. Nothing is ever sent anywhere by this script.
@@ -12,6 +15,8 @@
 param(
   [Parameter(Mandatory = $true)][string]$Out,
   [string]$Match = 'e2e-real\.ts',
+  [string]$RootName = 'node.exe',
+  [string]$Exclude = '',
   [int]$IntervalMs = 400,
   [int]$StartTimeoutSec = 300,
   [int]$MaxSeconds = 7200
@@ -29,7 +34,7 @@ function IsLoopback([string]$a) { return ($a -like '127.*' -or $a -eq '::1' -or 
 while ($true) {
   $ticks++
   $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine
-  $roots = @($all | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -match $Match -and $_.ProcessId -ne $PID })
+  $roots = @($all | Where-Object { $_.Name -eq $RootName -and $_.CommandLine -match $Match -and -not ($Exclude -and $_.CommandLine -match $Exclude) -and $_.ProcessId -ne $PID })
   if ($roots.Count -gt 0) { $sawRoot = $true }
   elseif ($sawRoot) { break }
   elseif (((Get-Date) - $start).TotalSeconds -gt $StartTimeoutSec) { break }
