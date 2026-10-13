@@ -232,7 +232,9 @@ describe('GPU-7: an ambiguous create that cannot be reconciled does not rent ano
     expect(h.vast.instances.size).toBe(1); // created on Vast although the API answered 500
     h.vast.fail.listAlwaysFails = false;
     await h.waitFor(() => h!.vast.instances.size === 0, 6000, 'background reconcile destroyed it');
-    expect(h.manager.history().some((r) => r.endReason === 'error')).toBe(true);
+    // The mock drops the instance when it receives the DELETE; the manager writes the history record only after the
+    // response comes back, so wait for it instead of asserting in the same tick (this raced under load).
+    await h.waitFor(() => h!.manager.history().some((r) => r.endReason === 'error'), 6000, 'history records the failed rental');
   });
 });
 
