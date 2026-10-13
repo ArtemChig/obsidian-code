@@ -153,6 +153,27 @@ export function parseToolCallBody(raw: string, tools?: ChatToolSpec[]): { name: 
 }
 
 const BLOCK_RE = /<tool_call>([\s\S]*?)(?:<\/tool_call>|$)/g;
+const BARE_OPEN_RE = /^\s*<([A-Za-z_][\w.-]*)>/;
+
+/**
+ * Qwen sometimes drops the `<tool_call><function=` wrapper and writes the tool's own name as the tag:
+ *   <TodoWrite>\n<parameter=todos>\n[...]\n</parameter>\n</function>\n</tool_call>
+ * llama.cpp's parser does not recognise that, so it arrives as plain text. Accepted only when the text starts with the
+ * name of a known tool and carries at least one <parameter=…>.
+ */
+function parseBareToolTag(text: string, tools?: ChatToolSpec[]): { call: { name: string; args: Record<string, unknown> }; rest: string } | null {
+  if (!tools?.length || !text.includes('<parameter=')) return null;
+  const open = BARE_OPEN_RE.exec(text);
+  const name = open?.[1];
+  if (!open || !name || !tools.some((t) => t.function.name === name)) return null;
+  const body = text.slice(open[0].length);
+  const parsed = parseQwenXml(`<function=${name}>${body}`, tools)[0];
+  if (!parsed || !Object.keys(parsed.args).length) return null;
+  const lastEnd = body.lastIndexOf('</function>');
+  const lastParam = body.lastIndexOf('</parameter>');
+  const tail = lastEnd >= 0 ? body.slice(lastEnd + '</function>'.length) : lastParam >= 0 ? body.slice(lastParam + '</parameter>'.length) : '';
+  return { call: parsed, rest: tail.replace(/^\s*<\/tool_call>/, '').trim() };
+}
 
 /**
  * Extract all text-form tool calls from content. Accepts a missing final </tool_call> and bare
@@ -185,7 +206,11 @@ export function parseTextToolCalls(text: string, tools?: ChatToolSpec[], makeId:
       for (const p of parsed) calls.push({ id: makeId(), name: p.name, arguments: JSON.stringify(p.args) });
     } else rest = text;
   } else {
-    rest = text;
+    const bare = parseBareToolTag(text, tools);
+    if (bare) {
+      calls.push({ id: makeId(), name: bare.call.name, arguments: JSON.stringify(bare.call.args) });
+      rest = bare.rest;
+    } else rest = text;
   }
   return { calls, rest: calls.length ? rest.trim() : text };
 }

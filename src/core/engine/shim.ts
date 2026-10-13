@@ -9,12 +9,14 @@
 //   * request bodies are adapted where llama.cpp differs from api.anthropic.com: Claude Code appends `role: "system"`
 //     entries mid-conversation, which llama.cpp's chat templates reject (HTTP 500 "System message must be at the
 //     beginning"); they are folded into the neighbouring user turn as <system-reminder> text.
-// Responses (SSE) are piped through untouched.
+//   * a tool call the model wrote as plain text (llama.cpp's parser missed it) is turned back into a tool_use block
+//     (recover.ts); everything else in the response (SSE) is piped through untouched.
 
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
+import { ToolCallRecovery } from './recover';
 
 export interface ShimRoute {
   /** Upstream server root (with or without /v1). */
@@ -36,6 +38,8 @@ export interface ShimRequestInfo {
   /** x-claude-code-request-class (main | subagent | compaction | auxiliary | workflow) when Claude Code sends it. */
   requestClass?: string;
   status?: number;
+  /** Tool calls the model wrote as text that were turned back into tool_use blocks (set once the response ended). */
+  recoveredToolCalls?: number;
 }
 
 type Json = Record<string, unknown>;
@@ -151,9 +155,15 @@ export class AnthropicShim {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     let body = Buffer.concat(chunks);
+    /** Streaming /v1/messages call with tools: a tool call the model writes as text is repaired in the response. */
+    let recovery: ToolCallRecovery | null = null;
     if (req.method === 'POST' && /^\/v1\/messages(\/count_tokens)?(\?|$)/.test(path) && body.length) {
       try {
         const parsed = JSON.parse(body.toString('utf8')) as Json;
+        if (parsed.stream === true && path.startsWith('/v1/messages') && !path.startsWith('/v1/messages/count_tokens')) {
+          const r = new ToolCallRecovery(parsed.tools);
+          if (r.active) recovery = r;
+        }
         let next = applyModel(foldSystemMessages(parsed), route.model);
         if (!path.startsWith('/v1/messages/count_tokens')) next = applyThinking(next);
         if (next !== parsed) body = Buffer.from(JSON.stringify(next), 'utf8');
@@ -175,7 +185,14 @@ export class AnthropicShim {
       const h = { ...ur.headers };
       delete h.connection; delete h['keep-alive'];
       res.writeHead(ur.statusCode ?? 502, h);
-      ur.pipe(res);
+      if (recovery && ur.statusCode === 200 && /text\/event-stream/i.test(String(ur.headers['content-type'] ?? ''))) {
+        const rec = recovery;
+        ur.on('data', (c: Buffer) => { const out = rec.write(c); if (out) res.write(out); });
+        ur.on('end', () => { const out = rec.end(); res.end(out || undefined); if (rec.recovered) info.recoveredToolCalls = rec.recovered; });
+        ur.on('error', () => res.destroy());
+      } else {
+        ur.pipe(res);
+      }
     });
     up.on('error', (e) => {
       info.status = 502;

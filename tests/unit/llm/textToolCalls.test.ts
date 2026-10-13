@@ -85,3 +85,27 @@ describe('text-form tool-call fallback parser', () => {
     expect(coerceValue('null', { type: ['string', 'null'] })).toBe(null);
   });
 });
+
+describe('tool name used as the tag (wrapper dropped by the model)', () => {
+  const tools: ChatToolSpec[] = [
+    { type: 'function', function: { name: 'TodoWrite', description: '', parameters: { type: 'object', properties: { todos: { type: 'array' } } } } },
+    TOOLS[1]!,
+  ];
+  const text = '<TodoWrite>\n<parameter=todos>\n[{"content": "a", "status": "pending"}]\n</parameter>\n</function>\n</tool_call>';
+
+  it('is parsed when the tag is a known tool and a <parameter=…> follows', () => {
+    const r = parseTextToolCalls(text, tools);
+    expect(r.calls).toHaveLength(1);
+    expect(r.calls[0]!.name).toBe('TodoWrite');
+    expect(JSON.parse(r.calls[0]!.arguments)).toEqual({ todos: [{ content: 'a', status: 'pending' }] });
+    expect(r.rest).toBe('');
+  });
+
+  it('keeps trailing prose as rest, and ignores unknown tags, prose and calls without parameters', () => {
+    expect(parseTextToolCalls(`${text}\nDone.`, tools).rest).toBe('Done.');
+    for (const t of ['<div>\n<parameter=x>\n1\n</parameter>', '<TodoWrite> I will update the list.', 'TodoWrite <parameter=todos>[]</parameter>']) {
+      expect(parseTextToolCalls(t, tools)).toEqual({ calls: [], rest: t });
+    }
+    expect(parseTextToolCalls(text, undefined).calls).toHaveLength(0);
+  });
+});
