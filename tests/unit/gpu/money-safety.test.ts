@@ -232,7 +232,8 @@ describe('GPU-7: an ambiguous create that cannot be reconciled does not rent ano
     expect(h.vast.instances.size).toBe(1); // created on Vast although the API answered 500
     h.vast.fail.listAlwaysFails = false;
     await h.waitFor(() => h!.vast.instances.size === 0, 6000, 'background reconcile destroyed it');
-    expect(h.manager.history().some((r) => r.endReason === 'error')).toBe(true);
+    // The ledger record is written after the destroy is verified (a follow-up GET), so wait for it too.
+    await h.waitFor(() => h!.manager.history().some((r) => r.endReason === 'error'), 6000, 'reconcile recorded');
   });
 });
 
