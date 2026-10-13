@@ -1423,15 +1423,28 @@ async function finalEvidence(h: AppHandle, sess: Session, title: string, f: Reco
 
   // Markdown export through the app's own Session → Export as Markdown (the download is routed into _evidence)
   const md = path.join(EVIDENCE_DIR, 'transcript.md');
+  // an earlier export moves aside (never "found" as this one), and the app must not quit before the download is done
+  if (existsSync(md)) renameSync(md, path.join(OUT, 'transcript.previous.md'));
   try {
     await h.app.evaluate(({ BrowserWindow }, target) => {
+      const g = globalThis as unknown as { __ocExport?: string };
+      g.__ocExport = 'pending';
       const w = BrowserWindow.getAllWindows()[0];
-      w.webContents.session.once('will-download', (_e, item) => item.setSavePath(target));
+      w.webContents.session.once('will-download', (_e, item) => {
+        item.setSavePath(target);
+        item.once('done', (_ev, state) => {
+          g.__ocExport = state;
+        });
+      });
     }, md);
     await page.getByTestId('menu-session').click({ timeout: 5000 });
     await page.getByRole('menuitem', { name: /Export as Markdown/ }).click({ timeout: 5000 });
-    for (let i = 0; i < 30 && !existsSync(md); i++) await sleep(500);
-    f.transcriptExport = existsSync(md) ? 'app menu Session → Export as Markdown' : 'missing';
+    let state = 'pending';
+    for (let i = 0; i < 40 && state === 'pending'; i++) {
+      await sleep(500);
+      state = await h.app.evaluate(() => (globalThis as unknown as { __ocExport?: string }).__ocExport ?? 'pending');
+    }
+    f.transcriptExport = state === 'completed' && existsSync(md) ? 'app menu Session → Export as Markdown' : `missing (download ${state})`;
   } catch (e) {
     log(`Export as Markdown via the menu failed: ${errMsg(e)}`);
     await page.keyboard.press('Escape').catch(() => undefined);
