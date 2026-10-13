@@ -15,10 +15,11 @@
 //            calculator-test (into the run's out dir — nothing is deleted), net-audit of the app's process tree, clock in
 //            Light (default model), a claude-code session (acceptEdits, thinking on) in calculator-test, one prompt
 //            "Read PLAN.md … carry out the whole plan", permissions auto-allowed inside the folder (logged), questions
-//            answered with the first option, plans approved; waits for idle (<= 45 min, hard limit 50 min from the
-//            clock-in), independent Orlando weather readings (wttr.in, api.weather.gov) during the run, clock out, then
+//            answered with the first option, plans approved; waits for idle (<= 45 min, hard limit 50 min from
+//            'ready'), independent Orlando weather readings (wttr.in, api.weather.gov) during the run, clock out, then
 //            screenshots (transcript top/middle/end, a thinking block, the Read/web/Write/Edit/Bash/todo cards) and the
 //            Markdown export into calculator-test/_evidence. Checks: scripts/live/final-checks.ts.
+//   final-evidence  no GPU: recapture the screenshots + Markdown export of the last final run's session.
 //
 // How it drives the app
 //   * Closes the user's running Obsidian Code gracefully first (taskkill without /F, waits for the exit; /F only when it
@@ -479,7 +480,7 @@ process.on('SIGINT', () => void abortRun('SIGINT', 130));
 process.on('SIGTERM', () => void abortRun('SIGTERM', 143));
 process.on('uncaughtException', (e) => void abortRun(`uncaught exception: ${e.stack ?? e.message}`, 1));
 process.on('unhandledRejection', (e) => void abortRun(`unhandled rejection: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`, 1));
-/** Hard limit: 50 min from the driver start; the final scenario re-arms it at the clock-in (GPU time is what costs). */
+/** Hard limit: 50 min from the driver start; the final scenario arms 30 min for the clock-in and 50 min from 'ready'. */
 let hardLimitTimer: NodeJS.Timeout | null = null;
 let hardLimitAt = 0;
 function armHardLimit(ms: number, what: string): void {
@@ -488,7 +489,7 @@ function armHardLimit(ms: number, what: string): void {
   hardLimitTimer = setTimeout(() => void abortRun(`run exceeded the hard limit of ${ms / 60_000} min (${what})`, 1), ms);
   hardLimitTimer.unref();
 }
-// the final scenario gets 10 more minutes before the clock-in (update + launch), then 50 min from the clock-in
+// final: 60 min until the clock-in starts (update + launch), 30 min for the clock-in, then 50 min from 'ready'
 armHardLimit(IS_FINAL ? RUN_HARD_LIMIT_MS + 10 * 60_000 : RUN_HARD_LIMIT_MS, IS_FINAL ? 'before the clock-in' : 'driver start');
 
 // ───────────────────────────── evidence ─────────────────────────────
@@ -792,7 +793,8 @@ async function clockInReady(h: AppHandle, p1: Record<string, unknown>, modelId: 
 
   step(`clock in ${PROFILE_ID} / ${modelId}`);
   const tClock = Date.now();
-  if (IS_FINAL) armHardLimit(RUN_HARD_LIMIT_MS, 'from the clock-in');
+  // final: the clock-in has its own READY_TIMEOUT_MS; the 50-min hard limit is re-armed at 'ready' (the model's run)
+  if (IS_FINAL) armHardLimit(READY_TIMEOUT_MS + 5 * 60_000, 'clock-in');
   const phases: { phase: string; atSec: number; message: string }[] = [];
   p1.phases = phases;
   let lastPhase = '';
@@ -861,6 +863,7 @@ async function clockInReady(h: AppHandle, p1: Record<string, unknown>, modelId: 
   }
 
   step('ready');
+  if (IS_FINAL) armHardLimit(RUN_HARD_LIMIT_MS, 'from ready');
   p1.ready = { secondsToReady: Math.round((Date.now() - tClock) / 1000), serverMode: ready.serverMode ?? null, droppedFeatures: ready.droppedFeatures ?? [], serverContextLength: ready.serverContextLength ?? null, endpoint: ready.endpoint ? 'tunnel up' : null, sessionCostAtReady: ready.sessionCost };
   log(`READY in ${p1.secondsToOutcome} s: serverMode=${ready.serverMode ?? '?'} dropped=[${(ready.droppedFeatures ?? []).join(',')}] ctx=${ready.serverContextLength ?? '?'}`);
   await gotoGpuView(h.page);
@@ -1273,22 +1276,42 @@ async function evidenceShot(page: Page, name: string, shots: string[]): Promise<
 
 interface ScrollBox { scrollTop: number; scrollHeight: number; clientHeight: number }
 
+/**
+ * The transcript sticks to the bottom unless the USER scrolls (useStickToBottom: wheel/keys/drag mark intent; a bare
+ * scrollTop change is treated as a layout shift and re-pinned). So every programmatic scroll first sends a wheel event.
+ */
+async function wheelIntent(page: Page, deltaY: number): Promise<void> {
+  await page.evaluate((d) => {
+    const g = globalThis as unknown as { document: { querySelector(s: string): { dispatchEvent(e: unknown): boolean } | null }; WheelEvent: new (t: string, i: { deltaY: number; bubbles: boolean }) => unknown };
+    g.document.querySelector('[data-testid=transcript]')?.dispatchEvent(new g.WheelEvent('wheel', { deltaY: d, bubbles: true }));
+  }, deltaY);
+}
+
 async function scrollTranscript(page: Page, frac: number): Promise<void> {
-  await page.evaluate((f) => {
-    const el = (globalThis as unknown as { document: { querySelector(s: string): ScrollBox | null } }).document.querySelector('[data-testid=transcript]');
-    if (el) el.scrollTop = f * (el.scrollHeight - el.clientHeight);
-  }, frac);
-  await sleep(600);
+  // twice: content-visibility sizes the rows that come into view, which changes scrollHeight after the first jump
+  for (let i = 0; i < 2; i++) {
+    await wheelIntent(page, frac < 1 ? -120 : 120);
+    await page.evaluate((f) => {
+      const el = (globalThis as unknown as { document: { querySelector(s: string): ScrollBox | null } }).document.querySelector('[data-testid=transcript]');
+      if (el) el.scrollTop = f * (el.scrollHeight - el.clientHeight);
+    }, frac);
+    await sleep(400);
+  }
+  await sleep(300);
 }
 
 /** Bring a transcript element to the top of the view (with a little context above it). */
 async function showElement(page: Page, loc: Locator): Promise<void> {
-  await loc.evaluate((el) => el.scrollIntoView({ block: 'start' }));
-  await page.evaluate(() => {
-    const el = (globalThis as unknown as { document: { querySelector(s: string): ScrollBox | null } }).document.querySelector('[data-testid=transcript]');
-    if (el) el.scrollTop = Math.max(0, el.scrollTop - 90);
-  });
-  await sleep(500);
+  for (let i = 0; i < 2; i++) {
+    await wheelIntent(page, -120);
+    await loc.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await page.evaluate(() => {
+      const el = (globalThis as unknown as { document: { querySelector(s: string): ScrollBox | null } }).document.querySelector('[data-testid=transcript]');
+      if (el) el.scrollTop = Math.max(0, el.scrollTop - 90);
+    });
+    await sleep(300);
+  }
+  await sleep(300);
 }
 
 async function openSessionInUi(page: Page, title: string): Promise<void> {
@@ -1363,13 +1386,17 @@ async function finalEvidence(h: AppHandle, sess: Session, title: string, f: Reco
     } else log('no thinking block in the transcript');
 
     const card = (tool: string) => page.locator(`[data-testid=tool-card][data-tool="${tool}"]`);
+    const shellCards = page.locator('[data-testid=tool-card][data-tool="Bash"], [data-testid=tool-card][data-tool="PowerShell"]');
+    const shellTools = sess.messages.flatMap((m) => m.blocks).filter((b): b is ToolUseBlock => b.type === 'tool_use' && (b.name === 'Bash' || b.name === 'PowerShell'));
+    const lastNodeTest = shellTools.map((t) => /node\s+--test/.test(String(t.input.command ?? ''))).lastIndexOf(true);
     const cards: { name: string; loc: Locator }[] = [
       { name: '30-card-read-plan.png', loc: card('Read').filter({ hasText: /PLAN\.md/i }).first() },
       { name: '31-card-web-search.png', loc: card('WebSearch').first() },
       { name: '32-card-web-fetch.png', loc: card('WebFetch').first() },
       { name: '33-card-write.png', loc: card('Write').first() },
       { name: '34-card-edit.png', loc: card('Edit').first() },
-      { name: '35-card-bash-node-test.png', loc: page.locator('[data-testid=tool-card][data-tool="Bash"], [data-testid=tool-card][data-tool="PowerShell"]').filter({ hasText: /node\s+--test/ }).last() },
+      // the card header shows the command's description, not the command: pick the card by its position in the session
+      { name: '35-card-bash-node-test.png', loc: lastNodeTest >= 0 ? shellCards.nth(lastNodeTest) : page.locator('[data-testid=no-node-test-card]') },
       { name: '36-card-todos.png', loc: card('TodoWrite').last() },
     ];
     const found: Record<string, boolean> = {};
@@ -1555,6 +1582,19 @@ async function main(): Promise<number> {
       case 'final':
         ok = await finalScenario(h);
         break;
+      case 'final-evidence': {
+        // no GPU: recapture the screenshots + Markdown export of the last final run's session (e.g. after a UI fix)
+        const sum = JSON.parse(readFileSync(path.join(EVIDENCE_DIR, 'run-summary.json'), 'utf8')) as { session: { id: string; title: string } };
+        const full = await h.rpc.call('sessions.get', { id: sum.session.id });
+        log(`recapturing the evidence of "${sum.session.title}" (${full.engine}, ${full.messages.length} messages)`);
+        const fr: Record<string, unknown> = { evidenceShots: [] as string[] };
+        result.final = fr;
+        await settingsEngineShot(h, fr.evidenceShots as string[]);
+        await finalEvidence(h, full, sum.session.title, fr);
+        log(`tool cards found: ${JSON.stringify(fr.toolCardsFound)}; thinking blocks in the UI: ${String(fr.thinkingBlocksInUi)}`);
+        ok = existsSync(path.join(EVIDENCE_DIR, 'transcript.md'));
+        break;
+      }
       case 'evidence-dry': {
         // no GPU: exercise the final scenario's evidence code on the newest existing session (OC_FINAL_DIR = a scratch folder)
         if (!process.env.OC_FINAL_DIR) throw new Error('evidence-dry needs OC_FINAL_DIR (a scratch folder, never the real test folder)');
