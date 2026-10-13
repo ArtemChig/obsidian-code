@@ -252,8 +252,9 @@ See §5. Layout like the Claude Code desktop app:
 * **Settings view** (sections): Models & providers (local URL + test, custom endpoints CRUD + keys), Vast.ai (API key
   input → `secrets.set('vast.apiKey')`, Test key, budget, idle/heartbeat/max hours, clock-out on quit, image, profiles
   editor), Permissions (default mode, allow/deny rules), Web search provider + keys, MCP servers (JSON editor),
-  Hooks (JSON editor), Memory & Claude import toggle, Shell, Appearance (density), Notifications, Launch at login,
-  About (data dir, version).
+  Hooks (JSON editor), Engine (default engine, Claude Code executable / system prompt / config import / env; 4.7),
+  Memory & Claude import toggle, Shell, Appearance (density), Notifications, Launch at login,
+  About & updates (data dir, version, update state, release notes, update token; `RELEASING.md`).
 * Global: command palette (Ctrl+K) for navigation/actions, toasts for `notification` events, reconnecting banner when
   the WebSocket drops (auto-reconnect with backoff, refetch state), keyboard focus rings, no emoji icons (lucide only).
 

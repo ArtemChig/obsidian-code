@@ -30,6 +30,10 @@ export interface BoxScenario {
   noStatusFile?: boolean;
   /** CONTAINER_API_KEY is not in the container env (the watchdog cannot arm until the app supplies the key). */
   noContainerKey?: boolean;
+  /** The failure-evidence command (logs + nvidia-smi) never answers (the app must time-box it and still destroy). */
+  evidenceHangs?: boolean;
+  /** bootstrap.sh's load fallback: reach ready in this mode (status.json mode/dropped/attempt/ctx + attempts.log). */
+  readyMode?: { mode: 'safe' | 'safe-minimal'; dropped: string[]; ctx: number; attempt: number };
 }
 
 type ParsedPub = Exclude<ReturnType<typeof ssh2.utils.parseKey>, Error | unknown[]>;
@@ -92,8 +96,8 @@ export class FakeBox {
     this.timers.clear();
   }
 
-  writeStatus(phase: string, progress: number, message: string, bytesDone = 0, bytesTotal = 0): void {
-    writeFileSync(this.file('status.json'), JSON.stringify({ phase, progress, message, modelId: this.modelId, bytesDone, bytesTotal, updatedAt: Math.floor(Date.now() / 1000) }) + '\n');
+  writeStatus(phase: string, progress: number, message: string, bytesDone = 0, bytesTotal = 0, extra: Record<string, unknown> = {}): void {
+    writeFileSync(this.file('status.json'), JSON.stringify({ phase, progress, message, modelId: this.modelId, bytesDone, bytesTotal, updatedAt: Math.floor(Date.now() / 1000), ...extra }) + '\n');
   }
 
   private log(line: string): void {
@@ -164,9 +168,13 @@ export class FakeBox {
         const session = accept();
         session.on('exec', (acc, _rej, info) => {
           const stream = acc();
+          // a write racing a dropped connection emits 'error' (write after end); it is not a test failure
+          stream.on('error', () => undefined);
+          stream.stderr.on('error', () => undefined);
           let stdin = '';
           stream.on('data', (d: Buffer) => (stdin += d.toString('utf8')));
           stream.on('end', () => {
+            if (this.scenario.evidenceHangs && info.command.includes('@@OC-EVIDENCE@@')) return; // never answers
             let r: { code: number; stdout: string; stderr: string };
             try {
               r = this.exec(info.command, stdin);
@@ -174,10 +182,16 @@ export class FakeBox {
               // e.g. an in-flight heartbeat that lands after the box (and its temp dir) was destroyed
               r = { code: 1, stdout: '', stderr: `mock box: ${err instanceof Error ? err.message : String(err)}\n` };
             }
-            if (r.stdout) stream.write(r.stdout);
-            if (r.stderr) stream.stderr.write(r.stderr);
-            stream.exit(r.code);
-            stream.end();
+            // the client may have gone away meanwhile (dropConnections / close): never write to an ended channel
+            if (stream.writableEnded || stream.destroyed || stream.stderr.writableEnded) return;
+            try {
+              if (r.stdout) stream.write(r.stdout);
+              if (r.stderr) stream.stderr.write(r.stderr);
+              stream.exit(r.code);
+              stream.end();
+            } catch {
+              /* channel closed under us */
+            }
           });
         });
       });
@@ -285,6 +299,10 @@ export class FakeBox {
         out += `${lines[lines.length - 1]}\n`;
         continue;
       }
+      if (/^timeout \d+ nvidia-smi 2>&1$/.test(p)) {
+        out += '| NVIDIA-SMI 575.57.08   Driver Version: 575.57.08   CUDA Version: 12.9 |\n|   0  NVIDIA GeForce RTX 5090   31456MiB / 32607MiB |\n';
+        continue;
+      }
       if ((m = /^bash \/root\/oc\/switch\.sh '([^']+)'$/.exec(p))) {
         this.switches.push(m[1]);
         this.run(m[1], true);
@@ -373,15 +391,26 @@ export class FakeBox {
       }
       this.modelsOnDisk.add(modelId);
       this.writeStatus('loading', 0, `Loading ${modelId} into VRAM`, total, total);
-      this.later(stepMs, () => {
+      // long enough for a status poll to see it even on a loaded test machine (the pipeline test asserts the phase)
+      this.later(Math.max(stepMs, 150), () => {
         if (token !== this.runToken) return;
         if (this.scenario.failLoad?.includes(modelId)) {
+          // what a real failure leaves behind, including secrets a careless log line could leak
+          this.log(`[oc] attempt 3/3 (safe-minimal) starting: /app/llama-server --api-key ${this.apiKey} --alias ${modelId}`);
+          this.log('llama_init_from_model: failed to initialize the context: CUDA error: out of memory');
+          this.log(`env: OC_API_KEY=${this.apiKey} CONTAINER_API_KEY='${this.env.CONTAINER_API_KEY ?? ''}'`);
+          this.log(`curl -H "Authorization: Bearer ${this.env.CONTAINER_API_KEY ?? ''}" https://console.vast.ai/api/v0/instances/${this.instanceId}/`);
           this.writeStatus('error', 0, `llama-server failed to load ${modelId}; see server.log`);
           this.log(`ERROR: failed to load ${modelId}`);
           return;
         }
         this.serving = true;
-        this.writeStatus('ready', 1, `Serving ${modelId}`, total, total);
+        const rm = this.scenario.readyMode;
+        if (rm) {
+          writeFileSync(this.file('attempts.log'), `[oc] attempt 1/3 (full) FAILED to load ${modelId}\n  | llama_init_from_model: failed to create the MTP draft context\n`);
+          this.log(`[oc] attempt 1/3 (full) FAILED to load ${modelId}`);
+        }
+        this.writeStatus('ready', 1, `Serving ${modelId}`, total, total, rm ? { mode: rm.mode, dropped: rm.dropped, attempt: rm.attempt, ctx: rm.ctx } : {});
         writeFileSync(this.file('was_ready'), '');
         this.log(`ready: ${modelId}`);
       });

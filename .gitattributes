@@ -2,6 +2,9 @@
 # Shell scripts run on Linux GPU servers (Vast.ai) and in Git Bash: always LF.
 *.sh text eol=lf
 *.bash text eol=lf
+# Node scripts may start with a #! line, which breaks with CRLF (vitest/vite cannot strip it): always LF.
+*.mjs text eol=lf
+*.cjs text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf

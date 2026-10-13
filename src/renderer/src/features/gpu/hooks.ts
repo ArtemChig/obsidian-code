@@ -116,7 +116,8 @@ export function useAccountCheck(hasApiKey: boolean | null, enabled: boolean) {
 
 // ───────────────────────────── Server log ─────────────────────────────
 
-export function useServerLog(enabled: boolean, autoRefreshMs: number | null) {
+/** `reloadKey`: bump it to load again (e.g. "View server log" while the viewer is already open). */
+export function useServerLog(enabled: boolean, autoRefreshMs: number | null, reloadKey = 0) {
   const [text, setText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +141,7 @@ export function useServerLog(enabled: boolean, autoRefreshMs: number | null) {
     if (!autoRefreshMs) return;
     const t = setInterval(() => void load(), autoRefreshMs);
     return () => clearInterval(t);
-  }, [enabled, autoRefreshMs, load]);
+  }, [enabled, autoRefreshMs, load, reloadKey]);
 
   return { text, loading, error, reload: load };
 }

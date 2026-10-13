@@ -17,11 +17,16 @@ panel with live cost and budget tracking.
 
 | What | Where |
 |---|---|
-| Installer | `release\Obsidian Code-Setup-0.1.0.exe` (installs, adds Start-menu + desktop shortcuts) |
-| Portable (no install) | `release\Obsidian Code-0.1.0-portable.exe` |
+| Installer | `Obsidian-Code-Setup-<version>.exe` from the latest [GitHub release](https://github.com/ArtemChig/obsidian-code/releases/latest) (or `release\` after `npm run dist`) — installs, adds Start-menu + desktop shortcuts |
+| Portable (no install, no auto-update) | `Obsidian-Code-<version>-portable.exe` |
 | From source | `npm install` → `npm run dev` |
 
 The app keeps its data (sessions, settings, encrypted keys, cost ledger) in `%APPDATA%\obsidian-code`.
+
+**Updates:** the installed app checks for new releases on its own. When one is out, an **UPDATE** button appears at the
+right of the menu bar: click it and the app installs the new version and restarts (a clocked-in GPU is clocked out
+first, if *Clock out on quit* is on). The repository is private, so the app reads releases with your GitHub CLI login
+(`gh auth login`) or a read-only token saved in **Settings → About & updates**. See `RELEASING.md`.
 
 ## First run
 
@@ -186,8 +191,12 @@ npm run typecheck && npm test
 npm run e2e          # Playwright (UI + real-app tests)
 npx tsx scripts/e2e-real.ts            # 15 agent scenarios against the local model (--engine claude-code for that engine)
 powershell -File scripts/net-audit.ps1 -Out audit.jsonl   # outbound-TCP audit while an e2e run is going
-npm run dist         # Windows installer + portable exe → release/
+npm run dist         # Windows installer + portable exe → release/ (not published)
+npm run release -- patch|minor|major   # bump, test, build, publish a GitHub release (RELEASING.md)
 ```
+
+Every change ships as a release; the version rule (patch = small fix, minor = feature, major = redesign) is in
+`CLAUDE.md` and `RELEASING.md`.
 
 The architecture, contracts and design system are documented in `SPEC.md`. Research notes (Vast API, model
 catalog, llama-server behaviour) are in `docs/research/`, and the real-model test results are in

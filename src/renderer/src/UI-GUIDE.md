@@ -53,8 +53,9 @@ export function GpuView(); ActivityView(); SchedulesView(); SettingsView()
 ```
 
 Shell layout (top → bottom): **title bar** 34 px (brand diamond + `OBSIDIAN CODE`, centred document title) · **menu strip**
-27 px (File / View / Session / GPU / Help + mono hints) · `[sidebar 240 | main | right panel]` · **status bar** 25 px
-(connection, model + provider, context %, permission mode, running count, GPU phase + $/h + session cost, month spend).
+27 px (File / View / Session / GPU / Help + mono hints; a solid `UPDATE x.y.z` button there when a release is out) ·
+`[sidebar 240 | main | right panel]` · **status bar** 25 px (connection, model + provider, context %, permission mode,
+running count, GPU phase + $/h + session cost, month spend, app version).
 Views get the full main area. Make the view root `h-full` and scroll inside it (`overflow-y-auto`). Each view is wrapped in an
 error boundary. Settings can read `useUi.getState().settingsSection` (set by `openSettings('vast')`) to focus a section.
 A view header follows the reference: `h-14 border-b border-rule px-6` with a `text-title font-semibold` heading
@@ -197,6 +198,7 @@ ready-made selectors.
 | `useActivity` / `useSchedules` | `items` / `tasks` (live through `activity.updated` / `schedules.updated`) |
 | `useConnection` | `mode` 'core'/'demo'/'none' · `state.status` (open/reconnecting/…) · `ready` |
 | `useUi` | `route` 'session'/'gpu'/'activity'/'schedules'/'settings' · `sidebarCollapsed` · `rightPanelOpen` · `rightPanelTab` · `paletteOpen` · `settingsSection` · `shortcutsOpen` |
+| `useUpdates` (`state/updates`) | `snapshot: UpdateSnapshot \| null` (`@shared/updates`: state idle/checking/available/not-available/downloading/downloaded/installing/error/unsupported, `currentVersion`, `lastCheckedAt`, `tokenSource`, `releaseUrl`) · `source` 'electron'/'demo'. null = no updater (browser) → hide update UI. Actions: `checkForUpdates()`, `installUpdate()`; `useStartUpdate()` (app/UpdateButton) adds the GPU confirm |
 | `useToasts` | toast queue |
 
 Selectors (`state/selectors`): `useTranscript(id)` (loads or refetches automatically), `useTranscriptLoading(id)`,
@@ -236,6 +238,8 @@ answers every RPC method with realistic data and simulates streaming turns. Keyw
 "run", "test" or "build" → Bash permission prompt; "ask", "which" or "choose" → question card; "plan" (or plan mode) → plan approval;
 "explore", "agent" or "research" → subagent (Task). Slash commands `/clear`, `/compact`, `/plan`, `/thinking`, `/cost` and `/help` work.
 GPU clock-in walks through every phase in about 10 s. In devtools, `__obsidianDemo.simulateDisconnect(4000)` shows the reconnect banner.
+Auto-update UI: add `&update=available` (or `downloading`, `installing`, `error`, `failed`, `portable`, `secret`) — the
+simulated updater lives in `lib/demo-updates.ts`; clicking UPDATE walks download → restart in a few seconds.
 
 Add demo content **from your own folder**: create `features/<area>/demo.ts`. It is auto-imported in demo mode before the
 demo core starts.
@@ -263,6 +267,7 @@ running subagent `s-sse-explore`), `s-perm` (waiting on a Bash permission `perm-
   `getByTestId('session-row')`, then call `page.screenshot({ path: 'tests/e2e/screenshots/<area>-<name>.png' })` at 1440×900 and 1024×700.
   Useful test ids: `app-title`, `titlebar`, `menubar`, `menu-<file|view|session|gpu|help>`, `view-title`, `status-bar`,
   `status-connection`, `status-gpu`, `sidebar` (`data-collapsed`), `session-row`, `new-session`, `nav-<route>`, `gpu-widget`,
-  `gpu-clock-button`, `right-panel`, `home`, `quick-start`, `palette-trigger`.
+  `gpu-clock-button`, `right-panel`, `home`, `quick-start`, `palette-trigger`, `update-button` (`data-status`),
+  `update-version`, `status-version`, `settings-updates`.
   Put your screenshots next to the reference shots in `docs/design/m-13-obsidian/shots/` and iterate on spacing, alignment
   and contrast until they read as the same design language before you hand off.

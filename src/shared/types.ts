@@ -279,7 +279,20 @@ export interface GpuStatus {
   parked?: { instanceId: number; profileId: string; modelId: string; gpuName: string; storageCostPerHour: number; parkedAt: number };
   /** Ordered checklist for the UI. */
   steps: { id: GpuPhase; label: string; state: 'todo' | 'active' | 'done' | 'error' }[];
+  /**
+   * How llama-server was started on the instance: 'full' = the catalog configuration; 'safe' / 'safe-minimal' = the
+   * fallback after the full configuration failed to load (see droppedFeatures). Absent until the server reports it.
+   */
+  serverMode?: GpuServerMode;
+  /** Features the safe-mode fallback turned off: 'mtp' | 'vision' | 'flash-attn' | 'kv-quant'. */
+  droppedFeatures?: string[];
+  /** Context length the server actually runs with (safe modes lower it). */
+  serverContextLength?: number;
+  /** The newest failure log saved this run (<dataDir>/logs/gpu-<instanceId>-<YYYYMMDD-HHMMSS>.log). */
+  failureLogPath?: string;
 }
+
+export type GpuServerMode = 'full' | 'safe' | 'safe-minimal';
 
 export interface GpuOffer {
   offerId: number;

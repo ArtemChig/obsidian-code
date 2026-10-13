@@ -1,7 +1,7 @@
 // Electron main process (owner: platform).
 // Starts the core in-process (createCore + NativeBridge), opens the window (custom title bar with the Windows
-// controls overlay), tray (Open / Clock in / Clock out / Quit), IPC for the preload, launch-at-login, and the
-// graceful quit sequence (clock out the GPU if configured, flush, close).
+// controls overlay), tray (Open / Clock in / Clock out / Quit), IPC for the preload, launch-at-login, auto-update
+// (updater.ts) and the graceful quit sequence (clock out the GPU if configured, flush, close; quit-gate.ts).
 
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
@@ -29,6 +29,8 @@ import { checkOpenPath, checkRevealPath } from './open-path';
 import type { NativeBridge } from '@core/contracts';
 import type { GpuStatus, Settings } from '@shared/types';
 import { createAttentionRouter, type AttentionRouter } from './attention';
+import { createQuitGate } from './quit-gate';
+import { initUpdater, type AppUpdater } from './updater';
 
 const APP_ID = 'com.obsidian.code';
 const BG = '#000000';
@@ -57,6 +59,9 @@ let core: CoreHandle | null = null;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let attention: AttentionRouter | null = null;
+let updater: AppUpdater | null = null;
+/** The graceful quit sequence has finished (core closed). */
+let shutdownDone = false;
 const liveNotifications = new Set<Notification>();
 
 const devUrl = !app.isPackaged ? process.env['ELECTRON_RENDERER_URL'] || '' : '';
@@ -387,6 +392,7 @@ let shutdownPromise: Promise<void> | null = null;
 function shutdown(): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = (async () => {
+    updater?.stop();
     // Quitting interrupts running turns: no "Task finished" notifications for those.
     attention?.dispose();
     attention = null;
@@ -419,9 +425,13 @@ function shutdown(): Promise<void> {
     }
     if (tray && !tray.isDestroyed()) tray.destroy();
     tray = null;
+    shutdownDone = true;
   })();
   return shutdownPromise;
 }
+
+// Holds the first quit until shutdown() has finished; the updater runs it up front instead (see quit-gate.ts).
+const quitGate = createQuitGate({ shutdown, quit: () => app.quit() });
 
 // ───────────────────────────── app lifecycle ─────────────────────────────
 
@@ -436,6 +446,19 @@ if (!gotLock) {
       callback(['clipboard-sanitized-write', 'clipboard-read', 'notifications', 'fullscreen'].includes(permission));
     });
     registerIpc();
+    updater = initUpdater({
+      dataDir,
+      getSecret: (name) => {
+        try {
+          return core?.ctx.secrets.get(name) ?? null;
+        } catch {
+          return null;
+        }
+      },
+      prepareQuit: () => quitGate.prepareForQuit(),
+      shutdownComplete: () => shutdownDone,
+      trusted,
+    });
 
     core = await startCore();
     showWindow();
@@ -455,7 +478,11 @@ if (!gotLock) {
           return { ok: false, error: errMessage(err) };
         }
       },
+      /** The updater's state (what window.obsidian.updates.getState() returns). */
+      updates: () => updater?.controller.snapshot() ?? null,
     };
+    // Update checks start once the core is up (the saved GitHub token lives in its secret store).
+    updater.start();
 
     if (core) {
       const c = core;
@@ -482,13 +509,7 @@ if (!gotLock) {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  let quitReady = false;
-  app.on('before-quit', (event) => {
-    if (quitReady) return;
-    event.preventDefault();
-    void shutdown().finally(() => {
-      quitReady = true;
-      app.quit();
-    });
-  });
+  // Graceful quit: the first quit waits for shutdown() (GPU clock-out, flush, core close), then quits for real.
+  // An update runs shutdown() before it starts the installer, so its quit passes straight through.
+  app.on('before-quit', (event) => quitGate.onBeforeQuit(event));
 }

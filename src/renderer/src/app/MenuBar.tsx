@@ -13,6 +13,7 @@ import {
   PanelLeft,
   PanelRight,
   Power,
+  RefreshCw,
   Search,
   Settings,
   Square,
@@ -40,8 +41,20 @@ import { useActiveSession } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { toast } from '@renderer/state/toasts';
 import { useUi } from '@renderer/state/ui';
+import { checkForUpdates, useUpdates } from '@renderer/state/updates';
 import { gpuPrimaryAction } from './GpuWidget';
 import { SHORTCUTS } from './shortcuts';
+import { UpdateButton } from './UpdateButton';
+
+/** Help → Check for updates: says what it found (the UPDATE button appears by itself when there is one). */
+async function checkNow(): Promise<void> {
+  const s = await checkForUpdates();
+  if (!s) return;
+  const st = s.state;
+  if (st.status === 'available') toast({ title: `Version ${st.version} is available`, body: 'Click UPDATE in the menu bar to install it.', level: 'info' });
+  else if (st.status === 'not-available') toast({ title: 'Obsidian Code is up to date', body: `Version ${s.currentVersion}`, level: 'success', durationMs: 2500 });
+  else if (st.status === 'error') toast({ title: 'Update check failed', body: st.message, level: 'error' });
+}
 
 const MENUS = ['file', 'view', 'session', 'gpu', 'help'] as const;
 type MenuId = (typeof MENUS)[number];
@@ -123,6 +136,7 @@ export function MenuBar() {
   const phase = gpu?.phase ?? 'off';
   const gpuOn = phase !== 'off' && phase !== 'error';
   const electron = isElectron();
+  const updatesOn = useUpdates((s) => s.snapshot !== null && s.snapshot.state.status !== 'unsupported');
 
   return (
     <nav aria-label="Application menu" data-testid="menubar" className="flex h-[var(--ob-menubar-h)] shrink-0 items-center gap-px border-b border-rule px-2">
@@ -205,21 +219,18 @@ export function MenuBar() {
         <DropdownMenuItem icon={Keyboard} shortcut={SHORTCUTS.help} onSelect={() => useUi.setState({ shortcutsOpen: true })}>
           Keyboard shortcuts
         </DropdownMenuItem>
-        <DropdownMenuItem
-          icon={Info}
-          onSelect={() =>
-            toast({
-              title: 'Obsidian Code',
-              body: [system?.version ? `Version ${system.version}` : null, system?.platform ?? null, electron ? 'desktop' : 'browser'].filter(Boolean).join(' · '),
-              level: 'info',
-            })
-          }
-        >
-          About
+        {updatesOn ? (
+          <DropdownMenuItem icon={RefreshCw} onSelect={() => void checkNow()}>
+            Check for updates
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem icon={Info} hint={system?.version ? `v${system.version}` : undefined} onSelect={() => openSettings('about')}>
+          About &amp; updates
         </DropdownMenuItem>
       </Menu>
 
       <div className="ml-auto flex items-center gap-3 pr-[5px]">
+        <UpdateButton />
         <Hint label="New session" keys={SHORTCUTS.newSession} onClick={() => void createSession()} />
         <Hint label="Command" keys={SHORTCUTS.palette} onClick={() => openPalette()} testId="palette-trigger" />
       </div>

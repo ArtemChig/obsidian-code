@@ -5,9 +5,27 @@
 #   bootstrap.sh serve <modelId> download (if needed) + start + supervise llama-server
 #   bootstrap.sh switch <modelId> stop the current server and serve another catalog model (used by switch.sh)
 #
-# State lives in /root/oc (env, config.sh, status.json, server.log, heartbeat, *.pid); models in /root/models/<id>.
-# OC_ROOT (default /root) relocates both, for tests only.
+# State lives in /root/oc (env, config.sh, status.json, server.log, attempts.log, heartbeat, *.pid); models in
+# /root/models/<id>. Test hooks (unset in production): OC_ROOT (default /root) relocates both, OC_LLAMA_BIN,
+# OC_LLAMA_PORT (default 8080), OC_POLL_S (health poll interval, default 3).
 # The self-destroy watchdog is armed by onstart.sh before this script runs. Everything is logged to /root/oc/server.log.
+#
+# Load fallback (a model that does not load must not kill the session):
+#   attempt 1  full          the catalog configuration
+#   attempt 2  safe          no speculative decoding (--spec-*/--draft*/-md), no --mmproj, -c min(ctx, 65536);
+#                            q8_0 KV + flash-attn kept
+#   attempt 3  safe-minimal  safe + --flash-attn off, f16 KV (q8_0 V needs flash-attn), -c min(ctx, 32768)
+# status.json carries "mode", "dropped" (mtp, vision, flash-attn, kv-quant), "attempt" and "ctx" once loading starts.
+# Each failed attempt logs its flags and the last 30 lines of llama-server output (server.log + attempts.log).
+#
+# Shared libraries (llama_preflight, BEFORE the model download): the llama.cpp images ship /app/llama-server as a small
+# stub whose RUNPATH is "/app/build/bin:" (a build-tree path plus an empty entry = the current directory) and that needs
+# /app/libllama-server-impl.so. The image's own entrypoint runs it from WORKDIR /app; this script runs from /root/oc, so it
+# exited with "error while loading shared libraries: libllama-server-impl.so" (live incident, b11561). llama-server is
+# therefore always started from its own directory with that directory first in LD_LIBRARY_PATH (plus the container's
+# LD_LIBRARY_PATH, which Vast's onstart environment lacks), and `llama-server --version` must run before 20+ GB are
+# downloaded; a missing library is searched for near the binary and in /app, /usr/local, /opt; if it still cannot start,
+# the bootstrap fails at once with that error.
 set -u
 R=${OC_ROOT:-/root}
 OC=$R/oc
@@ -19,8 +37,24 @@ cd "$OC" || exit 1
 OC_EXTRA=()
 LOAD_MAX_MIN=25
 [ -f "$OC/config.sh" ] && . "$OC/config.sh"
-LLAMA_BIN=/app/llama-server
-[ -x "$LLAMA_BIN" ] || LLAMA_BIN=$(command -v llama-server 2>/dev/null || echo /app/llama-server)
+if [ -n "${OC_LLAMA_BIN:-}" ]; then LLAMA_BIN=$OC_LLAMA_BIN; else
+  LLAMA_BIN=/app/llama-server
+  [ -x "$LLAMA_BIN" ] || LLAMA_BIN=$(command -v llama-server 2>/dev/null || echo /app/llama-server)
+fi
+LLAMA_DIR=$(cd "$(dirname "$LLAMA_BIN")" 2>/dev/null && pwd)
+[ -n "$LLAMA_DIR" ] || LLAMA_DIR=$(dirname "$LLAMA_BIN")
+# The container's LD_LIBRARY_PATH (e.g. /usr/local/cuda/lib64) is in PID 1's environment, not in Vast's onstart one.
+CONTAINER_LD=$(tr '\0' '\n' </proc/1/environ 2>/dev/null | sed -n 's/^LD_LIBRARY_PATH=//p' | head -n1)
+LLAMA_LD=$LLAMA_DIR
+LD_REST=${LD_LIBRARY_PATH:-$CONTAINER_LD}
+[ -n "$LD_REST" ] && LLAMA_LD="$LLAMA_LD:$LD_REST"
+PORT=${OC_LLAMA_PORT:-8080}
+POLL_S=${OC_POLL_S:-3}
+MODES=(full safe safe-minimal)
+MODE=
+DROPPED=
+ATTEMPT=0
+CTX_NOW=0
 
 # Detached background start (own process group when setsid exists; procps/pkill are not assumed to exist).
 bg() { if command -v setsid >/dev/null; then setsid nohup "$@"; else nohup "$@"; fi; }
@@ -29,10 +63,12 @@ log() { echo "[$(date -u +%FT%TZ)] [oc] $*" >> "$LOG"; }
 jesc() { local s=${1//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/ }; s=${s//$'\r'/}; s=${s//$'\t'/ }; printf '%s' "$s"; }
 frac() { awk -v d="$1" -v t="$2" 'BEGIN { if (t > 0) { p = d / t; if (p > 1) p = 1; printf "%.4f", p } else printf "0" }'; }
 gb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1e9 }'; }
-# status <phase> <progress> <message> <modelId> <bytesDone> <bytesTotal>
+# status <phase> <progress> <message> <modelId> <bytesDone> <bytesTotal>   (+ mode/dropped/attempt/ctx once loading)
 status() {
-  printf '{"phase":"%s","progress":%s,"message":"%s","modelId":"%s","bytesDone":%s,"bytesTotal":%s,"updatedAt":%s}\n' \
-    "$1" "${2:-0}" "$(jesc "${3:-}")" "$(jesc "${4:-}")" "${5:-0}" "${6:-0}" "$(date +%s)" > "$OC/status.json.tmp" \
+  local x=
+  [ -n "$MODE" ] && x=$(printf ',"mode":"%s","dropped":[%s],"attempt":%s,"ctx":%s' "$MODE" "$DROPPED" "$ATTEMPT" "$CTX_NOW")
+  printf '{"phase":"%s","progress":%s,"message":"%s","modelId":"%s","bytesDone":%s,"bytesTotal":%s,"updatedAt":%s%s}\n' \
+    "$1" "${2:-0}" "$(jesc "${3:-}")" "$(jesc "${4:-}")" "${5:-0}" "${6:-0}" "$(date +%s)" "$x" > "$OC/status.json.tmp" \
     && mv -f "$OC/status.json.tmp" "$OC/status.json"
 }
 fail() { log "ERROR: $2"; status error 0 "$2" "$1" 0 0; rm -f "$OC/busy"; exit 1; }
@@ -128,64 +164,151 @@ download_model() { # <modelId>
   log "download complete: $id"
 }
 
-build_args() { # <modelId> <dir> <ctx> <lean>
-  local a
-  ARGS=(-m "$2/${M_FILES[0]}" --host 127.0.0.1 --port 8080 --api-key "$OC_API_KEY" --alias "$1"
-        -ngl 99 -c "$3" --jinja --flash-attn on)
-  if [ "$4" != 1 ]; then ARGS+=(--cache-type-k q8_0 --cache-type-v q8_0); fi
-  if [ -n "${M_MMPROJ:-}" ]; then ARGS+=(--mmproj "$2/$M_MMPROJ"); fi
-  for a in "${M_ARGS[@]}" "${OC_EXTRA[@]}"; do ARGS+=("${a//\{modelDir\}/$2}"); done
+# llama_preflight <modelId>: `llama-server --version` (from its own directory, LD_LIBRARY_PATH=$LLAMA_LD) must work
+# before the download. A shared library it cannot find is searched for and its directory added to LLAMA_LD; when it
+# still cannot start, the bootstrap fails with llama-server's own error instead of downloading the model first.
+llama_preflight() {
+  local out rc=1 lib found dir i p roots TMO=
+  command -v timeout >/dev/null 2>&1 && TMO="timeout 120"
+  roots=("$LLAMA_DIR" /app /usr/local /opt)
+  p=$(dirname "$LLAMA_DIR"); [ "$p" != / ] && roots+=("$p")
+  for i in 1 2 3 4; do
+    out=$(cd "$LLAMA_DIR" 2>/dev/null; LD_LIBRARY_PATH=$LLAMA_LD $TMO "$LLAMA_BIN" --version 2>&1 </dev/null); rc=$?
+    if [ $rc = 0 ]; then
+      log "llama-server preflight ok: $LLAMA_BIN (LD_LIBRARY_PATH=$LLAMA_LD) $(printf '%s\n' "$out" | grep -m1 -i 'version')"
+      return 0
+    fi
+    lib=$(printf '%s\n' "$out" | sed -n 's/.*error while loading shared libraries: \([^:]*\):.*/\1/p' | head -n1)
+    [ -n "$lib" ] || break
+    found=$(find "${roots[@]}" -xdev -maxdepth 4 -name "$lib" 2>/dev/null | head -n1)
+    [ -n "$found" ] || break
+    dir=$(dirname "$found")
+    case ":$LLAMA_LD:" in *":$dir:"*) break ;; esac
+    log "llama-server preflight: $lib is in $dir; adding it to LD_LIBRARY_PATH"
+    LLAMA_LD="$dir:$LLAMA_LD"
+  done
+  log "llama-server preflight FAILED (rc=$rc): $(printf '%s' "$out" | tail -n 5)"
+  fail "$1" "llama-server cannot start on this server image: $(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n1)"
+}
+
+# flag_kind <arg>: sets FK to mtp (speculative decoding: MTP / draft model), vision, ctx, kv, fa or ''.
+flag_kind() {
+  case "${1%%=*}" in
+    --spec*|--draft*|-md|--model-draft|-cd|--ctx-size-draft|-ngld|--gpu-layers-draft|--n-gpu-layers-draft|-devd|--device-draft|-ctkd|-ctvd|--cache-type-k-draft|--cache-type-v-draft) FK=mtp ;;
+    --mmproj*|-mm|-mmu) FK=vision ;;
+    -c|--ctx-size) FK=ctx ;;
+    -ctk|-ctv|--cache-type-k|--cache-type-v) FK=kv ;;
+    -fa|--flash-attn) FK=fa ;;
+    *) FK= ;;
+  esac
+}
+# A flag's value: anything that is not itself a flag (negative numbers are values).
+is_val() { case "$1" in -[a-zA-Z-]*) return 1 ;; esac; return 0; }
+
+build_args() { # <modelId> <dir> <mode: full|safe|safe-minimal>; sets ARGS, DROPPED, CTX_NOW
+  local a drop skip=0 mtp=0 vis=0 ctx=$M_CTX d=
+  [ "$3" = safe ] && [ "$ctx" -gt 65536 ] && ctx=65536
+  [ "$3" = safe-minimal ] && [ "$ctx" -gt 32768 ] && ctx=32768
+  CTX_NOW=$ctx
+  ARGS=(-m "$2/${M_FILES[0]}" --host 127.0.0.1 --port "$PORT" --api-key "$OC_API_KEY" --alias "$1" -ngl 99 -c "$ctx" --jinja)
+  if [ "$3" = safe-minimal ]; then ARGS+=(--flash-attn off); else ARGS+=(--flash-attn on --cache-type-k q8_0 --cache-type-v q8_0); fi
+  if [ -n "${M_MMPROJ:-}" ]; then
+    vis=1
+    [ "$3" = full ] && ARGS+=(--mmproj "$2/$M_MMPROJ")
+  fi
+  for a in "${M_ARGS[@]}" "${OC_EXTRA[@]}"; do
+    if [ $skip = 1 ]; then is_val "$a" && continue; skip=0; fi
+    flag_kind "$a"
+    [ "$FK" = mtp ] && mtp=1
+    [ "$FK" = vision ] && vis=1
+    drop=0
+    if [ "$3" != full ]; then
+      case "$FK" in mtp|vision|ctx) drop=1 ;; kv|fa) [ "$3" = safe-minimal ] && drop=1 ;; esac
+    fi
+    if [ $drop = 1 ]; then
+      case "$a" in *=*) ;; *) skip=1 ;; esac
+      continue
+    fi
+    ARGS+=("${a//\{modelDir\}/$2}")
+  done
+  if [ "$3" != full ]; then
+    [ $mtp = 1 ] && d+=',"mtp"'
+    [ $vis = 1 ] && d+=',"vision"'
+  fi
+  [ "$3" = safe-minimal ] && d+=',"flash-attn","kv-quant"'
+  DROPPED=${d#,}
 }
 
 wait_healthy() { # <pid>
   local t0 code
   t0=$(date +%s)
   while kill -0 "$1" 2>/dev/null; do
-    code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:8080/health)
+    code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "http://127.0.0.1:$PORT/health")
     [ "$code" = 200 ] && return 0
     if [ $(( $(date +%s) - t0 )) -gt $((LOAD_MAX_MIN * 60)) ]; then log "load timeout after ${LOAD_MAX_MIN} min"; return 1; fi
-    sleep 3
+    sleep "$POLL_S"
   done
   return 1
 }
 
+# attempt_failed <modelId> <server.log offset before the start>: flags + the attempt's last 30 llama-server lines.
+attempt_failed() {
+  local out
+  out=$(tail -c +$(($2 + 1)) "$LOG" 2>/dev/null | tail -n 30)
+  {
+    echo "[$(date -u +%FT%TZ)] [oc] attempt $ATTEMPT/${#MODES[@]} ($MODE) FAILED to load $1"
+    echo "  flags: ${ARGS[*]//$OC_API_KEY/***}"
+    echo "  last 30 lines of llama-server output (attempt $ATTEMPT):"
+    printf '%s\n' "${out//$OC_API_KEY/***}" | sed 's/^/  | /'
+  } > "$OC/attempt.tmp"
+  cat "$OC/attempt.tmp" >> "$LOG"
+  cat "$OC/attempt.tmp" >> "$OC/attempts.log"
+  rm -f "$OC/attempt.tmp"
+}
+
 serve() { # <modelId>
-  local id=$1 dir crashes=0 ctx lean=0 lp rc
+  local id=$1 dir crashes=0 lp rc off msg
   oc_model "$id" || fail "$id" "Unknown model id: $id"
   echo $$ > "$OC/serve.pid"
   echo "$id" > "$OC/current_model"
   touch "$OC/busy"
+  llama_preflight "$id"
   download_model "$id"
   dir=$MODELS/$id
-  ctx=$M_CTX
+  : > "$OC/attempts.log"
+  ATTEMPT=1
   while :; do
-    build_args "$id" "$dir" "$ctx" "$lean"
-    status loading 0 "Loading $id into VRAM" "$id" "$M_BYTES" "$M_BYTES"
-    log "starting: $LLAMA_BIN ${ARGS[*]//$OC_API_KEY/***}"
-    "$LLAMA_BIN" "${ARGS[@]}" >> "$LOG" 2>&1 &
+    MODE=${MODES[$((ATTEMPT - 1))]}
+    build_args "$id" "$dir" "$MODE"
+    msg="Loading $id into VRAM"
+    [ "$MODE" = full ] || msg="Full configuration failed; loading $id in $MODE mode (attempt $ATTEMPT/${#MODES[@]}, -c $CTX_NOW${DROPPED:+, without ${DROPPED//\"/}})"
+    status loading 0 "$msg" "$id" "$M_BYTES" "$M_BYTES"
+    log "attempt $ATTEMPT/${#MODES[@]} ($MODE) starting: $LLAMA_BIN ${ARGS[*]//$OC_API_KEY/***}"
+    off=$(wc -c < "$LOG" 2>/dev/null | tr -d ' ')
+    # From its own directory with its libraries first (see the header); exec keeps $! = llama-server's pid.
+    ( cd "$LLAMA_DIR" 2>/dev/null; export LD_LIBRARY_PATH=$LLAMA_LD; exec "$LLAMA_BIN" "${ARGS[@]}" ) >> "$LOG" 2>&1 &
     lp=$!
     echo "$lp" > "$OC/llama.pid"
     if wait_healthy "$lp"; then
-      status ready 1 "Serving $id" "$id" "$M_BYTES" "$M_BYTES"
+      msg="Serving $id"; [ "$MODE" = full ] || msg="Serving $id ($MODE mode)"
+      status ready 1 "$msg" "$id" "$M_BYTES" "$M_BYTES"
       touch "$OC/was_ready" "$OC/last_inference"
       rm -f "$OC/busy"
-      log "ready: $id"
+      log "ready: $id (mode $MODE${DROPPED:+; dropped: ${DROPPED//\"/}})"
       wait "$lp"; rc=$?
       [ -f "$OC/switching" ] && exit 0
       crashes=$((crashes + 1))
-      log "llama-server exited (rc=$rc) while serving; crash $crashes"
+      log "llama-server exited (rc=$rc) while serving ($MODE mode); crash $crashes"
       [ $crashes -gt 1 ] && fail "$id" "llama-server crashed twice (rc=$rc); see server.log"
       touch "$OC/busy"
     else
-      kill "$lp" 2>/dev/null; sleep 2; kill -9 "$lp" 2>/dev/null; wait "$lp" 2>/dev/null
+      if kill -0 "$lp" 2>/dev/null; then kill "$lp" 2>/dev/null; sleep 2; kill -9 "$lp" 2>/dev/null; fi
+      wait "$lp" 2>/dev/null
       [ -f "$OC/switching" ] && exit 0
-      crashes=$((crashes + 1))
-      log "llama-server failed to load $id (attempt $crashes)"
-      [ $crashes -gt 1 ] && fail "$id" "llama-server failed to load $id; see server.log"
-      # Restart once with half the context (OOM mitigation); GLM: also drop the q8_0 KV flags (MLA cache).
-      ctx=$((ctx / 2))
-      case "$M_FAMILY" in glm*) lean=1 ;; esac
-      log "retrying with -c $ctx lean=$lean"
+      attempt_failed "$id" "${off:-0}"
+      [ $ATTEMPT -ge ${#MODES[@]} ] && fail "$id" "llama-server failed to load $id (full, safe and safe-minimal modes); see server.log"
+      ATTEMPT=$((ATTEMPT + 1))
+      log "retrying $id in ${MODES[$((ATTEMPT - 1))]} mode"
     fi
   done
 }

@@ -1,5 +1,5 @@
 // Electron launch smoke test: requires a prior `npm run build` (loads out/main/index.js via package.json "main").
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test } from '@playwright/test';
@@ -30,6 +30,16 @@ test('electron app launches and shows the Obsidian Code window', async () => {
 
     const isolated = await window.evaluate(() => typeof (globalThis as { require?: unknown }).require === 'undefined');
     expect(isolated).toBe(true);
+
+    // Auto-update bridge: present, token-free, and off in a dev run (no UPDATE button); the status bar shows the version.
+    const version = (JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8')) as { version: string }).version;
+    const updates = await window.evaluate(async () => {
+      const w = window as unknown as { obsidian?: { updates?: { getState(): Promise<unknown> } } };
+      return w.obsidian?.updates ? await w.obsidian.updates.getState() : null;
+    });
+    expect(updates).toMatchObject({ currentVersion: version, state: { status: 'unsupported', reason: expect.stringContaining('development') } });
+    await expect(window.getByTestId('status-version')).toContainText(version);
+    await expect(window.getByTestId('update-button')).toHaveCount(0);
 
     await window.screenshot({ path: join(__dirname, 'screenshots', 'smoke.png') });
   } finally {

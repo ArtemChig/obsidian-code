@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CatalogModel, GpuOffer, GpuProfile } from '@shared/types';
 import {
   availableVariants,
+  baseName,
   budgetRatio,
   budgetTone,
   contextLabel,
@@ -12,6 +13,7 @@ import {
   priceStats,
   profileModels,
   profileVramGb,
+  safeModeSummary,
   siblingModel,
   splitModelLabel,
   sumCost,
@@ -156,5 +158,16 @@ describe('profiles and catalog', () => {
     expect(splitModelLabel('Plain')).toEqual({ name: 'Plain', detail: '' });
     expect(contextLabel(131072)).toBe('128k ctx');
     expect(contextLabel(1048576)).toBe('1M ctx');
+  });
+});
+
+describe('safe mode notice', () => {
+  it('names what the fallback dropped and the context it runs with', () => {
+    expect(safeModeSummary({ droppedFeatures: ['mtp', 'vision'], serverContextLength: 65536 })).toBe('MTP speculative decoding and vision disabled because the full configuration failed to load. Context 64K.');
+    expect(safeModeSummary({ droppedFeatures: ['mtp', 'vision', 'flash-attn', 'kv-quant'] })).toBe('MTP speculative decoding, vision, flash attention and the q8_0 KV cache disabled because the full configuration failed to load.');
+    expect(safeModeSummary({ droppedFeatures: ['vision'] })).toBe('Vision disabled because the full configuration failed to load.');
+    expect(safeModeSummary({})).toMatch(/reduced setup/);
+    expect(baseName('C:\\Users\\a\\logs\\gpu-1-20261013-070203.log')).toBe('gpu-1-20261013-070203.log');
+    expect(baseName('/home/a/logs/gpu-2.log')).toBe('gpu-2.log');
   });
 });

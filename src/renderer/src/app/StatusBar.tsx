@@ -6,13 +6,14 @@ import type { PermissionMode } from '@shared/types';
 import { StatusDot, type Tone } from '@renderer/components/ui/feedback';
 import { cn } from '@renderer/lib/cn';
 import { formatMoney, formatPerHour, providerLabel, shortModelName } from '@renderer/lib/format';
-import { navigate, openPalette } from '@renderer/state/actions';
+import { navigate, openPalette, openSettings } from '@renderer/state/actions';
 import { useConnection } from '@renderer/state/connection';
 import { useGpu } from '@renderer/state/gpu';
 import { useModels } from '@renderer/state/models';
 import { useActiveSession, useModelInfo, useRunningCount } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { useUi } from '@renderer/state/ui';
+import { useUpdates } from '@renderer/state/updates';
 import { GPU_PHASE_LABEL, useLiveGpuCost } from './GpuWidget';
 
 const MODE_LABEL: Record<PermissionMode, string> = {
@@ -54,6 +55,27 @@ function useConnectionSummary(): { tone: Tone; label: string; value: string } {
   return { tone: 'danger', label: who, value: 'Offline' };
 }
 
+/** The running version ("V1.0.0"); a status dot when an update is offered (accent) or checking failed (warning). */
+function VersionSeg() {
+  const snap = useUpdates((s) => s.snapshot);
+  const systemVersion = useSettings((s) => s.system?.version ?? null);
+  const version = snap?.currentVersion ?? systemVersion;
+  if (!version) return null;
+  const st = snap?.state;
+  const failed = st?.status === 'error';
+  const offered = st?.status === 'available';
+  const title = failed ? `Update problem: ${st.message}` : offered ? `Version ${st.version} is available` : 'About & updates';
+  return (
+    <Seg onClick={() => openSettings('about')} title={title} testId="status-version">
+      {failed ? <StatusDot tone="warning" size={5} /> : offered ? <StatusDot tone="accent" size={5} /> : null}
+      <V className="normal-case tracking-[0.04em]">
+        <span className="uppercase">v</span>
+        {version}
+      </V>
+    </Seg>
+  );
+}
+
 export function StatusBar() {
   const conn = useConnectionSummary();
   const route = useUi((s) => s.route);
@@ -75,7 +97,7 @@ export function StatusBar() {
   const phase = gpu?.phase ?? 'off';
   const gpuOn = phase !== 'off' && phase !== 'error';
   const budget = gpu?.monthlyBudget ?? 0;
-  const month = (gpu?.monthCost ?? 0) + (gpuOn ? cost : 0);
+  const month = (gpu?.monthCost ?? 0) + (gpuOn ? Math.max(0, cost - (gpu?.sessionCost ?? 0)) : 0);
   const overBudget = budget > 0 && month / budget > 0.9;
 
   return (
@@ -128,6 +150,7 @@ export function StatusBar() {
         Month <V className={cn(overBudget && 'text-warn')}>{gpu ? formatMoney(month) : '—'}</V>
         {gpu && budget > 0 ? <span>/ {formatMoney(budget)}</span> : null}
       </Seg>
+      <VersionSeg />
     </footer>
   );
 }

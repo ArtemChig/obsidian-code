@@ -25,12 +25,14 @@ export function providerStatusFor(phase: GpuPhase): ProviderStatus {
   }
 }
 
-export function catalogModelInfo(m: CatalogModel, status: ProviderStatus): ModelInfo {
+/** `server`: what the running llama-server actually has (a safe-mode fallback drops vision and lowers -c). */
+export function catalogModelInfo(m: CatalogModel, status: ProviderStatus, server?: Pick<GpuStatus, 'droppedFeatures' | 'serverContextLength'>): ModelInfo {
+  const ctx = server?.serverContextLength;
   return {
     ref: { provider: 'vast', model: m.id },
     label: m.label,
-    contextLength: m.contextLength,
-    supportsVision: !!m.mmproj,
+    contextLength: ctx && ctx < m.contextLength ? ctx : m.contextLength,
+    supportsVision: !!m.mmproj && !server?.droppedFeatures?.includes('vision'),
     supportsTools: true,
     supportsThinking: true,
     variant: m.variant,
@@ -70,6 +72,7 @@ export class VastProvider implements LlmProvider {
   async listModels(): Promise<ModelInfo[]> {
     const m = this.src.currentModel();
     if (!m) return [];
-    return [catalogModelInfo(m, providerStatusFor(this.src.status().phase))];
+    const s = this.src.status();
+    return [catalogModelInfo(m, providerStatusFor(s.phase), s.modelId === m.id ? s : undefined)];
   }
 }

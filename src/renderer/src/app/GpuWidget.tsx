@@ -92,7 +92,7 @@ export function GpuWidget() {
   const inProgress = GPU_BUSY_PHASES.has(phase);
   const profile = profiles?.find((p) => p.id === (status?.profileId ?? defaultGpuProfileId()));
   const budget = status?.monthlyBudget ?? 0;
-  const month = (status?.monthCost ?? 0) + (on ? cost : 0);
+  const month = (status?.monthCost ?? 0) + (on ? Math.max(0, cost - (status?.sessionCost ?? 0)) : 0);
 
   return (
     <div data-testid="gpu-widget" className="border-t border-rule2 px-4 pb-3.5 pt-3">

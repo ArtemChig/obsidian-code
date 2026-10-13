@@ -1,5 +1,28 @@
 // Pure helpers for the GPU view: price statistics, budget maths, warm-up estimates, catalog sibling lookup. Owner: ui-views.
-import type { CatalogModel, GpuOffer, GpuProfile, GpuSessionRecord } from '@shared/types';
+import type { CatalogModel, GpuOffer, GpuProfile, GpuSessionRecord, GpuStatus } from '@shared/types';
+
+// ───────────────────────────── Safe mode (bootstrap.sh load fallback) ─────────────────────────────
+
+const DROPPED_LABEL: Record<string, string> = {
+  mtp: 'MTP speculative decoding',
+  vision: 'vision',
+  'flash-attn': 'flash attention',
+  'kv-quant': 'the q8_0 KV cache',
+};
+
+/** "MTP speculative decoding and vision disabled because the full configuration failed to load. Context 64K." */
+export function safeModeSummary(s: Pick<GpuStatus, 'droppedFeatures' | 'serverContextLength'>): string {
+  const items = (s.droppedFeatures ?? []).map((d) => DROPPED_LABEL[d] ?? d);
+  const list = items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+  const ctx = s.serverContextLength ? ` Context ${Math.round(s.serverContextLength / 1024)}K.` : '';
+  if (!list) return `The full configuration failed to load, so the model runs with a reduced setup.${ctx}`;
+  return `${list.charAt(0).toUpperCase()}${list.slice(1)} disabled because the full configuration failed to load.${ctx}`;
+}
+
+/** File name of a saved failure log path (Windows or POSIX separators). */
+export function baseName(p: string): string {
+  return p.split(/[\\/]/).pop() ?? p;
+}
 
 // ───────────────────────────── Prices & budget ─────────────────────────────
 

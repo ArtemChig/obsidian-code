@@ -144,6 +144,8 @@ export class MockVast {
     neverBoot: false,
     /** Next N created instances go to 'exited' instead of running. */
     bootDeadTimes: 0,
+    /** Next N creates (even with target_state running) leave the instance created-but-stopped (GPU just taken). */
+    createStoppedTimes: 0,
     /** Next N DELETEs answer 500. */
     destroyFailTimes: 0,
     /** Next N DELETEs answer success but leave the instance alive. */
@@ -357,13 +359,23 @@ export class MockVast {
       }
       const offer = this.offers.find((o) => o.id === offerId);
       if (!offer) return this.send(res, 404, { success: false, error: 'not_found', msg: 'Offer not found', ask_id: offerId });
-      const b = (body ?? {}) as { env?: Record<string, string>; onstart?: string; image?: string; disk?: number; label?: string; runtype?: string };
+      const b = (body ?? {}) as { env?: Record<string, string>; onstart?: string; image?: string; disk?: number; label?: string; runtype?: string; target_state?: string };
       const id = this.nextId++;
       const inst = this.newInstance(id, offer, b.env ?? {}, b.onstart ?? '', b.image ?? '', Number(b.disk ?? 0), b.runtype ?? '');
       inst.label = b.label ?? null;
       this.instances.set(id, inst);
       this.offers = this.offers.filter((o) => o.id !== offerId);
-      this.bootInstance(inst, 'create');
+      // Real Vast (observed 2026-10-13): without target_state 'running' the instance is created STOPPED and never boots.
+      const stopped = b.target_state !== 'running' || this.fail.createStoppedTimes > 0;
+      if (b.target_state === 'running' && this.fail.createStoppedTimes > 0) this.fail.createStoppedTimes--;
+      if (stopped) {
+        inst.intended_status = 'stopped';
+        inst.cur_state = 'stopped';
+        inst.actual_status = 'created';
+        inst.status_msg = 'Successfully loaded img';
+      } else {
+        this.bootInstance(inst, 'create');
+      }
       if (this.fail.createAmbiguousTimes > 0) {
         this.fail.createAmbiguousTimes--;
         return this.send(res, 500, { success: false, error: 'server_error', msg: 'Internal error' });

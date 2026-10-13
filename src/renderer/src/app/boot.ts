@@ -5,6 +5,7 @@ import { openSession } from '@renderer/state/actions';
 import { useConnection } from '@renderer/state/connection';
 import { useSessions } from '@renderer/state/sessions';
 import { bindEvents } from '@renderer/state/sync';
+import { initUpdates } from '@renderer/state/updates';
 
 let booted = false;
 
@@ -17,6 +18,8 @@ export async function boot(): Promise<void> {
   bindEvents();
   // A clicked desktop notification ("Permission needed", "Task finished") opens its session.
   onOpenSessionRequest((id) => openSession(id));
+  // Auto-update state (Electron bridge, or the simulated updater in demo mode).
+  void initUpdates();
 
   if (isDemoRequested()) {
     const demo = await import('@renderer/lib/demo');
