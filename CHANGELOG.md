@@ -4,6 +4,10 @@ Every change to Obsidian Code ships as a release (`npm run release`), and the in
 UPDATE button. Version rule: patch (last number) = small fix · minor (second) = feature or bigger change ·
 major (first) = redesign or giant change.
 
+## v1.1.0 — 2026-10-13
+
+New: the Claude Code engine.
+
 ## v1.0.4 — 2026-10-13
 
 - Updates download faster and cleaner: the app no longer tries (and fails) a partial download first for this private repository; it fetches the installer directly.
