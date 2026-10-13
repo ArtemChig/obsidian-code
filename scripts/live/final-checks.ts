@@ -198,7 +198,7 @@ function inCidr4(ip: string, cidr: string): boolean {
   return (toInt(ip) & mask) === (toInt(base) & mask);
 }
 
-async function netChecks(): Promise<{ ok: boolean; lines: string[] }> {
+async function netChecks(webFetchUrls: string[]): Promise<{ ok: boolean; lines: string[] }> {
   const file = path.join(EV, 'net-audit.jsonl');
   if (!existsSync(file)) return { ok: false, lines: ['_evidence/net-audit.jsonl missing'] };
   const rows = readFileSync(file, 'utf8')
@@ -227,7 +227,8 @@ async function netChecks(): Promise<{ ok: boolean; lines: string[] }> {
     }
   }
   const known: Record<string, string[]> = {};
-  for (const h of ['console.vast.ai', 'cloud.vast.ai', 'html.duckduckgo.com', 'duckduckgo.com', 'wttr.in', 'api.weather.gov', 'forecast.weather.gov', 'www.weather.gov', 'api.github.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com']) {
+  const fetchHosts = [...new Set(webFetchUrls.map((u) => { try { return new URL(u).hostname; } catch { return ''; } }).filter(Boolean))];
+  for (const h of ['console.vast.ai', 'cloud.vast.ai', 'html.duckduckgo.com', 'duckduckgo.com', 'api.github.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', ...fetchHosts]) {
     try {
       known[h] = await dns.resolve4(h);
     } catch {
@@ -258,7 +259,9 @@ async function netChecks(): Promise<{ ok: boolean; lines: string[] }> {
           ? 'Vast instance SSH (the model tunnel)'
           : knownAs.length
             ? knownAs.join('/')
-            : rdns.join(',') || 'unresolved';
+            : /claude/i.test(proc) && fetchHosts.length
+              ? `a WebFetch target behind a CDN (WebFetch hosts: ${fetchHosts.join(', ')})`
+              : rdns.join(',') || 'unresolved';
     analysis.push({ process: proc, ip, port, rdns, knownAs, role, samples: e.count, firstSeenSec: e.t });
     lines.push(`${proc} → ${ip}:${port} [${role}]${rdns.length ? ` rdns ${rdns.join(',')}` : ''} (${e.count} samples)`);
   }
@@ -314,7 +317,7 @@ async function main(): Promise<void> {
   const tools = session ? toolsOf(session.messages) : [];
   const names = [...new Set(tools.map((t) => t.name))];
   const shots = existsSync(EV) ? readdirSync(EV).filter((f) => /^\d\d-.*\.png$/.test(f)) : [];
-  const netr = await netChecks();
+  const netr = await netChecks(webUrls);
   const fOk = session?.engine === 'claude-code' && thinkingBlocks > 0 && names.includes('TodoWrite') && shots.some((s) => s.startsWith('20-thinking')) && shots.some((s) => s.startsWith('36-card-todos')) && netr.ok;
   record('f', 'Claude Code harness look; model calls only to the Vast endpoint (no Anthropic traffic)', fOk, [
     `session engine ${session?.engine}, permission mode ${session?.permissionMode}, thinking ${session?.thinking}, model ${session?.model ? `${session.model.provider}:${session.model.model}` : '?'}`,
