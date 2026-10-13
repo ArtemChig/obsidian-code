@@ -17,6 +17,15 @@
 #   attempt 3  safe-minimal  safe + --flash-attn off, f16 KV (q8_0 V needs flash-attn), -c min(ctx, 32768)
 # status.json carries "mode", "dropped" (mtp, vision, flash-attn, kv-quant), "attempt" and "ctx" once loading starts.
 # Each failed attempt logs its flags and the last 30 lines of llama-server output (server.log + attempts.log).
+#
+# Shared libraries (llama_preflight, BEFORE the model download): the llama.cpp images ship /app/llama-server as a small
+# stub whose RUNPATH is "/app/build/bin:" (a build-tree path plus an empty entry = the current directory) and that needs
+# /app/libllama-server-impl.so. The image's own entrypoint runs it from WORKDIR /app; this script runs from /root/oc, so it
+# exited with "error while loading shared libraries: libllama-server-impl.so" (live incident, b11561). llama-server is
+# therefore always started from its own directory with that directory first in LD_LIBRARY_PATH (plus the container's
+# LD_LIBRARY_PATH, which Vast's onstart environment lacks), and `llama-server --version` must run before 20+ GB are
+# downloaded; a missing library is searched for near the binary and in /app, /usr/local, /opt; if it still cannot start,
+# the bootstrap fails at once with that error.
 set -u
 R=${OC_ROOT:-/root}
 OC=$R/oc
@@ -32,6 +41,13 @@ if [ -n "${OC_LLAMA_BIN:-}" ]; then LLAMA_BIN=$OC_LLAMA_BIN; else
   LLAMA_BIN=/app/llama-server
   [ -x "$LLAMA_BIN" ] || LLAMA_BIN=$(command -v llama-server 2>/dev/null || echo /app/llama-server)
 fi
+LLAMA_DIR=$(cd "$(dirname "$LLAMA_BIN")" 2>/dev/null && pwd)
+[ -n "$LLAMA_DIR" ] || LLAMA_DIR=$(dirname "$LLAMA_BIN")
+# The container's LD_LIBRARY_PATH (e.g. /usr/local/cuda/lib64) is in PID 1's environment, not in Vast's onstart one.
+CONTAINER_LD=$(tr '\0' '\n' </proc/1/environ 2>/dev/null | sed -n 's/^LD_LIBRARY_PATH=//p' | head -n1)
+LLAMA_LD=$LLAMA_DIR
+LD_REST=${LD_LIBRARY_PATH:-$CONTAINER_LD}
+[ -n "$LD_REST" ] && LLAMA_LD="$LLAMA_LD:$LD_REST"
 PORT=${OC_LLAMA_PORT:-8080}
 POLL_S=${OC_POLL_S:-3}
 MODES=(full safe safe-minimal)
@@ -148,6 +164,33 @@ download_model() { # <modelId>
   log "download complete: $id"
 }
 
+# llama_preflight <modelId>: `llama-server --version` (from its own directory, LD_LIBRARY_PATH=$LLAMA_LD) must work
+# before the download. A shared library it cannot find is searched for and its directory added to LLAMA_LD; when it
+# still cannot start, the bootstrap fails with llama-server's own error instead of downloading the model first.
+llama_preflight() {
+  local out rc=1 lib found dir i p roots TMO=
+  command -v timeout >/dev/null 2>&1 && TMO="timeout 120"
+  roots=("$LLAMA_DIR" /app /usr/local /opt)
+  p=$(dirname "$LLAMA_DIR"); [ "$p" != / ] && roots+=("$p")
+  for i in 1 2 3 4; do
+    out=$(cd "$LLAMA_DIR" 2>/dev/null; LD_LIBRARY_PATH=$LLAMA_LD $TMO "$LLAMA_BIN" --version 2>&1 </dev/null); rc=$?
+    if [ $rc = 0 ]; then
+      log "llama-server preflight ok: $LLAMA_BIN (LD_LIBRARY_PATH=$LLAMA_LD) $(printf '%s\n' "$out" | grep -m1 -i 'version')"
+      return 0
+    fi
+    lib=$(printf '%s\n' "$out" | sed -n 's/.*error while loading shared libraries: \([^:]*\):.*/\1/p' | head -n1)
+    [ -n "$lib" ] || break
+    found=$(find "${roots[@]}" -xdev -maxdepth 4 -name "$lib" 2>/dev/null | head -n1)
+    [ -n "$found" ] || break
+    dir=$(dirname "$found")
+    case ":$LLAMA_LD:" in *":$dir:"*) break ;; esac
+    log "llama-server preflight: $lib is in $dir; adding it to LD_LIBRARY_PATH"
+    LLAMA_LD="$dir:$LLAMA_LD"
+  done
+  log "llama-server preflight FAILED (rc=$rc): $(printf '%s' "$out" | tail -n 5)"
+  fail "$1" "llama-server cannot start on this server image: $(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n1)"
+}
+
 # flag_kind <arg>: sets FK to mtp (speculative decoding: MTP / draft model), vision, ctx, kv, fa or ''.
 flag_kind() {
   case "${1%%=*}" in
@@ -229,6 +272,7 @@ serve() { # <modelId>
   echo $$ > "$OC/serve.pid"
   echo "$id" > "$OC/current_model"
   touch "$OC/busy"
+  llama_preflight "$id"
   download_model "$id"
   dir=$MODELS/$id
   : > "$OC/attempts.log"
@@ -241,7 +285,8 @@ serve() { # <modelId>
     status loading 0 "$msg" "$id" "$M_BYTES" "$M_BYTES"
     log "attempt $ATTEMPT/${#MODES[@]} ($MODE) starting: $LLAMA_BIN ${ARGS[*]//$OC_API_KEY/***}"
     off=$(wc -c < "$LOG" 2>/dev/null | tr -d ' ')
-    "$LLAMA_BIN" "${ARGS[@]}" >> "$LOG" 2>&1 &
+    # From its own directory with its libraries first (see the header); exec keeps $! = llama-server's pid.
+    ( cd "$LLAMA_DIR" 2>/dev/null; export LD_LIBRARY_PATH=$LLAMA_LD; exec "$LLAMA_BIN" "${ARGS[@]}" ) >> "$LOG" 2>&1 &
     lp=$!
     echo "$lp" > "$OC/llama.pid"
     if wait_healthy "$lp"; then

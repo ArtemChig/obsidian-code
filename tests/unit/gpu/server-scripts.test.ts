@@ -185,8 +185,45 @@ interface BootRun {
   cleanup: () => Promise<void>;
 }
 
+/**
+ * How the fake llama-server binary finds its shared library (the b11561 image: /app/llama-server is a stub with RUNPATH
+ * "/app/build/bin:" that needs /app/libllama-server-impl.so — found only from the current directory /app).
+ *   plain          always starts
+ *   own-dir        starts only from its own directory or with that directory on LD_LIBRARY_PATH (the live incident)
+ *   lib-subdir     needs <dir>/lib on LD_LIBRARY_PATH (the library lives elsewhere; the preflight must find it)
+ *   unstartable    the library exists nowhere: never starts
+ */
+type FakeBinary = 'plain' | 'own-dir' | 'lib-subdir' | 'unstartable';
+
+function writeFakeBinary(root: string, kind: FakeBinary, posix: (p: string) => string): string {
+  const node = `exec "${posix(process.execPath)}" "${posix(FAKE_LLAMA)}" "$@"`;
+  if (kind === 'plain') {
+    writeFileSync(path.join(root, 'fake-llama'), `#!/bin/bash\n${node}\n`);
+    return `${posix(root)}/fake-llama`;
+  }
+  const app = path.join(root, 'app');
+  mkdirSync(path.join(app, 'lib'), { recursive: true });
+  const need = kind === 'own-dir' ? '$d' : kind === 'lib-subdir' ? '$d/lib' : '/nonexistent-oc-lib-dir';
+  if (kind === 'lib-subdir') writeFileSync(path.join(app, 'lib', 'libllama-server-impl.so'), '');
+  writeFileSync(
+    path.join(app, 'llama-server'),
+    [
+      '#!/bin/bash',
+      'd=$(cd "$(dirname "$0")" && pwd)',
+      `need="${need}"`,
+      'ok=',
+      'case ":${LD_LIBRARY_PATH:-}:" in *":$need:"*) ok=1 ;; esac',
+      '[ "$(pwd)" = "$need" ] && ok=1',
+      'if [ -z "$ok" ]; then echo "$0: error while loading shared libraries: libllama-server-impl.so: cannot open shared object file: No such file or directory" >&2; exit 127; fi',
+      node,
+      '',
+    ].join('\n'),
+  );
+  return `${posix(app)}/llama-server`;
+}
+
 /** Runs the real bootstrap.sh (main) against a model already on disk, with the fake llama-server as LLAMA_BIN. */
-async function runBootstrap(rule: string): Promise<BootRun> {
+async function runBootstrap(rule: string, binary: FakeBinary = 'plain'): Promise<BootRun> {
   const root = mkdtempSync(path.join(os.tmpdir(), 'oc-boot-'));
   const posix = (p: string) => p.replace(/\\/g, '/');
   const oc = path.join(root, 'oc');
@@ -197,7 +234,7 @@ async function runBootstrap(rule: string): Promise<BootRun> {
   writeFileSync(path.join(oc, 'env'), "export OC_API_KEY='server-key-0123456789'\n");
   writeFileSync(path.join(oc, 'config.sh'), renderConfigSh(CATALOG, [], { loadMaxMin: 2 }));
   writeFileSync(path.join(oc, 'bootstrap.sh'), loadServerScripts(RESOURCES_DIR).bootstrap);
-  writeFileSync(path.join(root, 'fake-llama'), `#!/bin/bash\nexec "${posix(process.execPath)}" "${posix(FAKE_LLAMA)}" "$@"\n`);
+  const llamaBin = writeFakeBinary(root, binary, posix);
   const callsFile = path.join(root, 'calls.jsonl');
   const stopFile = path.join(root, 'stop');
   const p = spawn(bash!, [`${posix(oc)}/bootstrap.sh`, 'main'], {
@@ -205,7 +242,9 @@ async function runBootstrap(rule: string): Promise<BootRun> {
       ...process.env,
       OC_ROOT: posix(root),
       OC_MODEL_ID: model.id,
-      OC_LLAMA_BIN: `${posix(root)}/fake-llama`,
+      OC_LLAMA_BIN: llamaBin,
+      // like Vast's onstart environment: no LD_LIBRARY_PATH pointing at the binary's directory
+      LD_LIBRARY_PATH: '',
       OC_LLAMA_PORT: String(await freePort()),
       OC_POLL_S: '0.2',
       FAKE_LLAMA_RULE: rule,
@@ -306,6 +345,54 @@ describe.skipIf(!bash)('bootstrap.sh load fallback (real bash, fake llama-server
       expect(attempts).toContain('attempt 1/3 (full) FAILED');
       expect(attempts).toContain('attempt 2/3 (safe) FAILED');
       expect(attempts).toContain('flash attention is not supported');
+    } finally {
+      await run.cleanup();
+    }
+  }, 45_000);
+
+  // v1.0.1 live incident (b11561 image): /app/llama-server only finds libllama-server-impl.so from /app, the bootstrap
+  // ran it from /root/oc and every attempt died with "error while loading shared libraries" after a 21 GB download.
+  it('a llama-server that finds its libraries only from its own directory loads the FULL configuration', async () => {
+    const run = await runBootstrap('ok', 'own-dir');
+    try {
+      await waitFor(() => ['ready', 'error'].includes(String(run.status().phase)), 30_000, 'ready or error');
+      expect(run.status()).toMatchObject({ phase: 'ready', modelId: INCIDENT_MODEL, mode: 'full', dropped: [], attempt: 1, ctx: 131072 });
+      const calls = run.calls();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toEqual(expect.arrayContaining(['--spec-type', 'draft-mtp', '--mmproj']));
+      const log = read(path.join(run.oc, 'server.log'));
+      expect(log).toContain('llama-server preflight ok');
+      expect(log).not.toContain('error while loading shared libraries');
+      expect(read(path.join(run.oc, 'attempts.log'))).toBe('');
+    } finally {
+      await run.cleanup();
+    }
+  }, 45_000);
+
+  it('a shared library outside the binary directory is found by the preflight and added to LD_LIBRARY_PATH', async () => {
+    const run = await runBootstrap('ok', 'lib-subdir');
+    try {
+      await waitFor(() => ['ready', 'error'].includes(String(run.status().phase)), 30_000, 'ready or error');
+      expect(run.status()).toMatchObject({ phase: 'ready', mode: 'full', attempt: 1 });
+      const log = read(path.join(run.oc, 'server.log'));
+      expect(log).toMatch(/preflight: libllama-server-impl\.so is in \S+\/app\/lib; adding it to LD_LIBRARY_PATH/);
+      expect(log).toContain('llama-server preflight ok');
+    } finally {
+      await run.cleanup();
+    }
+  }, 45_000);
+
+  it('a llama-server that cannot start fails the bootstrap BEFORE any download or load attempt, with its error', async () => {
+    const run = await runBootstrap('ok', 'unstartable');
+    try {
+      await waitFor(() => ['ready', 'error'].includes(String(run.status().phase)), 30_000, 'ready or error');
+      const st = run.status();
+      expect(st.phase).toBe('error');
+      expect(String(st.message)).toMatch(/llama-server cannot start on this server image: .*libllama-server-impl\.so: cannot open shared object file/);
+      expect(run.calls()).toHaveLength(0);
+      const log = read(path.join(run.oc, 'server.log'));
+      expect(log).toContain('llama-server preflight FAILED');
+      expect(log).not.toMatch(/model .* already on disk|hf download|curl download|attempt 1\/3/);
     } finally {
       await run.cleanup();
     }

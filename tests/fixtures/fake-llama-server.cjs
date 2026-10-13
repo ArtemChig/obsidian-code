@@ -3,6 +3,8 @@
 //   FAKE_LLAMA_RULE=no-spec-vision  fails to load (exit 1) whenever it sees --spec-type or --mmproj
 //   FAKE_LLAMA_RULE=fa-off-only     fails to load unless it gets "--flash-attn off"
 //   FAKE_LLAMA_RULE=never           always fails to load
+//   FAKE_LLAMA_RULE=ok              always loads (any other unknown rule too)
+//   `--version` prints a version and exits 0 (bootstrap.sh's preflight), without being recorded.
 // Otherwise it serves GET /health on --host/--port until the file FAKE_LLAMA_STOP exists (or 60 s pass).
 // Every start appends its argv (JSON) to FAKE_LLAMA_CALLS.
 'use strict';
@@ -10,6 +12,13 @@ const fs = require('node:fs');
 const http = require('node:http');
 
 const args = process.argv.slice(2);
+// bootstrap.sh's preflight (`llama-server --version`, before the download): like llama.cpp, print and exit 0. Not
+// recorded in FAKE_LLAMA_CALLS (those are the load attempts).
+if (args.includes('--version')) {
+  console.error('version: 11561 (fake)');
+  console.error('built with cc for x86_64-linux-gnu');
+  process.exit(0);
+}
 const rule = process.env.FAKE_LLAMA_RULE || 'no-spec-vision';
 if (process.env.FAKE_LLAMA_CALLS) fs.appendFileSync(process.env.FAKE_LLAMA_CALLS, `${JSON.stringify(args)}\n`);
 const value = (flag) => {
