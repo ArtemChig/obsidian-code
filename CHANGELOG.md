@@ -4,6 +4,10 @@ Every change to Obsidian Code ships as a release (`npm run release`), and the in
 UPDATE button. Version rule: patch (last number) = small fix · minor (second) = feature or bigger change ·
 major (first) = redesign or giant change.
 
+## v1.0.2 — 2026-10-13
+
+- Fixed: clocking in to a Vast GPU failed every time with "llama-server failed to load". The server program could not find its own libraries on the rented machine; it now starts correctly, and a broken server image is detected before the model download instead of after it.
+
 ## v1.0.1 — 2026-10-13
 
 - GPU clock-in no longer loses the evidence when the model fails to load: the server log, bootstrap/watchdog logs and nvidia-smi output are saved to your PC before the rented machine is deleted (View server log in the GPU view).
