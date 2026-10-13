@@ -9,10 +9,12 @@ import { Tooltip } from '@renderer/components/ui/tooltip';
 import { pickFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { basename, formatTokens } from '@renderer/lib/format';
-import { createSession, deleteSession, openSession, renameSession, toggleRightPanel } from '@renderer/state/actions';
+import { createSession, deleteSession, loadGpuCatalog, openSession, renameSession, toggleRightPanel } from '@renderer/state/actions';
+import { useGpu } from '@renderer/state/gpu';
 import { useModelInfo, useSessionSummary } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { useUi } from '@renderer/state/ui';
+import { contextUsage, knownContextLength } from './lib/context';
 import { useGitBranch } from './lib/git';
 
 function EditableTitle({ session }: { session: SessionSummary }) {
@@ -76,21 +78,24 @@ function EditableTitle({ session }: { session: SessionSummary }) {
 /** Context window usage: mono "CTX 31%" + a thin flat bar (last prompt tokens vs the model's context length). */
 export function ContextMeter({ session }: { session: SessionSummary }) {
   const model = useModelInfo(session.model);
+  const catalog = useGpu((s) => s.catalog);
   const compactAt = useSettings((s) => s.settings?.autoCompactPercent ?? 80) / 100;
   const used = session.usage.lastPromptTokens;
-  const total = model?.contextLength ?? 32_768;
-  const ratio = total > 0 ? Math.min(1, used / total) : 0;
-  const pct = Math.round(ratio * 100);
+  const offlineVast = !model && session.model?.provider === 'vast';
+  // A Vast model is not listed while the GPU is off: measure against the catalog's context length (loaded once).
+  useEffect(() => {
+    if (offlineVast) void loadGpuCatalog(false, true);
+  }, [offlineVast]);
+  const total = knownContextLength(model, session.model, catalog);
+  const { pct, tone } = contextUsage(used, total, compactAt);
   // Colour only means status: near the auto-compact line the bar warns, past it it is an error.
-  const fill = ratio >= compactAt ? 'bg-err' : ratio >= compactAt * 0.75 ? 'bg-warn' : 'bg-t2';
-  const value = ratio >= compactAt ? 'text-err' : ratio >= compactAt * 0.75 ? 'text-warn' : 'text-t1';
+  const fill = tone === 'error' ? 'bg-err' : tone === 'warn' ? 'bg-warn' : 'bg-t2';
+  const value = tone === 'error' ? 'text-err' : tone === 'warn' ? 'text-warn' : 'text-t1';
   return (
     <Tooltip
       content={
         <span className="flex flex-col gap-0.5">
-          <span>
-            {formatTokens(used)} of {formatTokens(total)} tokens used
-          </span>
+          <span>{total ? `${formatTokens(used)} of ${formatTokens(total)} tokens used` : `${formatTokens(used)} tokens used · context size unknown while the model is offline`}</span>
           <span className="text-t3">
             {model?.label ?? 'Unknown model'} · auto-compacts at {Math.round(compactAt * 100)}%
           </span>
@@ -100,18 +105,18 @@ export function ContextMeter({ session }: { session: SessionSummary }) {
       <span
         className="flex h-7 shrink-0 items-center gap-2.5 px-1.5 font-mono"
         data-testid="context-meter"
-        aria-label={`Context ${pct}% used`}
+        aria-label={pct !== null ? `Context ${pct}% used` : 'Context usage unknown'}
         role="meter"
-        aria-valuenow={pct}
+        aria-valuenow={pct ?? undefined}
         aria-valuemin={0}
         aria-valuemax={100}
       >
         <span className="flex items-baseline gap-1.5">
           <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-t3">Ctx</span>
-          <span className={cn('ob-tabular text-[10.5px] tracking-[-0.02em]', value)}>{pct}%</span>
+          <span className={cn('ob-tabular text-[10.5px] tracking-[-0.02em]', value)}>{pct !== null ? `${pct}%` : '—'}</span>
         </span>
         <span aria-hidden className="relative h-[2px] w-12 overflow-hidden bg-s4 @max-[560px]:hidden">
-          <span className={cn('absolute inset-y-0 left-0 transition-[width] duration-300 ease-out', fill)} style={{ width: `${Math.max(used ? 2 : 0, pct)}%` }} />
+          <span className={cn('absolute inset-y-0 left-0 transition-[width] duration-300 ease-out', fill)} style={{ width: `${pct === null ? 0 : Math.max(used ? 2 : 0, pct)}%` }} />
         </span>
       </span>
     </Tooltip>
