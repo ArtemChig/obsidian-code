@@ -156,6 +156,8 @@ describe('GPU-4: parked instances expire while the app keeps running', () => {
     expect(h.manager.status().parked?.instanceId).toBe(779);
     offset = 4 * 86_400_000;
     await h.waitFor(() => !h!.vast.instances.has(779), 4000, 'parked expiry while running');
+    // the parked record is cleared after the destroy is verified (a follow-up GET), so wait for it too
+    await h.waitFor(() => h!.manager.status().parked === undefined, 4000, 'parked record cleared');
     expect(h.manager.status().parked).toBeUndefined();
     expect(h.notifications.some((n) => n.title === 'Parked GPU destroyed')).toBe(true);
   });
