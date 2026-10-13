@@ -215,6 +215,8 @@ Prompt tokens add up over requests; most of each request is the cached prefix.
 
 * First turn **17.6–17.7k tokens**: tool definitions ≈15k (Claude Code's 22 + 4 `obsidian` MCP tools), context block ≈2k,
   system prompt 614 (lean) / 1,329 (full) → first turn ≈ 17.6k / ≈ 18.3k.
+* The full Claude Code prompt (`--sysprompt full`, scenarios 1, 2, 5: all pass) is 18.4k tokens on the first turn and
+  starts uncached for every new folder (first token 41 s each time); lean keeps the tool block cached across sessions.
 * Cold first token (nothing cached): 30–80 s on the shared local GPU. With the previous session's prefix still in the
   server's cache (15.6k tokens): **4–10 s**. Follow-up requests of a turn: 2–6 s (only the new tokens are processed).
 * A subagent starts with its own prompt (different tools and system prompt): 1.7–10.8k uncached tokens, 7–50 s to its first token.

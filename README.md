@@ -131,11 +131,13 @@ the Home screen. Claude Code needs an endpoint that serves the Anthropic Message
 | | System prompt | First turn (prompt tokens) |
 |---|---|---|
 | **Lean** (default) | Claude Code's tools and loop with the app's compact prompt: 614 tokens, no refusal or content-policy language | about 17.6k |
-| **Full** | Claude Code's own preset prompt: 1,329 tokens, includes Anthropic's refusal guidance | about 18.3k |
+| **Full** | Claude Code's own preset prompt: 1,329 tokens, includes Anthropic's refusal guidance | about 18.4k |
 
 The prompt is dominated by Claude Code's tool definitions (about 15k tokens) and its context block (about 2k), so
 **Full is only about 4% heavier than Lean**; the real difference is behaviour. Measured on the local GPU: a cold first
 turn takes 30–80 s before the first token, and the following turns reuse the prompt cache (first token in 2–10 s).
+Full puts the working directory near the top of its prompt, so a new folder starts without any cached prefix (first token
+after about 41 s in the full-prompt runs), while Lean keeps the tool block cached across sessions (4–10 s).
 The Obsidian engine starts with about 4.4k tokens. Use Claude Code when you want its harness, and Obsidian when speed
 matters.
 
