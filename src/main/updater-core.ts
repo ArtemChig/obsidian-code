@@ -214,6 +214,34 @@ export function normalizeReleaseNotes(notes: unknown): string | null {
 
 // ───────────────────────────── the state machine ─────────────────────────────
 
+/**
+ * The electron-updater NsisUpdater flags (applied in updater.ts). disableDifferentialDownload: for a PRIVATE GitHub repo
+ * electron-updater resolves the installer to an api.github.com asset URL and looks for the blockmap at "<that URL>.blockmap",
+ * which does not exist ("Cannot parse blockmap … incorrect header check" on every update since v1.0.1, live 2026-10-13); it
+ * then falls back to the full download anyway. Skipping the differential attempt saves that failing request and the
+ * misleading error in the log.
+ */
+export function nsisUpdaterFlags(): {
+  autoDownload: boolean;
+  autoInstallOnAppQuit: boolean;
+  autoRunAppAfterInstall: boolean;
+  allowPrerelease: boolean;
+  allowDowngrade: boolean;
+  disableWebInstaller: boolean;
+  disableDifferentialDownload: boolean;
+} {
+  return {
+    autoDownload: false,
+    // Install only through update() (graceful quit first), never silently when the user quits.
+    autoInstallOnAppQuit: false,
+    autoRunAppAfterInstall: true,
+    allowPrerelease: false,
+    allowDowngrade: false,
+    disableWebInstaller: true,
+    disableDifferentialDownload: true,
+  };
+}
+
 export type FeedConfig =
   | { provider: 'github'; owner: string; repo: string; token: string }
   | { provider: 'generic'; url: string };

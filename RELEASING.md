@@ -64,6 +64,9 @@ fail).
   Remove that line once the app is code-signed.
 - **Where it runs**: only in the installed app (the NSIS installer puts `Uninstall Obsidian Code.exe` next to the exe).
   Dev runs, `release/win-unpacked` and the portable exe report "unsupported" (portable: *use the installer*).
+- **Full downloads only**: `disableDifferentialDownload` is on (`nsisUpdaterFlags()` in updater-core). For a private repo
+  electron-updater looks for the blockmap at `<api.github.com asset URL>.blockmap`, which does not exist, so the differential
+  attempt always failed ("Cannot parse blockmap") before falling back to the full installer (~117 MB).
 - **Logs**: `[updater] …` lines on the main-process console (tokens redacted).
 
 ### Token sources (the repo is private)
@@ -95,4 +98,6 @@ npm run release -- --set 1.0.0 --notes "- One-click updates: an UPDATE button ap
 - Test switches (main process): `OBSIDIAN_UPDATE_TEST_FEED=<http url>` uses a generic feed at that URL (works in dev and
   unpacked runs, no token); with `OBSIDIAN_UPDATE_TEST_INSTALL=record` the install step writes
   `<dataDir>/update-install-record.json` and quits instead of running the installer.
+- Live, against the real installed app and GitHub: `npx tsx scripts/live/vast-live.ts update` (closes the running app gracefully,
+  clicks UPDATE, waits for the installer to relaunch it, relaunches it under Playwright and checks the version; no GPU).
 - UI in demo mode: `/?demo=1&update=available` (also `downloading`, `installing`, `error`, `failed`, `portable`, `secret`).

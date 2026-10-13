@@ -25,6 +25,7 @@ import {
   createUpdateController,
   detectUpdateSupport,
   normalizeReleaseNotes,
+  nsisUpdaterFlags,
   redact,
   resolveUpdateToken,
   type FeedConfig,
@@ -92,13 +93,8 @@ function takePersistedError(dataDir: string): UpdateState | undefined {
 function createNsisAdapter(opts: { logger: Logger; recordFile: string | null; forceDev: boolean; host: UpdaterHost; onError: (e: Error) => void }): UpdaterAdapter {
   const u = new NsisUpdater();
   u.logger = opts.logger;
-  u.autoDownload = false;
-  // Install only through update() (graceful quit first), never silently when the user quits.
-  u.autoInstallOnAppQuit = false;
-  u.autoRunAppAfterInstall = true;
-  u.allowPrerelease = false;
-  u.allowDowngrade = false;
-  u.disableWebInstaller = true;
+  // autoDownload off, install only through update(), no differential download (private repo: see nsisUpdaterFlags).
+  Object.assign(u, nsisUpdaterFlags());
   // A dev run only reaches here with OBSIDIAN_UPDATE_TEST_FEED (isUpdaterActive() is false for unpackaged apps). It has
   // no resources/app-update.yml (cache dir name, signature settings), so give it one in the data dir.
   u.forceDevUpdateConfig = opts.forceDev;

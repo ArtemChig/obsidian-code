@@ -507,7 +507,9 @@ async function updateTest(): Promise<AppHandle> {
   }
   if (!latest || cmpSemver(latest, before) <= 0) {
     upd.outcome = 'already latest';
-    log('no newer release: skipping the update');
+    const s = (await h.page.evaluate(() => (globalThis as unknown as { obsidian: { updates: { check(): Promise<unknown> } } }).obsidian.updates.check())) as UpdateSnap;
+    upd.check = s.state;
+    log(`no newer release: skipping the update (updater check → ${JSON.stringify(s.state)})`);
     return h;
   }
   const evalUpdates = <T>(fn: 'getState' | 'check'): Promise<T> =>
@@ -585,6 +587,13 @@ async function updateTest(): Promise<AppHandle> {
   await shot(h.page, '12-after-update');
   log(`running version ${info.version}; status bar "${statusText}"`);
   if (info.version !== after || !statusText.toUpperCase().includes(after.toUpperCase())) throw new Error(`version mismatch after update: core ${info.version}, exe ${after}, status bar "${statusText}"`);
+  // The NEW version's updater must work too (it delivers the next release): a check now finds nothing newer.
+  const evalNew = (f: 'check') =>
+    h.page.evaluate((x) => (globalThis as unknown as { obsidian: { updates: Record<string, () => Promise<unknown>> } }).obsidian.updates[x](), f) as Promise<UpdateSnap>;
+  const again = await evalNew('check');
+  upd.checkAfterUpdate = again.state;
+  log(`updater of ${info.version}: check → ${JSON.stringify(again.state)}`);
+  if (again.state.status !== 'not-available' && again.state.status !== 'available') throw new Error(`the updated app's updater does not work: ${JSON.stringify(again.state)}`);
   upd.outcome = `updated ${before} → ${after} via the UPDATE button`;
   saveResult();
   return h;

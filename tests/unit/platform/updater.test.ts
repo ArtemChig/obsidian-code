@@ -13,6 +13,7 @@ import {
   friendlyUpdateError,
   NO_TOKEN_MESSAGE,
   normalizeReleaseNotes,
+  nsisUpdaterFlags,
   redact,
   resolveUpdateToken,
   runCommand,
@@ -214,6 +215,22 @@ function harness(over: Partial<UpdateControllerDeps> = {}): Harness {
   };
   return { deps, states, calls, feeds, adapter, last: () => snaps[snaps.length - 1] };
 }
+
+describe('NsisUpdater flags', () => {
+  it('downloads only on click, installs only through update(), and never tries a differential download (private repo)', () => {
+    // Live 2026-10-13: every update logged "Cannot parse blockmap … incorrect header check" — the private GitHub provider
+    // looks for the blockmap at <api asset URL>.blockmap — and then fell back to the full download anyway.
+    expect(nsisUpdaterFlags()).toEqual({
+      autoDownload: false,
+      autoInstallOnAppQuit: false,
+      autoRunAppAfterInstall: true,
+      allowPrerelease: false,
+      allowDowngrade: false,
+      disableWebInstaller: true,
+      disableDifferentialDownload: true,
+    });
+  });
+});
 
 describe('update controller', () => {
   afterEach(() => {
