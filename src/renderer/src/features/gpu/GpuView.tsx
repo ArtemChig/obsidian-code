@@ -42,6 +42,15 @@ export function GpuView() {
   const [showTest, setShowTest] = useState(false);
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logReload, setLogReload] = useState(0);
+
+  // "View server log" (error card) / "View" (safe-mode notice): open the log viewer and reload it (it scrolls itself
+  // into view once loaded).
+  const viewLog = useCallback(() => {
+    setLogOpen(true);
+    setLogReload((n) => n + 1);
+  }, []);
 
   const wanted = active && status?.profileId ? status.profileId : (profileSel ?? defaultGpuProfileId());
   const profile = profileList.find((p) => p.id === wanted) ?? profileList[0];
@@ -164,6 +173,7 @@ export function GpuView() {
             parkedElsewhere={!!status.parked && !!profile && status.parked.profileId !== profile.id && !active}
             onClockIn={onClockIn}
             onClockOut={() => requestClockOut()}
+            onViewLog={viewLog}
           />
 
           {orphanIds.length > 0 || hasApiKey === false || accountRejected ? (
@@ -236,7 +246,13 @@ export function GpuView() {
 
           <div className="flex flex-col gap-6 px-[26px] pt-5">
             <HistoryTable records={history.records} error={history.error} catalog={catalog} />
-            <ServerLog live={status.phase !== 'off' && status.phase !== 'error'} />
+            <ServerLog
+              live={status.phase !== 'off' && status.phase !== 'error'}
+              open={logOpen}
+              onOpenChange={setLogOpen}
+              reloadKey={logReload}
+              savedPath={status.failureLogPath}
+            />
           </div>
         </div>
 

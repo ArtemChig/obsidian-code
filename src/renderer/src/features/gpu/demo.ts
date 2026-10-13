@@ -1,4 +1,6 @@
 // Demo-mode data for the GPU view (loaded automatically with ?demo=1). Owner: ui-views.
+// ?gpu=safe  → ready in safe mode (MTP + vision dropped after the full configuration failed to load)
+// ?gpu=error → a failed clock-in whose server log was saved before the destroy (View server log)
 import type { GpuOffer, GpuSessionRecord, GpuStatus } from '@shared/types';
 import { registerDemoData, registerDemoHandler } from '@renderer/lib/demo';
 
@@ -43,6 +45,66 @@ registerDemoData({
     rec('gb', 17 * DAY, 1.9, 'max', 'glm53-flash-uncensored-huihui-iq4xs', 'RTX PRO 6000 WS', 2, 2.7, 'budget'),
   ],
 });
+
+const SAVED_LOG = 'C:\\Users\\you\\AppData\\Roaming\\obsidian-code\\logs\\gpu-26418220-20261013-110203.log';
+const FAILED_MODEL = 'qwen38-27b-uncensored-hauhau-q5kp';
+
+function failureLogText(): string {
+  return [
+    'Obsidian Code - GPU failure log',
+    'Captured:  2026-10-13T11:02:03.000Z',
+    `Reason:    GPU server error: llama-server failed to load ${FAILED_MODEL} (full, safe and safe-minimal modes); see server.log`,
+    'Instance:  #26418220 (1x RTX 5090)',
+    `Model:     ${FAILED_MODEL}`,
+    'Image:     ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561',
+    '',
+    '===== status.json =====',
+    `{"phase":"error","progress":0,"message":"llama-server failed to load ${FAILED_MODEL} (full, safe and safe-minimal modes); see server.log","mode":"safe-minimal","dropped":["mtp","vision","flash-attn","kv-quant"],"attempt":3,"ctx":32768}`,
+    '',
+    '===== attempts.log (failed load attempts) =====',
+    `[2026-10-13T11:01:12Z] [oc] attempt 1/3 (full) FAILED to load ${FAILED_MODEL}`,
+    '  flags: -m /root/models/…/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q5_K_P.gguf --api-key *** -ngl 99 -c 131072 --jinja --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --mmproj … --spec-type draft-mtp --spec-draft-n-max 2 --parallel 1',
+    '  | llama_init_from_model: failed to initialize the context (demo text)',
+    '  | main: exiting due to model loading error',
+    '',
+    '===== server.log (last 400 lines) =====',
+    'llama_model_loader: loaded meta data with 52 key-value pairs and 866 tensors',
+    'llama_init_from_model: failed to initialize the context (demo text)',
+    '',
+    '===== nvidia-smi =====',
+    '|   0  NVIDIA GeForce RTX 5090   On  |   00000000:01:00.0 Off |   1MiB / 32607MiB |',
+  ].join('\n');
+}
+
+const scenario = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('gpu') : null;
+if (scenario === 'safe') {
+  registerDemoData((d) => ({
+    gpuStatus: { ...d.gpuStatus, message: `${d.gpuStatus.message} (safe mode)`, serverMode: 'safe', droppedFeatures: ['mtp', 'vision'], serverContextLength: 65536, failureLogPath: SAVED_LOG },
+    serverLog: `===== failed load attempts (safe mode is active) =====\n[2026-10-13T11:01:12Z] [oc] attempt 1/3 (full) FAILED to load ${FAILED_MODEL}\n  | llama_init_from_model: failed to create the MTP draft context\n\n===== server.log (last 300 lines) =====\n${d.serverLog}`,
+  }));
+} else if (scenario === 'error') {
+  registerDemoData((d) => {
+    const ids = ['searching', 'renting', 'connecting', 'downloading', 'loading', 'ready'] as const;
+    const error = `GPU server error: llama-server failed to load ${FAILED_MODEL} (full, safe and safe-minimal modes); see server.log`;
+    const g: GpuStatus = {
+      ...d.gpuStatus,
+      phase: 'error',
+      message: `Clock-in failed: ${error}`,
+      lastError: error,
+      failureLogPath: SAVED_LOG,
+      instanceId: undefined,
+      endpoint: undefined,
+      clockedInAt: undefined,
+      readyAt: undefined,
+      progress: undefined,
+      steps: d.gpuStatus.steps.map((s) => {
+        const i = ids.indexOf(s.id as (typeof ids)[number]);
+        return { ...s, state: i < 4 ? 'done' : i === 4 ? 'error' : 'todo' };
+      }),
+    };
+    return { gpuStatus: g, serverLog: failureLogText() };
+  });
+}
 
 // The demo core knows nothing about parked instances: model what the real GpuManager does with them.
 registerDemoHandler('gpu.clockOut', async (_p, ctx) => {

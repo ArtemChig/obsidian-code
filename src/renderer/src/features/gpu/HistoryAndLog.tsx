@@ -1,15 +1,16 @@
 // History (a mono table) and the server log (an --s1 mono well) of the GPU view. Owner: ui-views.
-import { ChevronDown, ChevronRight, History, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderOpen, History, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogModel, GpuSessionRecord } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
 import { EmptyState, Skeleton } from '@renderer/components/ui/feedback';
 import { SectionLabel } from '@renderer/components/ui/layout';
+import { canRevealFiles, showItemInFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { formatDateTime, formatDuration, formatMoney, formatPerHour, shortModelName } from '@renderer/lib/format';
 import { TD, TH } from '../settings/view-kit';
-import { END_REASON_LABEL, endReasonTone, splitModelLabel, sumCost } from './model';
+import { END_REASON_LABEL, baseName, endReasonTone, splitModelLabel, sumCost } from './model';
 import { useServerLog } from './hooks';
 
 // ───────────────────────────── History ─────────────────────────────
@@ -103,19 +104,51 @@ export function HistoryTable({ records, error, catalog, pageSize = 8 }: { record
 
 // ───────────────────────────── Server log ─────────────────────────────
 
-export function ServerLog({ live }: { live: boolean }) {
-  const [open, setOpen] = useState(false);
-  const { text, loading, error, reload } = useServerLog(open, open && live ? 5000 : null);
+export interface ServerLogProps {
+  live: boolean;
+  /** Controlled open state (the error card's / safe-mode notice's "View" opens it). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Bump to reload while open. */
+  reloadKey?: number;
+  /** The failure log saved on this computer (shown when no instance runs; Electron: Show in folder). */
+  savedPath?: string;
+}
+
+export function ServerLog({ live, open: openProp, onOpenChange, reloadKey = 0, savedPath }: ServerLogProps) {
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (fn: (v: boolean) => boolean) => {
+    const next = fn(open);
+    if (onOpenChange) onOpenChange(next);
+    else setOpenState(next);
+  };
+  const { text, loading, error, reload } = useServerLog(open, open && live ? 5000 : null, reloadKey);
+  const saved = !live && !!savedPath;
   const ref = useRef<HTMLPreElement>(null);
 
+  // Live output: follow the tail. A saved failure log: start at its summary (reason, instance, model) at the top.
   useEffect(() => {
     const el = ref.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [text, open]);
+    if (el) el.scrollTop = saved ? 0 : el.scrollHeight;
+  }, [text, open, saved]);
+
+  // Opened via "View" (reloadKey bumped): bring the viewer into view once the log has loaded.
+  const section = useRef<HTMLElement>(null);
+  const reveal = useRef(0);
+  useEffect(() => {
+    if (reloadKey) reveal.current = reloadKey;
+  }, [reloadKey]);
+  useEffect(() => {
+    if (!open || loading || !reveal.current || (text === null && !error)) return;
+    reveal.current = 0;
+    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    section.current?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+  }, [open, loading, text, error]);
 
   const lines = text ? text.split(/\r?\n/).length : 0;
   return (
-    <section className="flex flex-col gap-1.5" data-testid="gpu-log" aria-label="Server log">
+    <section ref={section} className="flex scroll-mt-4 scroll-mb-6 flex-col gap-1.5" data-testid="gpu-log" aria-label="Server log">
       <div className="flex min-h-7 items-center gap-2.5">
         <button
           type="button"
@@ -126,12 +159,17 @@ export function ServerLog({ live }: { live: boolean }) {
         >
           {open ? <ChevronDown size={12} aria-hidden className="shrink-0 text-t3" /> : <ChevronRight size={12} aria-hidden className="shrink-0 text-t3" />}
           <span className="ob-cap shrink-0 group-hover:text-t2">Server log</span>
-          <span className="truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">llama-server output on the rented machine</span>
+          <span className="truncate font-mono text-[9.5px] tracking-[0.01em] text-t3" title={saved ? savedPath : undefined}>
+            {saved ? `saved before the instance was destroyed · ${baseName(savedPath!)}` : 'llama-server output on the rented machine'}
+          </span>
           <span aria-hidden className="ml-1 h-px min-w-4 flex-1 bg-rule2" />
         </button>
         {open ? (
           <>
             {lines ? <span className="ob-tabular shrink-0 font-mono text-[9.5px] text-t3">{lines} lines</span> : null}
+            {savedPath && canRevealFiles() ? (
+              <IconButton label="Show in folder" icon={FolderOpen} size="sm" data-testid="gpu-log-reveal" onClick={() => showItemInFolder(savedPath)} />
+            ) : null}
             <IconButton label="Refresh log" icon={RefreshCw} size="sm" loading={loading} onClick={() => void reload()} />
           </>
         ) : null}

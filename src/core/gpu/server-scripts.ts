@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
-import type { CatalogModel } from '../../shared/types';
+import type { CatalogModel, GpuServerMode } from '../../shared/types';
 
 /** Vast's documented onstart limit is ~4048 chars; stay safely below. */
 export const ONSTART_MAX_CHARS = 4000;
@@ -129,13 +129,23 @@ export interface ServerStatus {
   bytesDone: number;
   bytesTotal: number;
   updatedAt?: number;
+  /** Load configuration (bootstrap.sh fallback): full → safe → safe-minimal. Present once loading started. */
+  mode?: GpuServerMode;
+  /** Features the fallback dropped: mtp, vision, flash-attn, kv-quant. */
+  dropped?: string[];
+  /** Load attempt (1-based) of the current serve. */
+  attempt?: number;
+  /** -c the server was started with. */
+  ctx?: number;
 }
+
+const SERVER_MODES: readonly GpuServerMode[] = ['full', 'safe', 'safe-minimal'];
 
 export function parseServerStatus(text: string): ServerStatus | null {
   try {
     const j = JSON.parse(text.trim()) as Partial<ServerStatus>;
     if (!j || typeof j !== 'object' || typeof j.phase !== 'string') return null;
-    return {
+    const st: ServerStatus = {
       phase: j.phase,
       progress: Number.isFinite(Number(j.progress)) ? Number(j.progress) : 0,
       message: typeof j.message === 'string' ? j.message : '',
@@ -144,6 +154,11 @@ export function parseServerStatus(text: string): ServerStatus | null {
       bytesTotal: Number(j.bytesTotal) || 0,
       updatedAt: typeof j.updatedAt === 'number' ? j.updatedAt : undefined,
     };
+    if (typeof j.mode === 'string' && SERVER_MODES.includes(j.mode)) st.mode = j.mode;
+    if (Array.isArray(j.dropped)) st.dropped = j.dropped.filter((d): d is string => typeof d === 'string');
+    if (Number.isFinite(Number(j.attempt)) && Number(j.attempt) > 0) st.attempt = Number(j.attempt);
+    if (Number.isFinite(Number(j.ctx)) && Number(j.ctx) > 0) st.ctx = Number(j.ctx);
+    return st;
   } catch {
     return null;
   }

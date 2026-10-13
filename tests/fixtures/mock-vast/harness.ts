@@ -1,8 +1,10 @@
 // Test harness for the GPU manager (owner: gpu): MockVast + one FakeBox (ssh2 server + mock llama) per instance +
 // an in-memory CoreContext. Nothing touches the real Vast API, %APPDATA% or the network beyond 127.0.0.1.
 
+import { mkdtempSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import type { CoreContext } from '../../../src/core/contracts';
 import type { ActivityItem, GpuStatus, Settings } from '../../../src/shared/types';
@@ -46,6 +48,7 @@ export const FAST_TIMINGS: Partial<GpuTimings> = {
   watchdogGraceMs: 300,
   parkCheckMs: 100,
   reconcileRetryMs: 50,
+  evidenceTimeoutMs: 1500,
 };
 
 export interface HarnessOptions {
@@ -62,6 +65,8 @@ export interface HarnessOptions {
 
 export interface Harness {
   vast: MockVast;
+  /** Per-harness temp CoreContext.dataDir (failure logs land in <dataDir>/logs); removed by close(). */
+  dataDir: string;
   boxes: Map<number, FakeBox>;
   ctx: CoreContext;
   manager: GpuManagerImpl;
@@ -124,8 +129,9 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   const stopFns = new Map<string, () => void>();
   const listeners = new Map<string, Set<(d: unknown) => void>>();
 
+  const dataDir = mkdtempSync(path.join(os.tmpdir(), 'oc-gpu-data-'));
   const ctx = {
-    dataDir: path.join(REPO_ROOT, 'node_modules', '.cache', 'gpu-test-unused'),
+    dataDir,
     bus: {
       emit(event: string, data: unknown) {
         if (event === 'gpu.status') events.push(data as GpuStatus);
@@ -187,6 +193,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
 
   return {
     vast,
+    dataDir,
     boxes,
     ctx,
     manager,
@@ -204,6 +211,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
       for (const b of boxes.values()) await b.close().catch(() => undefined);
       boxes.clear();
       await vast.stop();
+      rmSync(dataDir, { recursive: true, force: true });
     },
   };
 }

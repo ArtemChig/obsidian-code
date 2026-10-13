@@ -155,7 +155,8 @@ describe('GPU-4: parked instances expire while the app keeps running', () => {
     await h.manager.start();
     expect(h.manager.status().parked?.instanceId).toBe(779);
     offset = 4 * 86_400_000;
-    await h.waitFor(() => !h!.vast.instances.has(779), 4000, 'parked expiry while running');
+    // the DELETE lands before the ledger closes the parked record: wait for both
+    await h.waitFor(() => !h!.vast.instances.has(779) && !h!.manager.status().parked, 4000, 'parked expiry while running');
     expect(h.manager.status().parked).toBeUndefined();
     expect(h.notifications.some((n) => n.title === 'Parked GPU destroyed')).toBe(true);
   });
@@ -165,7 +166,7 @@ describe('GPU-4: parked instances expire while the app keeps running', () => {
     h.vast.addInstance({ id: 780, actual_status: 'stopped', intended_status: 'stopped' });
     h.vast.fail.listAlwaysFails = true;
     await h.manager.start();
-    await h.waitFor(() => !h!.vast.instances.has(780), 4000, 'expired');
+    await h.waitFor(() => !h!.vast.instances.has(780) && !h!.manager.status().parked, 4000, 'expired');
     expect(h.manager.status().parked).toBeUndefined();
   });
 

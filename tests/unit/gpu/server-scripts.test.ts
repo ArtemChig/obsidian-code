@@ -2,7 +2,7 @@
 // to a temp dir (OC_ROOT) and the Vast API pointed at a local mock (OC_API_BASE). Money-critical: proves the
 // watchdog self-destroys the instance via DELETE /api/v0/instances/$CONTAINER_ID/ when the app heartbeat stops.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -163,4 +163,164 @@ describe.skipIf(!bash)('onstart.sh + watchdog (real bash)', () => {
       }
     }
   }, 30_000);
+});
+
+// ── bootstrap.sh load fallback: full → safe (no MTP, no vision) → safe-minimal (flash-attn off, f16 KV) ──
+
+const INCIDENT_MODEL = 'qwen38-27b-uncensored-hauhau-q5kp'; // the v1.0.0 incident: MTP + mmproj, -c 131072
+const FAKE_LLAMA = path.join(__dirname, '../../fixtures/fake-llama-server.cjs');
+
+async function freePort(): Promise<number> {
+  const s = http.createServer();
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+  const port = (s.address() as AddressInfo).port;
+  await new Promise<void>((r) => s.close(() => r()));
+  return port;
+}
+
+interface BootRun {
+  oc: string;
+  status: () => Record<string, unknown>;
+  calls: () => string[][];
+  cleanup: () => Promise<void>;
+}
+
+/** Runs the real bootstrap.sh (main) against a model already on disk, with the fake llama-server as LLAMA_BIN. */
+async function runBootstrap(rule: string): Promise<BootRun> {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'oc-boot-'));
+  const posix = (p: string) => p.replace(/\\/g, '/');
+  const oc = path.join(root, 'oc');
+  const model = CATALOG.find((m) => m.id === INCIDENT_MODEL)!;
+  mkdirSync(path.join(root, 'models', model.id), { recursive: true });
+  writeFileSync(path.join(root, 'models', model.id, '.oc_complete'), '');
+  mkdirSync(oc, { recursive: true });
+  writeFileSync(path.join(oc, 'env'), "export OC_API_KEY='server-key-0123456789'\n");
+  writeFileSync(path.join(oc, 'config.sh'), renderConfigSh(CATALOG, [], { loadMaxMin: 2 }));
+  writeFileSync(path.join(oc, 'bootstrap.sh'), loadServerScripts(RESOURCES_DIR).bootstrap);
+  writeFileSync(path.join(root, 'fake-llama'), `#!/bin/bash\nexec "${posix(process.execPath)}" "${posix(FAKE_LLAMA)}" "$@"\n`);
+  const callsFile = path.join(root, 'calls.jsonl');
+  const stopFile = path.join(root, 'stop');
+  const p = spawn(bash!, [`${posix(oc)}/bootstrap.sh`, 'main'], {
+    env: {
+      ...process.env,
+      OC_ROOT: posix(root),
+      OC_MODEL_ID: model.id,
+      OC_LLAMA_BIN: `${posix(root)}/fake-llama`,
+      OC_LLAMA_PORT: String(await freePort()),
+      OC_POLL_S: '0.2',
+      FAKE_LLAMA_RULE: rule,
+      FAKE_LLAMA_CALLS: callsFile,
+      FAKE_LLAMA_STOP: stopFile,
+    },
+    stdio: 'ignore',
+  });
+  return {
+    oc,
+    status: () => {
+      try {
+        return JSON.parse(read(path.join(oc, 'status.json'))) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    },
+    calls: () =>
+      read(callsFile)
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as string[]),
+    cleanup: async () => {
+      const sp = read(path.join(oc, 'serve.pid')).trim();
+      if (sp) spawnSync(bash!, ['-c', `kill -9 ${sp} 2>/dev/null; true`]);
+      p.kill();
+      writeFileSync(stopFile, '');
+      await new Promise((r) => setTimeout(r, 700));
+      try {
+        rmSync(root, { recursive: true, force: true });
+      } catch {
+        /* the fake may still hold a handle for a moment on Windows */
+      }
+    },
+  };
+}
+
+const flagValue = (args: string[], flag: string) => {
+  const i = args.indexOf(flag);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+
+describe.skipIf(!bash)('bootstrap.sh load fallback (real bash, fake llama-server)', () => {
+  it('full config fails (MTP/mmproj) → attempt 2 reaches ready in safe mode with dropped [mtp, vision]', async () => {
+    const run = await runBootstrap('no-spec-vision');
+    try {
+      await waitFor(() => ['ready', 'error'].includes(String(run.status().phase)), 30_000, 'ready or error');
+      const st = run.status();
+      expect(st).toMatchObject({ phase: 'ready', modelId: INCIDENT_MODEL, mode: 'safe', dropped: ['mtp', 'vision'], attempt: 2, ctx: 65536 });
+
+      const calls = run.calls();
+      expect(calls).toHaveLength(2);
+      const [full, safe] = calls;
+      // attempt 1: the full catalog configuration
+      expect(full).toEqual(expect.arrayContaining(['--spec-type', 'draft-mtp', '--spec-draft-n-max', '--mmproj', '--parallel']));
+      expect(flagValue(full, '-c')).toBe('131072');
+      // attempt 2: no speculative flags (or their values), no projector, -c 65536; q8_0 KV + flash-attn kept
+      expect(safe.some((a) => /^--(spec|draft)|^-md$|^--model-draft$|^--mmproj/.test(a))).toBe(false);
+      expect(safe).not.toContain('draft-mtp');
+      expect(flagValue(safe, '-c')).toBe('65536');
+      expect(flagValue(safe, '--flash-attn')).toBe('on');
+      expect(flagValue(safe, '--cache-type-k')).toBe('q8_0');
+      expect(flagValue(safe, '--cache-type-v')).toBe('q8_0');
+      expect(flagValue(safe, '--parallel')).toBe('1');
+
+      // the failed attempt is logged with its flags (key masked) and llama-server's last lines
+      const attempts = read(path.join(run.oc, 'attempts.log'));
+      expect(attempts).toContain('attempt 1/3 (full) FAILED');
+      expect(attempts).toContain('--spec-type draft-mtp');
+      expect(attempts).toContain('failed to create the MTP draft context');
+      expect(attempts).toContain('--api-key ***');
+      expect(attempts).not.toContain('server-key-0123456789');
+      await waitFor(() => read(path.join(run.oc, 'server.log')).includes(`ready: ${INCIDENT_MODEL}`), 5000, 'ready log line');
+      const log = read(path.join(run.oc, 'server.log'));
+      expect(log).toContain('attempt 1/3 (full) FAILED');
+      expect(log).toContain(`retrying ${INCIDENT_MODEL} in safe mode`);
+      expect(log).toContain(`ready: ${INCIDENT_MODEL} (mode safe; dropped: mtp,vision)`);
+    } finally {
+      await run.cleanup();
+    }
+  }, 45_000);
+
+  it('only --flash-attn off loads → attempt 3 reaches ready in safe-minimal mode (f16 KV, -c 32768)', async () => {
+    const run = await runBootstrap('fa-off-only');
+    try {
+      await waitFor(() => ['ready', 'error'].includes(String(run.status().phase)), 30_000, 'ready or error');
+      expect(run.status()).toMatchObject({ phase: 'ready', mode: 'safe-minimal', dropped: ['mtp', 'vision', 'flash-attn', 'kv-quant'], attempt: 3, ctx: 32768 });
+      const calls = run.calls();
+      expect(calls).toHaveLength(3);
+      const minimal = calls[2];
+      expect(flagValue(minimal, '--flash-attn')).toBe('off');
+      expect(minimal).not.toContain('--cache-type-k');
+      expect(minimal).not.toContain('--cache-type-v');
+      expect(minimal).not.toContain('--mmproj');
+      expect(minimal).not.toContain('--spec-type');
+      expect(flagValue(minimal, '-c')).toBe('32768');
+      const attempts = read(path.join(run.oc, 'attempts.log'));
+      expect(attempts).toContain('attempt 1/3 (full) FAILED');
+      expect(attempts).toContain('attempt 2/3 (safe) FAILED');
+      expect(attempts).toContain('flash attention is not supported');
+    } finally {
+      await run.cleanup();
+    }
+  }, 45_000);
+
+  it('nothing loads → error after the third attempt (status error, all three attempts logged)', async () => {
+    const run = await runBootstrap('never');
+    try {
+      await waitFor(() => ['ready', 'error'].includes(String(run.status().phase)), 30_000, 'ready or error');
+      expect(run.status()).toMatchObject({ phase: 'error', mode: 'safe-minimal' });
+      expect(String(run.status().message)).toMatch(/failed to load .*full, safe and safe-minimal/);
+      expect(run.calls()).toHaveLength(3);
+      expect(read(path.join(run.oc, 'attempts.log'))).toContain('attempt 3/3 (safe-minimal) FAILED');
+    } finally {
+      await run.cleanup();
+    }
+  }, 45_000);
 });

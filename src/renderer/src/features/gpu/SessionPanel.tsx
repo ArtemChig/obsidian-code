@@ -1,6 +1,6 @@
 // The top of the GPU view, modelled on the M13 recorder screen: a hero (title, mono meta, REC-style billing label, the big
 // session clock and Clock in / Clock out), a strip of mono figures, and the clock-in checklist with a segmented meter. Owner: ui-views.
-import { Copy, Power, TriangleAlert } from 'lucide-react';
+import { Copy, FolderOpen, Power, ScrollText, ShieldAlert, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { CatalogModel, GpuProfile, GpuStatus } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -8,12 +8,13 @@ import { Button, IconButton } from '@renderer/components/ui/button';
 import { ProgressBar, StatusDot } from '@renderer/components/ui/feedback';
 import { useNow } from '@renderer/components/ui/time';
 import { GPU_PHASE_LABEL, gpuTone, useLiveGpuCost } from '@renderer/app/GpuWidget';
+import { canRevealFiles, showItemInFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { formatMoney, formatPerHour } from '@renderer/lib/format';
 import { toast } from '@renderer/state/toasts';
 import { GPU_BUSY_PHASES } from '@renderer/state/gpu';
 import { MetaLine, Notice } from '../settings/view-kit';
-import { formatWarmup, gpuSpec, profileVramGb, splitModelLabel, warmupCost, warmupSeconds, type PriceStats } from './model';
+import { formatWarmup, gpuSpec, profileVramGb, safeModeSummary, splitModelLabel, warmupCost, warmupSeconds, type PriceStats } from './model';
 
 export interface SessionPanelProps {
   status: GpuStatus;
@@ -32,6 +33,8 @@ export interface SessionPanelProps {
   parkedElsewhere: boolean;
   onClockIn: () => void;
   onClockOut: () => Promise<unknown> | void;
+  /** Open the server log viewer (the saved failure log once the instance is gone). */
+  onViewLog?: () => void;
 }
 
 /** The main button: 34 px (reference .btn.lg). */
@@ -44,7 +47,7 @@ export function SessionPanel(p: SessionPanelProps) {
     <section data-testid="gpu-panel" data-phase={phase} aria-label={phase === 'off' ? 'Clock in' : 'GPU session'}>
       {phase === 'off' ? <OffHero {...p} /> : <ActiveHero {...p} />}
       {phase === 'off' ? <OffStrip {...p} /> : <ActiveStrip {...p} />}
-      {phase !== 'off' ? <Checklist status={status} /> : null}
+      {phase !== 'off' ? <Checklist status={status} onViewLog={p.onViewLog} /> : null}
     </section>
   );
 }
@@ -304,7 +307,7 @@ function ActiveStrip({ status, runningModelLabel }: SessionPanelProps) {
 
 const STATE_TEXT: Record<GpuStatus['steps'][number]['state'], string> = { done: 'done', active: 'now', todo: '—', error: 'failed' };
 
-function Checklist({ status }: { status: GpuStatus }) {
+function Checklist({ status, onViewLog }: { status: GpuStatus; onViewLog?: () => void }) {
   const phase = status.phase;
   const steps = status.steps ?? [];
   const done = steps.filter((s) => s.state === 'done').length;
@@ -360,6 +363,30 @@ function Checklist({ status }: { status: GpuStatus }) {
         </>
       ) : null}
 
+      {phase === 'ready' && status.serverMode && status.serverMode !== 'full' ? (
+        <Notice
+          tone="warn"
+          icon={ShieldAlert}
+          testId="gpu-safe-mode"
+          title="Running in safe mode —"
+          action={
+            <>
+              <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-t3">Server log</span>
+              {onViewLog ? (
+                <Button size="sm" variant="ghost" className="-ml-1" data-testid="gpu-safe-mode-view-log" onClick={onViewLog}>
+                  View
+                </Button>
+              ) : null}
+              {status.failureLogPath && canRevealFiles() ? (
+                <IconButton label="Show in folder" icon={FolderOpen} size="sm" onClick={() => showItemInFolder(status.failureLogPath!)} />
+              ) : null}
+            </>
+          }
+        >
+          {safeModeSummary(status)}
+        </Notice>
+      ) : null}
+
       {phase === 'error' && (status.lastError || status.message) ? (
         <Notice
           tone="err"
@@ -369,14 +396,24 @@ function Checklist({ status }: { status: GpuStatus }) {
           className="ob-selectable"
           title="Clock-in failed"
           action={
-            <IconButton
-              label="Copy error"
-              icon={Copy}
-              size="sm"
-              onClick={() => {
-                void navigator.clipboard?.writeText(status.lastError ?? status.message).then(() => toast({ title: 'Copied', level: 'success', durationMs: 1500 }));
-              }}
-            />
+            <>
+              {onViewLog ? (
+                <Button size="sm" variant="ghost" icon={ScrollText} data-testid="gpu-error-view-log" onClick={onViewLog}>
+                  View server log
+                </Button>
+              ) : null}
+              {status.failureLogPath && canRevealFiles() ? (
+                <IconButton label="Show in folder" icon={FolderOpen} size="sm" data-testid="gpu-error-reveal-log" onClick={() => showItemInFolder(status.failureLogPath!)} />
+              ) : null}
+              <IconButton
+                label="Copy error"
+                icon={Copy}
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(status.lastError ?? status.message).then(() => toast({ title: 'Copied', level: 'success', durationMs: 1500 }));
+                }}
+              />
+            </>
           }
         >
           <span className="break-words">{status.lastError ?? status.message}</span>

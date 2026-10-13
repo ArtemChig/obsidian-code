@@ -21,10 +21,11 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { CoreContext, GpuManager, LlmProvider } from '../contracts';
-import type { CatalogModel, GpuOffer, GpuPhase, GpuProfile, GpuSessionRecord, GpuStatus, Settings } from '../../shared/types';
+import type { CatalogModel, GpuOffer, GpuPhase, GpuProfile, GpuServerMode, GpuSessionRecord, GpuStatus, Settings } from '../../shared/types';
 import {
   catalogModels, defaultModelForProfile, diskGbFor, estimateWarmupCost, experimentalFallback, getCatalogModel, CATALOG,
 } from './catalog';
+import { evidenceCommand, formatFailureLog, latestFailureLog, parseEvidence, redactSecrets, saveFailureLog } from './failure-log';
 import { GpuLedger, costFor, round4, type ActiveInstance, type ParkedInstance } from './ledger';
 import { defaultProfiles, findProfile } from './profiles';
 import {
@@ -81,6 +82,8 @@ export interface GpuTimings {
   parkCheckMs: number;
   /** Re-check interval for a tracked instance that could not be reconciled (no API key at start). */
   reconcileRetryMs: number;
+  /** Upper bound for fetching the failure evidence (logs, nvidia-smi) over SSH before a destroy. */
+  evidenceTimeoutMs: number;
 }
 
 export const DEFAULT_TIMINGS: GpuTimings = {
@@ -115,6 +118,7 @@ export const DEFAULT_TIMINGS: GpuTimings = {
   watchdogGraceMs: 2 * 60_000,
   parkCheckMs: 15 * 60_000,
   reconcileRetryMs: 15_000,
+  evidenceTimeoutMs: 20_000,
 };
 
 export const DEFAULT_VAST_SETTINGS: Settings['vast'] = {
@@ -209,6 +213,16 @@ export class GpuManagerImpl implements GpuManager {
   private creditBalance: number | undefined;
   private lastServerLog = '';
   private lastWatchdogMsg: string | undefined;
+  /** The newest failure log saved this run (<dataDir>/logs). */
+  private failureLogPath: string | undefined;
+  /** How llama-server runs on the active instance (bootstrap.sh fallback) and what the fallback dropped. */
+  private serverMode: GpuServerMode | undefined;
+  private droppedFeatures: string[] | undefined;
+  private serverCtx: number | undefined;
+  /** Instance whose safe-mode start was already captured as evidence (once per instance). */
+  private safeModeCaptured: number | undefined;
+  /** Evidence captures started (a slower, older capture never replaces the newest one). */
+  private evidenceSeq = 0;
 
   private active: ActiveInstance | null = null;
   private serverApiKey: string | null = null;
@@ -509,6 +523,12 @@ export class GpuManagerImpl implements GpuManager {
     if (this.phase === 'ready' && this.endpointUrl) st.endpoint = this.endpointUrl;
     if (this.creditBalance !== undefined) st.creditBalance = this.creditBalance;
     if (this.lastError) st.lastError = this.lastError;
+    if (this.failureLogPath) st.failureLogPath = this.failureLogPath;
+    if (a && this.serverMode) {
+      st.serverMode = this.serverMode;
+      if (this.droppedFeatures?.length) st.droppedFeatures = [...this.droppedFeatures];
+      if (this.serverCtx) st.serverContextLength = this.serverCtx;
+    }
     // Untracked labelled instances + destroys that were never confirmed (retried in the background): both may bill.
     const unconfirmed = [...new Set([...this.orphanIds, ...this.ledger.pendingDestroy])].filter((id) => !this.destroying.has(id) && id !== a?.instanceId);
     if (unconfirmed.length) st.orphanInstanceIds = unconfirmed;
@@ -586,6 +606,8 @@ export class GpuManagerImpl implements GpuManager {
     this.lastError = undefined;
     this.failedStep = undefined;
     this.lastServerLog = '';
+    this.failureLogPath = undefined;
+    this.clearServerMode();
     this.autoStopping = false;
     this.target = { profileId: profile.id, modelId: model.id };
     this.setPhase('searching', 'Checking the budget and searching for a GPU…');
@@ -655,6 +677,7 @@ export class GpuManagerImpl implements GpuManager {
     }
     if (model.sizeGb + 5 > a.diskGb) throw new Error(`${model.label} (${model.sizeGb} GB) does not fit on this instance's ${a.diskGb} GB disk.`);
     this.target = { profileId: a.profileId, modelId: model.id };
+    this.clearServerMode();
     this.setPhase('switching', `Switching to ${model.label}…`, 0);
     this.runJob('switch', async (signal) => {
       await this.runSwitchCommand(model.id);
@@ -687,11 +710,21 @@ export class GpuManagerImpl implements GpuManager {
     return destroyed;
   }
 
+  /**
+   * Live: the server.log tail over SSH (in a safe mode prefixed with the failed load attempts). No instance running:
+   * the evidence saved by the last failure (this run, else the newest file in <dataDir>/logs).
+   */
   async serverLog(lines = 200): Promise<string> {
     const n = Math.max(10, Math.min(5000, Math.round(lines)));
     if (this.ssh?.isConnected()) {
       try {
         const r = await this.ssh.exec(`tail -n ${n} /root/oc/server.log 2>/dev/null`, { timeoutMs: 15_000 });
+        if (r.stdout.trim() && this.serverMode && this.serverMode !== 'full') {
+          const at = await this.ssh.exec('cat /root/oc/attempts.log 2>/dev/null', { timeoutMs: 15_000 }).catch(() => null);
+          if (at?.stdout.trim()) {
+            return `===== failed load attempts (${this.serverMode} mode is active) =====\n${at.stdout.trimEnd()}\n\n===== server.log (last ${n} lines) =====\n${r.stdout}`;
+          }
+        }
         if (r.stdout.trim()) return r.stdout;
         const r2 = await this.ssh.exec(`tail -n ${n} /root/oc/bootstrap.log /root/oc/watchdog.log 2>/dev/null`, { timeoutMs: 15_000 });
         return r2.stdout;
@@ -706,7 +739,12 @@ export class GpuManagerImpl implements GpuManager {
         /* fall through */
       }
     }
-    return this.lastServerLog;
+    if (this.lastServerLog || this.active) return this.lastServerLog;
+    try {
+      return latestFailureLog(this.ctx.dataDir)?.text ?? '';
+    } catch {
+      return '';
+    }
   }
 
   async testKey(): Promise<{ ok: boolean; message: string; creditBalance?: number }> {
@@ -1552,6 +1590,7 @@ export class GpuManagerImpl implements GpuManager {
     let lastProgressAt = this.now();
     let downloadSince: number | null = null;
     let loadingSince: number | null = null;
+    let loadAttempt: number | undefined;
     let sshDownSince: number | null = null;
     const downloadBudget = () => this.t.downloadBaseTimeoutMs + expected.sizeGb * this.t.downloadPerGbMs;
 
@@ -1607,13 +1646,21 @@ export class GpuManagerImpl implements GpuManager {
             break;
           }
           case 'loading': {
+            // Each bootstrap load attempt (full → safe → safe-minimal) gets the full load budget.
+            if (st.attempt !== undefined && st.attempt !== loadAttempt) {
+              loadAttempt = st.attempt;
+              loadingSince = now;
+            }
             loadingSince ??= now;
             this.setPhase(switching ? 'switching' : 'loading', st.message || `Loading ${expected.label}…`, switching ? 1 : undefined);
             if (now - loadingSince > this.t.loadTimeoutMs) throw new Error(`Loading ${expected.label} took longer than ${Math.round(this.t.loadTimeoutMs / 60_000)} min.`);
             break;
           }
           case 'ready': {
-            if (!st.modelId || st.modelId === expected.id) return expected;
+            if (!st.modelId || st.modelId === expected.id) {
+              this.applyServerMode(st);
+              return expected;
+            }
             if (!switchIssued) {
               // e.g. a resumed parked instance serving another model
               this.setMessage(`Server is running ${st.modelId}; switching to ${expected.label}…`);
@@ -1689,7 +1736,8 @@ export class GpuManagerImpl implements GpuManager {
   private readyMessage(): string {
     const a = this.active;
     const m = a ? getCatalogModel(a.modelId) : undefined;
-    return `Ready: ${m?.label ?? a?.modelId ?? 'model'} on ${a?.numGpus ?? 1}x ${a?.gpuName ?? 'GPU'}`;
+    const safe = this.serverMode && this.serverMode !== 'full' ? ` (${this.serverMode} mode)` : '';
+    return `Ready: ${m?.label ?? a?.modelId ?? 'model'} on ${a?.numGpus ?? 1}x ${a?.gpuName ?? 'GPU'}${safe}`;
   }
 
   private markReady(model: CatalogModel): void {
@@ -1704,7 +1752,15 @@ export class GpuManagerImpl implements GpuManager {
     this.target = { profileId: a.profileId, modelId: model.id };
     this.failedStep = undefined;
     this.setPhase('ready', this.readyMessage(), 1);
-    this.notify('GPU ready', `${model.label} is serving on ${a.numGpus}x ${a.gpuName} ($${a.pricePerHour.toFixed(2)}/h).`, 'success');
+    const safe = this.serverMode && this.serverMode !== 'full' ? this.serverMode : null;
+    if (safe) {
+      const dropped = this.droppedFeatures?.length ? ` without ${this.droppedFeatures.join(', ')}` : '';
+      this.notify('GPU ready (safe mode)', `${model.label} is serving on ${a.numGpus}x ${a.gpuName} in ${safe} mode${dropped}: the full configuration failed to load. The server log has the details.`, 'warning');
+      if (this.safeModeCaptured !== a.instanceId) {
+        this.safeModeCaptured = a.instanceId;
+        void this.captureEvidence(`The full configuration of ${model.id} failed to load; serving in ${safe} mode${dropped}.`);
+      }
+    } else this.notify('GPU ready', `${model.label} is serving on ${a.numGpus}x ${a.gpuName} ($${a.pricePerHour.toFixed(2)}/h).`, 'success');
   }
 
   // ───────────────────────────── heartbeat / billing ─────────────────────────────
@@ -1765,9 +1821,81 @@ export class GpuManagerImpl implements GpuManager {
       }
     } else if (st.phase === 'loading' && this.phase === 'ready') {
       this.setPhase('loading', 'llama-server restarted; reloading the model…');
+      // Keep the crash evidence even if the restart works (the instance and its logs go away at clock-out).
+      void this.captureEvidence('llama-server exited while serving (restarting it)');
     } else if (st.phase === 'ready' && this.phase === 'loading') {
+      this.applyServerMode(st);
       const m = getCatalogModel(this.active.modelId);
       if (m) this.markReady(m);
+    } else if (st.phase === 'ready') {
+      const before = `${this.serverMode}|${this.droppedFeatures?.join(',')}|${this.serverCtx}`;
+      this.applyServerMode(st);
+      if (before !== `${this.serverMode}|${this.droppedFeatures?.join(',')}|${this.serverCtx}`) this.emit();
+    }
+  }
+
+  private applyServerMode(st: ServerStatus): void {
+    if (!st.mode) return;
+    this.serverMode = st.mode;
+    this.droppedFeatures = st.dropped ?? [];
+    this.serverCtx = st.ctx;
+  }
+
+  private clearServerMode(): void {
+    this.serverMode = undefined;
+    this.droppedFeatures = undefined;
+    this.serverCtx = undefined;
+  }
+
+  /** Secret values that must never reach a saved log. */
+  private knownSecrets(a: ActiveInstance | null): string[] {
+    return [this.serverApiKey, a?.instanceApiKey, this.secret(VAST_KEY_SECRET), this.secret(SERVER_KEY_SECRET)].filter((x): x is string => !!x);
+  }
+
+  /**
+   * Fetch the server-side evidence (status.json, attempts.log, server.log, bootstrap.log, watchdog.log, nvidia-smi) over
+   * SSH and save it, secrets stripped, to <dataDir>/logs/gpu-<id>-<time>.log. Destroying the instance deletes those
+   * logs, so callers run this BEFORE the destroy. Time-boxed to evidenceTimeoutMs and never throws: a slow or dead
+   * instance can delay a destroy by at most that long and never prevent it. Returns the saved path (null: not saved).
+   */
+  private async captureEvidence(reason: string): Promise<string | null> {
+    const a = this.active;
+    const ssh = this.ssh;
+    if (!a || !ssh?.isConnected()) return null;
+    const budget = Math.max(200, this.t.evidenceTimeoutMs);
+    const seq = ++this.evidenceSeq;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const r = await Promise.race([
+        ssh.exec(evidenceCommand(), { timeoutMs: budget }).then(
+          (x) => ({ out: x.stdout, note: undefined as string | undefined }),
+          (err: unknown) => ({ out: '', note: `SSH exec failed: ${errMsg(err)}` }),
+        ),
+        new Promise<{ out: string; note: string }>((resolve) => {
+          timer = setTimeout(() => resolve({ out: '', note: `the instance did not answer within ${Math.round(budget / 1000)} s` }), budget);
+          timer.unref?.();
+        }),
+      ]);
+      const at = this.now();
+      const vs = this.vastSettings();
+      const text = redactSecrets(
+        formatFailureLog(
+          { reason, instanceId: a.instanceId, capturedAt: at, gpu: `${a.numGpus}x ${a.gpuName}`, modelId: a.modelId, profileId: a.profileId, image: vs.image, phase: this.phase, note: r.note },
+          parseEvidence(r.out),
+        ),
+        this.knownSecrets(a),
+      );
+      const file = saveFailureLog(this.ctx.dataDir, a.instanceId, text, at);
+      if (seq === this.evidenceSeq) {
+        this.lastServerLog = text;
+        this.failureLogPath = file;
+        this.emit();
+      }
+      return file;
+    } catch {
+      return null;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -1827,6 +1955,7 @@ export class GpuManagerImpl implements GpuManager {
       this.setSecret(SERVER_KEY_SECRET, null);
       this.serverApiKey = null;
       this.active = null;
+      this.clearServerMode();
       this.stopBillingTimers();
       this.endpointUrl = undefined;
       this.failedStep = undefined;
@@ -1915,13 +2044,10 @@ export class GpuManagerImpl implements GpuManager {
     const a = this.active;
     this.setPhase('stopping', a ? `Stopping GPU instance #${a.instanceId}…` : 'Stopping…');
     this.stopHeartbeat();
-    if (opts.error && this.ssh?.isConnected()) {
-      try {
-        const r = await this.ssh.exec('tail -n 200 /root/oc/server.log /root/oc/watchdog.log 2>/dev/null', { timeoutMs: 5000 });
-        this.lastServerLog = r.stdout;
-      } catch {
-        /* ignore */
-      }
+    if (opts.error && a && this.ssh?.isConnected()) {
+      // The instance's logs die with it: save them first (time-boxed; never blocks the destroy for long).
+      this.setMessage(`Saving the server log of instance #${a.instanceId} before destroying it…`);
+      await this.captureEvidence(opts.error);
     }
     await this.closeTunnel();
     this.closeSsh();
@@ -1942,6 +2068,7 @@ export class GpuManagerImpl implements GpuManager {
       this.serverApiKey = null;
       this.active = null;
     }
+    this.clearServerMode();
     this.stopBillingTimers();
     this.endpointUrl = undefined;
     this.autoStopping = false;
@@ -1985,6 +2112,7 @@ export class GpuManagerImpl implements GpuManager {
     this.setSecret(SERVER_KEY_SECRET, null);
     this.serverApiKey = null;
     this.active = null;
+    this.clearServerMode();
     this.stopBillingTimers();
   }
 
