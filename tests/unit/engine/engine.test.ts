@@ -1,7 +1,7 @@
 // ClaudeCodeEngine bridging with a scripted fake Agent SDK: permissions, questions, plans, headless runs, hooks
 // (app deny rules, checkpoints), rewind/fork, interrupt, engine switch seeding, restarts, commands, errors.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PermissionRequest, PlanRequest, QuestionRequest, ToolUseBlock } from '@shared/types';
@@ -230,6 +230,30 @@ describe('ClaudeCodeEngine', () => {
     expect(r.h.eventsOf('permission.requested')).toHaveLength(0);
   });
 
+  it('plan mode rejects changes instead of asking, except the plan file Claude Code writes into its config dir', async () => {
+    const out: Obj[] = [];
+    const r = await newRig(async (_u, q) => {
+      const planFile = join(r.h.dir, 'claude-code', 'plans', 'x-y-z.md');
+      out.push(await canUse(q, 'Write', { file_path: join(r.h.cwd, 'src.js'), content: 'x' }));
+      out.push(await canUse(q, 'Edit', { file_path: join(r.h.cwd, 'src.js'), old_string: 'a', new_string: 'b' }));
+      out.push(await canUse(q, 'Bash', { command: 'echo hi > out.txt' }));
+      out.push(await canUse(q, 'Write', { file_path: planFile, content: '# plan' }));
+      out.push(await canUse(q, 'Read', { file_path: join(r.h.cwd, 'src.js') }));
+      result(q);
+    });
+    const s = r.h.createSession({ engine: 'claude-code', title: 'x', permissionMode: 'plan' });
+    await r.engine.send(s.id, 'plan it');
+    await idle(r, s.id);
+    for (const i of [0, 1, 2]) {
+      expect(out[i]).toMatchObject({ behavior: 'deny' });
+      expect(String(out[i]!.message)).toMatch(/Plan mode is active/);
+      expect(out[i]!.interrupt).toBeUndefined();
+    }
+    expect(out[3]).toMatchObject({ behavior: 'allow' });
+    expect(out[4]).toMatchObject({ behavior: 'allow' });
+    expect(r.h.eventsOf('permission.requested')).toHaveLength(0);
+  });
+
   it('AskUserQuestion → question card → answers in updatedInput', async () => {
     let d: Obj | undefined;
     const questions = [{ question: 'Color?', header: 'Color', multiSelect: false, options: [{ label: 'Red', description: '' }, { label: 'Blue', description: '' }] }];
@@ -338,6 +362,54 @@ describe('ClaudeCodeEngine', () => {
     expect(r.engine.state(s.id).fork).toBeUndefined();
   });
 
+  it('the Claude Code plan file (<config dir>/plans) is not listed as a changed file', async () => {
+    const r = await newRig();
+    const planFile = join(r.h.dir, 'claude-code', 'plans', 'add-a-function-staged-lemur.md');
+    const real = join(r.h.cwd, 'real.txt');
+    r.setTurn(async (_u, q) => {
+      mkdirSync(join(r.h.dir, 'claude-code', 'plans'), { recursive: true });
+      for (const [id, file] of [['p1', planFile], ['p2', real]] as const) {
+        expect(await preToolUse(q, 'Write', { file_path: file, content: 'x\n' }, id)).toEqual({ continue: true });
+        callTool(q, id, 'Write', { file_path: file, content: 'x\n' });
+        writeFileSync(file, 'x\n');
+        toolResult(q, id, 'ok', false, { type: 'create', filePath: file, content: 'x\n' });
+      }
+      say(q, 'ok');
+      result(q);
+    });
+    const s = r.h.createSession({ engine: 'claude-code', title: 'x' });
+    await r.engine.send(s.id, 'plan it');
+    await idle(r, s.id);
+    await until(() => r.h.session(s.id).changedFiles.length >= 1, 8000, 'change recorded');
+    await new Promise((res) => setTimeout(res, 150)); // the plan file would have been recorded by now
+    expect(r.h.session(s.id).changedFiles.map((f) => f.path.toLowerCase())).toEqual([real.toLowerCase()]);
+    // both Write cards are still in the transcript
+    const writes = r.h.session(s.id).messages.flatMap((m) => m.blocks).filter((b): b is ToolUseBlock => b.type === 'tool_use' && b.name === 'Write');
+    expect(writes).toHaveLength(2);
+  });
+
+  it('subagents (Agent tool) run in the foreground unless the call asks for the background', async () => {
+    const r = await newRig();
+    let hook: Obj[] = [];
+    r.setTurn(async (_u, q) => {
+      hook = [
+        await preToolUse(q, 'Agent', { prompt: 'find it', description: 'find', subagent_type: 'Explore' }, 'a1'),
+        await preToolUse(q, 'Agent', { prompt: 'find it', run_in_background: true }, 'a2'),
+        await preToolUse(q, 'Agent', { prompt: 'find it', run_in_background: false }, 'a3'),
+        await preToolUse(q, 'Read', { file_path: join(r.h.cwd, 'a.txt') }, 'a4'),
+      ];
+      say(q, 'ok');
+      result(q);
+    });
+    const s = r.h.createSession({ engine: 'claude-code', title: 'x' });
+    await r.engine.send(s.id, 'go');
+    await idle(r, s.id);
+    expect(hook[0]).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { prompt: 'find it', description: 'find', subagent_type: 'Explore', run_in_background: false } } });
+    expect(hook[1]).toEqual({ continue: true }); // explicit background request is honoured
+    expect(hook[2]).toEqual({ continue: true });
+    expect(hook[3]).toEqual({ continue: true });
+  });
+
   it('a changed model/thinking setting restarts the harness and resumes the same Claude session', async () => {
     const r = await newRig();
     const s = r.h.createSession({ engine: 'claude-code', title: 'x' });
@@ -384,6 +456,35 @@ describe('ClaudeCodeEngine', () => {
     expect(msgs[0]).toMatchObject({ role: 'user', tag: 'command' });
     expect(msgs[1]).toMatchObject({ role: 'assistant', tag: 'command', blocks: [{ type: 'text', text: '/cost output' }] });
     expect(sent).toBe('/cost');
+  });
+
+  it('/cost output is shown once (not billed) and not re-emitted after /compact', async () => {
+    const cost = ['Total cost:            $0.0365 (costs may be inaccurate due to usage of unknown models)', 'Total duration (API):  15s', 'Usage by model:', 'qwen3:  2.2k input, 9 output ($0.0365)'].join(String.fromCharCode(10));
+    const synthetic = (q: FakeQuery) => q.emit({
+      type: 'assistant', uuid: `uuid-${++uuidN}`, parent_tool_use_id: null, local_command_source: `<local-command-stdout>${cost}</local-command-stdout>`,
+      message: { id: `syn-${uuidN}`, role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: cost }] },
+    });
+    const r = await newRig(async (u, q) => {
+      const t = textOf(u);
+      if (t === '/cost') synthetic(q);
+      if (t === '/compact') {
+        q.emit({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'manual', pre_tokens: 17854 } });
+        synthetic(q); // Claude Code carries the earlier local command output into the new context and emits it again
+        q.emit({ type: 'user', isReplay: true, parent_tool_use_id: null, message: { role: 'user', content: '<local-command-stdout>Compacted </local-command-stdout>' } });
+      }
+      result(q, '');
+    });
+    const s = r.h.createSession({ engine: 'claude-code', title: 'x' });
+    await r.engine.send(s.id, '/cost');
+    await idle(r, s.id);
+    await r.engine.send(s.id, '/compact');
+    await idle(r, s.id);
+    const msgs = r.h.session(s.id).messages;
+    const texts = msgs.map((m) => m.blocks.map((b) => (b.type === 'text' ? b.text : '')).join(''));
+    expect(msgs.map((m) => m.tag ?? m.role)).toEqual(['command', 'assistant', 'command', 'compact_summary']);
+    expect(texts[1]).toContain('Total cost:            $0.00 (local model, not billed)');
+    expect(texts[1]).toContain('qwen3:  2.2k input, 9 output');
+    expect(texts[1]).not.toMatch(/\$0\.0365|unknown models/);
   });
 });
 

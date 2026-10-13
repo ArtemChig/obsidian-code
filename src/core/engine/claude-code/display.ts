@@ -61,6 +61,32 @@ export function toQuestions(raw: unknown): Question[] {
   });
 }
 
+/**
+ * Claude Code prices a model it does not know like a Sonnet-class one ("Total cost: $0.0365 (costs may be inaccurate
+ * due to usage of unknown models)"). A model on the user's own endpoint is not billed: say so instead.
+ */
+export function localizeCostText(text: string): string {
+  return text
+    .replace(/^(Total cost:\s+)\$[\d.,]+.*$/m, '$1$0.00 (local model, not billed)')
+    .replace(/ \(\$[\d.,]+\)$/gm, '');
+}
+
+/** The synthetic assistant message of a local slash command with its cost lines made honest (other text untouched). */
+export function localizeCommandOutput(m: Record<string, unknown>): Record<string, unknown> {
+  const message = m.message as Record<string, unknown> | undefined;
+  const content = message?.content;
+  if (!message || !Array.isArray(content)) return m;
+  let changed = false;
+  const next = content.map((b) => {
+    if (b && typeof b === 'object' && (b as Obj).type === 'text' && typeof (b as Obj).text === 'string') {
+      const text = localizeCostText((b as Obj).text as string);
+      if (text !== (b as Obj).text) { changed = true; return { ...(b as Obj), text }; }
+    }
+    return b;
+  });
+  return changed ? { ...m, message: { ...message, content: next } } : m;
+}
+
 export interface DisplayInput {
   /** Claude Code's tool name (not the UI name). */
   name: string;

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { CoreEventName } from '@shared/protocol';
 import type { Message, Session, ToolUseBlock } from '@shared/types';
-import { toolDisplay, toTodos, uiToolName } from '@core/engine/claude-code/display';
+import { localizeCommandOutput, localizeCostText, toolDisplay, toTodos, uiToolName } from '@core/engine/claude-code/display';
 import { Translator, type TranslatorHost } from '@core/engine/claude-code/translate';
 
 const FIX = join(__dirname, '..', '..', 'fixtures', 'claude-code');
@@ -228,5 +228,25 @@ describe('display mapping', () => {
   it('todos keep Claude Code statuses and activeForm', () => {
     expect(toTodos([{ content: 'a', status: 'completed', activeForm: 'Doing a' }, { content: 'b', status: 'weird' }]))
       .toEqual([{ id: '1', content: 'a', status: 'completed', activeForm: 'Doing a' }, { id: '2', content: 'b', status: 'pending' }]);
+  });
+});
+
+describe('local command output', () => {
+  it('shows a local model as not billed instead of the price Claude Code guesses', () => {
+    const raw = ['Total cost:            $0.0365 (costs may be inaccurate due to usage of unknown models)', 'Usage by model:', 'qwen3.6:  2.2k input, 9 output, 51.0k cache read ($0.0365)', 'Prompt cache (main):   3 requests'].join(String.fromCharCode(10));
+    expect(localizeCostText(raw).split(String.fromCharCode(10))).toEqual([
+      'Total cost:            $0.00 (local model, not billed)', 'Usage by model:', 'qwen3.6:  2.2k input, 9 output, 51.0k cache read', 'Prompt cache (main):   3 requests',
+    ]);
+    expect(localizeCostText('Context usage: 12k / 131k')).toBe('Context usage: 12k / 131k');
+  });
+
+  it('rewrites only the text blocks of the synthetic message and leaves other messages untouched', () => {
+    const m = { type: 'assistant', uuid: 'u', message: { content: [{ type: 'text', text: 'Total cost: $1.20 (x)' }] } };
+    const out = localizeCommandOutput(m) as typeof m;
+    expect(out.message.content[0]!.text).toBe('Total cost: $0.00 (local model, not billed)');
+    expect(out.uuid).toBe('u');
+    expect(m.message.content[0]!.text).toBe('Total cost: $1.20 (x)'); // input not mutated
+    const plain = { type: 'assistant', message: { content: [{ type: 'text', text: 'hello' }] } };
+    expect(localizeCommandOutput(plain)).toBe(plain);
   });
 });

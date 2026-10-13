@@ -7,7 +7,7 @@
 
 import { execFile } from 'node:child_process';
 import { promises as fs, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { diffLines } from 'diff';
 import type { CoreContext, ToolDef } from '../../contracts';
 import type { CoreEventName, CoreEvents } from '../../../shared/protocol';
@@ -23,7 +23,7 @@ import { clipLine, errorMessage, isDefaultTitle, newId, sanitizeTitle, toSummary
 import { resolveShellKind } from '../../tools/lib/shell';
 import { buildClaudeEnv, resolveClaudeExecutable, type ExecutableInfo } from '../env';
 import { AnthropicShim, modelAlias } from '../shim';
-import { EDIT_TOOL_NAMES, inputFilePath, toQuestions, uiToolName } from './display';
+import { EDIT_TOOL_NAMES, inputFilePath, localizeCommandOutput, SUBAGENT_TOOL_NAMES, toQuestions, uiToolName } from './display';
 import { createObsidianMcpServer, stableKey } from './mcp';
 import { leanSystemPrompt, prepareConfigDir } from './setup';
 import { Translator, type TranslatorHost } from './translate';
@@ -123,6 +123,8 @@ interface Rt {
   interruptRequested: boolean;
   /** A turn Claude Code started by itself (e.g. reacting to a finished background agent). */
   backgroundTurn: boolean;
+  /** A compact_boundary was seen in the current turn: local-command output Claude Code re-emits after it is a duplicate. */
+  compactSeen: boolean;
   backgroundWaiters: (() => void)[];
   /** Tool calls denied via canUseTool (shown as 'denied'). */
   denied: Set<string>;
@@ -320,7 +322,7 @@ export class ClaudeCodeEngine {
       rt = {
         id, busy: false, queue: [], live: null, starting: null, turn: null, translator: new Translator(this.translatorHost(), id),
         headless: false, pendingHuman: 0, idleWaiters: [], titleDone: false, activityStartedAt: Date.now(), activityRegistered: false,
-        interruptRequested: false, backgroundTurn: false, backgroundWaiters: [], denied: new Set(), before: new Map(), mcpDisplays: new Map(), stderrTail: '',
+        interruptRequested: false, backgroundTurn: false, compactSeen: false, backgroundWaiters: [], denied: new Set(), before: new Map(), mcpDisplays: new Map(), stderrTail: '',
       };
       this.runtimes.set(id, rt);
       if (s.status === 'running' || s.status === 'waiting') this.mutate(id, (x) => { x.status = 'idle'; });
@@ -380,6 +382,8 @@ export class ClaudeCodeEngine {
   private recordChange(sessionId: string, toolUseId: string, abs: string): void {
     const s = this.ctx.sessions.get(sessionId);
     if (!s) return;
+    // Claude Code's own files (plan mode writes the plan to <config dir>/plans/*.md) are not the user's changes
+    if (isInside(join(this.ctx.dataDir, 'claude-code'), abs)) return;
     const rootId = s.kind === 'subagent' && s.parentSessionId ? s.parentSessionId : sessionId;
     const targets = rootId === sessionId ? [sessionId] : [sessionId, rootId];
     void (async () => {
@@ -921,6 +925,7 @@ export class ClaudeCodeEngine {
           this.emitSession(rt.id);
         }
       } else if (sub === 'compact_boundary') {
+        rt.compactSeen = true;
         const meta = (m.compact_metadata ?? {}) as Obj;
         const pre = Number(meta.pre_tokens ?? 0);
         this.note(rt.id, `Conversation compacted by Claude Code (${meta.trigger === 'auto' ? 'automatic' : 'manual'}${pre ? `, ${pre.toLocaleString('en-US')} tokens before` : ''}). Older turns stay visible here; the model now sees a summary.`, 'compact_summary');
@@ -940,6 +945,7 @@ export class ClaudeCodeEngine {
       return;
     }
     if (type === 'result') {
+      rt.compactSeen = false;
       this.applyUsage(rt, m);
       if (!rt.turn) {
         if (rt.backgroundTurn) {
@@ -971,6 +977,11 @@ export class ClaudeCodeEngine {
       const out = /<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/.exec(raw)?.[1]?.trim();
       if (out && !/^Compacted\b/.test(out)) this.note(rt.id, out);
       return;
+    }
+    // output of a local slash command (/cost, /context, ...) arrives as a synthetic assistant message
+    if (type === 'assistant' && typeof m.local_command_source === 'string') {
+      if (rt.compactSeen) return; // after /compact Claude Code re-emits the earlier command outputs it carried over
+      m = localizeCommandOutput(m);
     }
     // Claude Code can start a turn on its own (a background agent finished and it reacts): show it as running
     if (!rt.turn && !rt.backgroundTurn && (type === 'stream_event' || type === 'assistant') && m.parent_tool_use_id == null) {
@@ -1051,6 +1062,12 @@ export class ClaudeCodeEngine {
     if (decision.action === 'ask' && PROTECTED_REASON.test(decision.reason ?? '')) {
       return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: decision.reason } };
     }
+    // Claude Code 2.1 starts subagents in the background unless the call says otherwise. On a (single, shared) local
+    // model that runs two requests at once and leaves the model polling for a result; run them in the foreground
+    // like the app's own Task tool, so the report comes back as the tool result. An explicit choice is kept.
+    if (SUBAGENT_TOOL_NAMES.has(toolName) && input.run_in_background === undefined) {
+      return { hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { ...input, run_in_background: false } } };
+    }
     return { continue: true };
   }
 
@@ -1111,7 +1128,15 @@ export class ClaudeCodeEngine {
     }
 
     const { decision, title } = this.appDecision(rt, toolName, input);
-    if (decision.action === 'deny' && decision.reason !== 'plan mode') { rt.denied.add(toolUseId); return { behavior: 'deny', message: decision.message }; }
+    if (decision.action === 'deny') {
+      // Plan mode rejects every change (like the Obsidian engine); the one exception is the plan file Claude Code itself
+      // has the model write into its config dir. Asking the user instead would let a model edit files while "planning".
+      if (decision.reason === 'plan mode' && EDIT_TOOL_NAMES.has(toolName) && isInside(join(this.ctx.dataDir, 'claude-code'), resolve(s.cwd, inputFilePath(input)))) {
+        return { behavior: 'allow', updatedInput: input };
+      }
+      rt.denied.add(toolUseId);
+      return { behavior: 'deny', message: decision.message };
+    }
     if (decision.action === 'allow' && !PROTECTED_REASON.test(String(opts.decisionReason ?? ''))) return { behavior: 'allow', updatedInput: input };
     if (rt.headless) {
       rt.denied.add(toolUseId);
