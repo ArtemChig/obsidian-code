@@ -31,6 +31,7 @@ export function defaultSettings(patch: Partial<Settings> = {}): Settings {
     autoCompactPercent: 80,
     notifications: true,
     launchAtLogin: false,
+    engine: { default: 'builtin', claudeCode: { executable: 'auto', systemPrompt: 'lean', importUserClaudeConfig: false, extraEnv: {} } },
     ...patch,
   };
 }

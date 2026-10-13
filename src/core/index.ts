@@ -10,14 +10,14 @@
 //   * use only Node 24 APIs (@types/node is pinned to 24 to match Electron's runtime).
 //
 // Construction order (factories only store ctx; they must not call other modules while constructing):
-//   stores → bus → activity → llm → ext → shells → tools → models → gpu → agent → scheduler
+//   stores → bus → activity → llm → ext → shells → tools → models → gpu → agent (engine router) → scheduler
 // Startup: models.register(gpu.provider()) → ext.start() → gpu.start() → scheduler.start() → models.refresh() (bg)
 //          → HTTP/WS server.
 
 import { mkdirSync } from 'node:fs';
 import type { CoreContext, NativeBridge } from './contracts';
 import { createActivityRegistry } from './activity/index';
-import { createAgentManager } from './agent/index';
+import { createAgentRouter } from './engine/index';
 import { createExtensions } from './ext/index';
 import { createGpuManager } from './gpu/index';
 import { createLlmClient, createModelRegistry } from './llm/index';
@@ -95,7 +95,7 @@ export async function createCore(opts: CreateCoreOptions): Promise<CoreHandle> {
   ctx.models = createModelRegistry(ctx);
   const gpu = createGpuManager(ctx);
   ctx.gpu = gpu;
-  ctx.agent = createAgentManager(ctx);
+  ctx.agent = createAgentRouter(ctx);
   const scheduler = createScheduler(ctx);
   ctx.scheduler = scheduler;
 
@@ -138,6 +138,11 @@ export async function createCore(opts: CreateCoreOptions): Promise<CoreHandle> {
         scheduler.stop();
       } catch (err) {
         logErr('scheduler stop failed', err);
+      }
+      try {
+        ctx.agent.dispose?.();
+      } catch (err) {
+        logErr('agent engines dispose failed', err);
       }
       await bounded('extensions dispose', Promise.resolve().then(() => ext.dispose()), CLOSE_STEP_TIMEOUT_MS);
       await bounded('gpu dispose', Promise.resolve().then(() => gpu.dispose()), CLOSE_STEP_TIMEOUT_MS);

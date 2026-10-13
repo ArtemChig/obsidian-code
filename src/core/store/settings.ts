@@ -51,11 +51,15 @@ export function defaultSettings(): Settings {
     autoCompactPercent: 80,
     notifications: true,
     launchAtLogin: false,
+    engine: {
+      default: 'builtin',
+      claudeCode: { executable: 'auto', systemPrompt: 'lean', importUserClaudeConfig: true, extraEnv: {} },
+    },
   };
 }
 
 /** Keys whose values are replaced wholesale on update (maps / nullable objects), never deep-merged. */
-const REPLACE_KEYS = new Set(['defaultModel', 'mcpServers', 'hooks', 'env', 'headers', 'projectAllow']);
+const REPLACE_KEYS = new Set(['defaultModel', 'mcpServers', 'hooks', 'env', 'headers', 'projectAllow', 'extraEnv']);
 
 /**
  * Deep-merge `patch` into `base` (returns a new object). Plain objects merge recursively, arrays and primitives
@@ -126,6 +130,16 @@ export function validateSettings(input: unknown): Settings {
   m.autoCompactPercent = Math.min(98, Math.max(10, m.autoCompactPercent));
   m.maxToolOutputChars = Math.max(1000, Math.floor(m.maxToolOutputChars));
   if (!m.defaultCwd) m.defaultCwd = d.defaultCwd;
+  if (!['builtin', 'claude-code'].includes(m.engine.default)) m.engine.default = d.engine.default;
+  if (!['claude_code', 'lean'].includes(m.engine.claudeCode.systemPrompt)) m.engine.claudeCode.systemPrompt = d.engine.claudeCode.systemPrompt;
+  if (!m.engine.claudeCode.executable.trim()) m.engine.claudeCode.executable = 'auto';
+  const extraEnv: Record<string, string> = {};
+  if (isPlainObject(m.engine.claudeCode.extraEnv)) {
+    for (const [k, v] of Object.entries(m.engine.claudeCode.extraEnv)) {
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && typeof v === 'string') extraEnv[k] = v;
+    }
+  }
+  m.engine.claudeCode.extraEnv = extraEnv;
   return m;
 }
 

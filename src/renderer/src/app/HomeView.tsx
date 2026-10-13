@@ -3,7 +3,7 @@
 // sessions separated by sub-hairlines and a status column of hairline-separated blocks (reference .sblk / .kv).
 import { ArrowRight, ArrowUp, Box, CalendarClock, Check, ChevronDown, Cpu, Folder, MessageSquare, Power, RefreshCw } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { ModelRef, SessionSummary } from '@shared/types';
+import type { EngineId, ModelRef, SessionSummary } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
 import { EmptyState, ProgressBar, StatusDot } from '@renderer/components/ui/feedback';
@@ -22,6 +22,7 @@ import { Tooltip } from '@renderer/components/ui/tooltip';
 import { pickFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { basename, formatMoney, formatPerHour, pluralize, shortModelName, shortenPath, sameModel } from '@renderer/lib/format';
+import { EngineMenuItems } from '@renderer/features/chat/composer/EngineSelector';
 import { ModelNotice } from '@renderer/features/chat/composer/ModelNotice';
 import { SyncFailed, useSyncError } from '@renderer/features/settings/core-missing';
 import { createSession, navigate, openSession, refreshModels, sendMessage } from '@renderer/state/actions';
@@ -30,6 +31,7 @@ import { useModels } from '@renderer/state/models';
 import { findModel, useModelGroups, useRecentSessions, useWaitingSessionIds } from '@renderer/state/selectors';
 import { useSessions } from '@renderer/state/sessions';
 import { useSettings } from '@renderer/state/settings';
+import { engineLabel, useEngines } from '@renderer/state/engines';
 import { GPU_PHASE_LABEL, gpuPrimaryAction, gpuTone, useLiveGpuCost, useModelLabel } from './GpuWidget';
 
 function greeting(d = new Date()): string {
@@ -89,21 +91,44 @@ function ModelChip({ value, onChange }: { value: ModelRef | null; onChange: (m: 
   );
 }
 
+function EngineChip({ value, onChange }: { value: EngineId; onChange: (e: EngineId) => void }) {
+  const engines = useEngines();
+  return (
+    <DropdownMenu>
+      <Tooltip content="Agent engine for the new session">
+        <DropdownMenuTrigger asChild>
+          <button type="button" data-testid="home-engine" data-engine={value} className={CHIP}>
+            <span className="font-mono text-[9px] font-medium uppercase tracking-[0.13em] text-t3">Engine</span>
+            <span className="truncate">{engineLabel(value)}</span>
+            <ChevronDown size={11} aria-hidden className="shrink-0 text-t3" />
+          </button>
+        </DropdownMenuTrigger>
+      </Tooltip>
+      <DropdownMenuContent className="w-[340px]">
+        <DropdownMenuLabel>Agent engine</DropdownMenuLabel>
+        <EngineMenuItems value={value} engines={engines} onPick={onChange} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function QuickStart() {
   const settings = useSettings((s) => s.settings);
   const homeDir = useSettings((s) => s.system?.homeDir ?? null);
   const [text, setText] = useState('');
   const [cwd, setCwd] = useState<string | null>(null);
   const [model, setModel] = useState<ModelRef | null>(null);
+  const [engine, setEngine] = useState<EngineId | null>(null);
   const [busy, setBusy] = useState(false);
   const folder = cwd ?? settings?.defaultCwd ?? '';
   const chosenModel = model ?? settings?.defaultModel ?? null;
+  const chosenEngine: EngineId = engine ?? settings?.engine?.default ?? 'builtin';
 
   const start = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const s = await createSession({ cwd: folder || undefined, model: chosenModel });
+      const s = await createSession({ cwd: folder || undefined, model: chosenModel, engine: chosenEngine });
       if (s && text.trim()) {
         await sendMessage(s.id, text.trim());
         setText('');
@@ -149,6 +174,8 @@ function QuickStart() {
           </Tooltip>
           <span aria-hidden className="h-3 w-px bg-rule" />
           <ModelChip value={chosenModel} onChange={setModel} />
+          <span aria-hidden className="h-3 w-px bg-rule" />
+          <EngineChip value={chosenEngine} onChange={setEngine} />
           <span className="flex-1" />
           <span className="mr-3 hidden font-mono text-[9px] uppercase tracking-[0.12em] text-t3 @min-[780px]:inline">
             <span className="text-t2">Enter</span> start · <span className="text-t2">Shift+Enter</span> new line

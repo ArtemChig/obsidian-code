@@ -1,0 +1,120 @@
+[
+  {
+    "hook": "PreToolUse",
+    "inp": {
+      "session_id": "bbbbc90c-0dc5-47e6-9a18-a14ab59c6286",
+      "transcript_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-spike-u9tqnA\\projects\\C--Users-user-AppData-Local-Temp-oc-claude-work-yOV9sz\\bbbbc90c-0dc5-47e6-9a18-a14ab59c6286.jsonl",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz",
+      "prompt_id": "aaf67f9c-8e97-4664-8cd0-86c1d6af30a2",
+      "permission_mode": "default",
+      "effort": {
+        "level": "high"
+      },
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Read",
+      "tool_input": {
+        "file_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz\\a.txt"
+      },
+      "tool_use_id": "SyNnUxDFP911eaK1eWemG48ezvjI2yQJ"
+    }
+  },
+  {
+    "hook": "PostToolUse",
+    "inp": {
+      "session_id": "bbbbc90c-0dc5-47e6-9a18-a14ab59c6286",
+      "transcript_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-spike-u9tqnA\\projects\\C--Users-user-AppData-Local-Temp-oc-claude-work-yOV9sz\\bbbbc90c-0dc5-47e6-9a18-a14ab59c6286.jsonl",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz",
+      "prompt_id": "aaf67f9c-8e97-4664-8cd0-86c1d6af30a2",
+      "permission_mode": "default",
+      "effort": {
+        "level": "high"
+      },
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Read",
+      "tool_input": {
+        "file_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz\\a.txt"
+      },
+      "tool_response": {
+        "type": "text",
+        "file": {
+          "filePath": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz\\a.txt",
+          "content": "alpha beta\n",
+          "numLines": 2,
+          "startLine": 1,
+          "totalLines": 2
+        }
+      },
+      "tool_use_id": "SyNnUxDFP911eaK1eWemG48ezvjI2yQJ",
+      "duration_ms": 81
+    }
+  },
+  {
+    "hook": "PreToolUse",
+    "inp": {
+      "session_id": "bbbbc90c-0dc5-47e6-9a18-a14ab59c6286",
+      "transcript_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-spike-u9tqnA\\projects\\C--Users-user-AppData-Local-Temp-oc-claude-work-yOV9sz\\bbbbc90c-0dc5-47e6-9a18-a14ab59c6286.jsonl",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz",
+      "prompt_id": "aaf67f9c-8e97-4664-8cd0-86c1d6af30a2",
+      "permission_mode": "default",
+      "effort": {
+        "level": "high"
+      },
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Write",
+      "tool_input": {
+        "file_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz\\b.txt",
+        "content": "ALPHA BETA\n"
+      },
+      "tool_use_id": "iYqmwpyYj3NWeZsgzepGvDagesFPNVD3"
+    }
+  },
+  {
+    "toolName": "Write",
+    "input": {
+      "file_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz\\b.txt",
+      "content": "ALPHA BETA\n"
+    },
+    "opts": {
+      "suggestions": [
+        {
+          "type": "setMode",
+          "mode": "acceptEdits",
+          "destination": "session"
+        }
+      ],
+      "displayName": "Write",
+      "description": "b.txt",
+      "toolUseID": "iYqmwpyYj3NWeZsgzepGvDagesFPNVD3",
+      "requestId": "60d69191-c339-4c49-bc76-8c975be567e0"
+    }
+  },
+  {
+    "hook": "PostToolUse",
+    "inp": {
+      "session_id": "bbbbc90c-0dc5-47e6-9a18-a14ab59c6286",
+      "transcript_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-spike-u9tqnA\\projects\\C--Users-user-AppData-Local-Temp-oc-claude-work-yOV9sz\\bbbbc90c-0dc5-47e6-9a18-a14ab59c6286.jsonl",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz",
+      "prompt_id": "aaf67f9c-8e97-4664-8cd0-86c1d6af30a2",
+      "permission_mode": "default",
+      "effort": {
+        "level": "high"
+      },
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Write",
+      "tool_input": {
+        "file_path": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz\\b.txt",
+        "content": "ALPHA BETA\n"
+      },
+      "tool_response": {
+        "type": "create",
+        "filePath": "C:\\Users\\user\\AppData\\Local\\Temp\\oc-claude-work-yOV9sz\\b.txt",
+        "content": "ALPHA BETA\n",
+        "structuredPatch": [],
+        "originalFile": null,
+        "userModified": false
+      },
+      "tool_use_id": "iYqmwpyYj3NWeZsgzepGvDagesFPNVD3",
+      "duration_ms": 72
+    }
+  }
+]

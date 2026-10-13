@@ -143,6 +143,9 @@ Scripts: `dev` (electron-vite dev) · `dev:web` (vite renderer only) · `core` (
 * Mock LLM server (`tests/fixtures/mock-llm/server.ts`): scripted SSE responses incl. reasoning_content, tool_calls
   (native and `<tool_call>` text form), usage; used by unit tests for the loop.
 
+### 4.1b Engines
+See §4.7: `ctx.agent` is the `EngineRouter`; each session runs on `builtin` (the loop above) or `claude-code`.
+
 ### 4.2 Tools (tools) — Claude Code parity, model-facing names exactly:
 `Read` (offset/limit, line numbers `cat -n` style, images → ToolResultPayload.images, PDFs → text if possible, notebooks),
 `Write`, `Edit` (old_string/new_string/replace_all, uniqueness check, read-before-edit), `MultiEdit`, `Glob`, `Grep`
@@ -249,10 +252,69 @@ See §5. Layout like the Claude Code desktop app:
 * **Settings view** (sections): Models & providers (local URL + test, custom endpoints CRUD + keys), Vast.ai (API key
   input → `secrets.set('vast.apiKey')`, Test key, budget, idle/heartbeat/max hours, clock-out on quit, image, profiles
   editor), Permissions (default mode, allow/deny rules), Web search provider + keys, MCP servers (JSON editor),
-  Hooks (JSON editor), Memory & Claude import toggle, Shell, Appearance (density), Notifications, Launch at login,
-  About (data dir, version).
+  Hooks (JSON editor), Engine (default engine, Claude Code executable / system prompt / config import / env; 4.7),
+  Memory & Claude import toggle, Shell, Appearance (density), Notifications, Launch at login,
+  About & updates (data dir, version, update state, release notes, update token; `RELEASING.md`).
 * Global: command palette (Ctrl+K) for navigation/actions, toasts for `notification` events, reconnecting banner when
   the WebSocket drops (auto-reconnect with backoff, refetch state), keyboard focus rings, no emoji icons (lucide only).
+
+### 4.7 Engines (src/core/engine) — a session runs on one agent harness
+Binding requirement (user): Claude Code's shell and all its functionality, but **every model call goes to the user's own
+local/uncensored model; zero Anthropic traffic**. Research, measurements and gotchas: `docs/research/claude-agent-sdk.md`;
+real-model results: `docs/e2e-real-results.md`.
+
+* **Contract.** `EngineId = 'builtin' | 'claude-code'`; `Session.engine` (missing = `builtin`); `settings.engine`
+  `{ default, claudeCode: { executable: 'auto'|path, systemPrompt: 'lean'|'claude_code', importUserClaudeConfig, extraEnv } }`;
+  RPC `engines.list`, `chat.setEngine` (idle sessions only; the transcript carries over), `sessions.create {engine}`,
+  `commands.list {sessionId}`. `ctx.agent` is the `EngineRouter` (`engine/index.ts`): every `AgentManager` call dispatches
+  by `session.engine`; `builtin` is the loop of §4.1, shown as "Obsidian". UI: engine selector in the composer, Settings →
+  Engine, Home quick start; `claude-code` sessions list Claude Code's own slash commands.
+* **Harness.** `claude-code` (`engine/claude-code/engine.ts`) runs one long-lived SDK query per active session
+  (`@anthropic-ai/claude-agent-sdk` 0.3.296 → the bundled native `claude.exe` = Claude Code 2.1.296, pinned, auto-update
+  off) in streaming-input mode; the app keeps its own queue (one turn at a time, queued messages stay withdrawable).
+  `translate.ts`/`display.ts` turn SDK messages into the existing CoreEvents and tool cards (`Agent` → `Task`,
+  `mcp__obsidian__*` → `WebSearch`/`ScheduleTask`/…); the UI is unchanged. Resume across restarts, rewind (checkpoints +
+  `resumeSessionAt` fork), engine switch (seeded with a transcript), interrupt, headless (scheduled) runs, session titles
+  and usage totals work as for `builtin`.
+* **Zero Anthropic traffic.** Claude Code gets `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>/r/<route>`: the **relay**
+  (`engine/shim.ts`, in the core) forwards only to the session's endpoint (local llama-server or Vast tunnel) and has no
+  other upstream, injects the endpoint API key (it never enters Claude Code's environment), maps model ids containing `/`
+  to an alias, adds `chat_template_kwargs.enable_thinking=false` when thinking is off, folds mid-conversation
+  `role:"system"` entries into the user turn (llama.cpp answers HTTP 500 otherwise), and repairs a tool call the model wrote as
+  plain text (`engine/recover.ts`: only a text block that starts with a tool-call opener is held back and, if it parses with
+  the shared fallback parser `llm/textToolCalls.ts`, replaced by `tool_use` blocks with `stop_reason: tool_use`). `engine/env.ts` strips every inherited
+  `ANTHROPIC_*`/`CLAUDE_CODE_*`/OAuth variable, sets an isolated `CLAUDE_CONFIG_DIR=<dataDir>/claude-code` and disables
+  telemetry, error reporting, feature flags, updates, claude.ai connectors, the marketplace, login/account commands and
+  WebFetch's api.anthropic.com preflight. Verification: the spike (31 model requests, all to the endpoint) and
+  `scripts/net-audit.ps1` (outbound TCP of the core's process tree during a run with a subagent and `/compact`: loopback
+  only; with a web scenario: only the sites the web tools fetched).
+* **Prompt.** `systemPrompt: 'lean'` (default) = Claude Code's tools/loop with the app's compact prompt (614 tokens, no
+  refusal or content-policy language); `'claude_code'` ("full") = Claude Code's preset (1,329 tokens, contains Anthropic's
+  refusal guidance). First turn ≈17.6k / ≈18.3k tokens: Claude Code's tool schemas (≈15k) dominate, so the choice is
+  behaviour, not speed. Cold first token 30–80 s on the local GPU, cached follow-ups 2–10 s.
+* **Tools and permissions.** Claude Code's own tools run unchanged, except: `WebSearch` is disallowed and replaced by the
+  in-process MCP server `obsidian` (`mcp.ts`: `web_search`, `schedule_task`, `list_scheduled_tasks`,
+  `delete_scheduled_task` run the app's ToolDefs and keep their result cards); session-only cron tools are off (the app's
+  persistent scheduler is used). Permissions use the app's rules (`decidePermission`, allow/deny, trusted folders,
+  protected paths) via `canUseTool` and a `PreToolUse` hook (which also snapshots edits for the Changes panel/rewind);
+  AskUserQuestion and ExitPlanMode use the existing question/plan requests. Plan mode denies every change with the
+  app's plan-mode message (never a prompt) except Claude Code's own plan file (`<config dir>/plans/*.md`), which is not
+  listed as a changed file. Subagents (`Agent`) default to `run_in_background:false` (one
+  request at a time on a single local GPU; the report returns as the tool result); an explicit choice is kept.
+* **Local-model details.** `/cost` output shows "local model, not billed" instead of Claude Code's guessed price; local
+  command output Claude Code re-emits after `/compact` is dropped; project `.claude` settings/hooks/skills load only for
+  trusted folders; `~/.claude` skills/agents/commands/CLAUDE.md are copied into the config dir (toggle), `settings.json`
+  and plugins never.
+* **Packaging.** The native binary is an optional dependency of the SDK (260 MB); electron-builder unpacks it
+  (`asarUnpack: node_modules/@anthropic-ai/claude-agent-sdk-*/**`) and `resolveClaudeExecutable` maps `app.asar` →
+  `app.asar.unpacked`. Fallbacks: the user's installed `claude`, or an explicit path (Settings → Engine).
+* **Status and limits.** Anthropic does not officially support non-Claude models behind Claude Code; open-weight models
+  follow its conventions less reliably (they may skip TodoWrite or ignore a tool), which is model variance, not an engine
+  fault. Needs an endpoint with `/v1/messages` (probed once; clear error otherwise). No prefill progress bar for these
+  turns; Claude Code's own file checkpointing is unused (the app's checkpoints do not see files changed by Bash).
+* **Tests.** `tests/unit/engine/*` (scripted fake SDK, translator on recorded real SDK streams, shim, env, setup),
+  `scripts/e2e-real.ts --engine claude-code` (real model: scenarios 1, 2, 3, 5, 7, 8, 9, 11, 12, 14),
+  `tests/e2e/app-claude-code.spec.ts` (built and packaged Electron app).
 
 ## 5. Design system — "Obsidian" (M13)
 

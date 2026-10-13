@@ -155,7 +155,7 @@ describe('GPU-4: parked instances expire while the app keeps running', () => {
     await h.manager.start();
     expect(h.manager.status().parked?.instanceId).toBe(779);
     offset = 4 * 86_400_000;
-    // the DELETE lands before the ledger closes the parked record: wait for both
+    // the DELETE lands before the ledger closes the parked record (the destroy is verified by a follow-up GET): wait for both
     await h.waitFor(() => !h!.vast.instances.has(779) && !h!.manager.status().parked, 4000, 'parked expiry while running');
     expect(h.manager.status().parked).toBeUndefined();
     expect(h.notifications.some((n) => n.title === 'Parked GPU destroyed')).toBe(true);
@@ -234,7 +234,7 @@ describe('GPU-7: an ambiguous create that cannot be reconciled does not rent ano
     h.vast.fail.listAlwaysFails = false;
     await h.waitFor(() => h!.vast.instances.size === 0, 6000, 'background reconcile destroyed it');
     // The mock drops the instance when it receives the DELETE; the manager writes the history record only after the
-    // response comes back, so wait for it instead of asserting in the same tick (this raced under load).
+    // destroy is verified (a follow-up GET), so wait for it instead of asserting in the same tick (this raced under load).
     await h.waitFor(() => h!.manager.history().some((r) => r.endReason === 'error'), 6000, 'history records the failed rental');
   });
 });

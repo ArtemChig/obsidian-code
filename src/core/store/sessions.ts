@@ -41,6 +41,7 @@ export function toSummary(s: Session | SessionSummary): SessionSummary {
   if (s.parentToolUseId !== undefined) summary.parentToolUseId = s.parentToolUseId;
   if (s.scheduleId !== undefined) summary.scheduleId = s.scheduleId;
   if (s.pinned !== undefined) summary.pinned = s.pinned;
+  if (s.engine !== undefined) summary.engine = s.engine;
   return summary;
 }
 

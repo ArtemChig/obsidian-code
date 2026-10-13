@@ -172,3 +172,86 @@ Not changed (documented trade-offs):
 * `scripts/e2e-real.ts`: the harness (recording proxy, WS client, auto-responders, 15 scenarios, `--mock` fallback).
 * `scripts/measure-prompt.ts`: prompt-size breakdown via `/apply-template` + `/tokenize`.
 * Raw JSON for the final runs (per-request `timings`, details) is written to `<tmp>/oc-e2e-real-*/results.json` or `--out`.
+
+## Claude Code engine (`--engine claude-code`)
+
+Measured on 2026-10-13 against the same server and model, with `@anthropic-ai/claude-agent-sdk` 0.3.296 (Claude Code
+2.1.296), lean prompt, thinking off, `~/.claude` import off.
+
+```bash
+npx tsx scripts/e2e-real.ts --engine claude-code 1 2 3 5 7 8 9 11 12 14   # scenarios, one at a time
+npx tsx scripts/e2e-real.ts --engine claude-code --sysprompt full 1        # Claude Code's own prompt instead of lean
+npx tsx scripts/e2e-real.ts --engine claude-code --dump --out r.json 7     # also writes r.json.requests.json (bodies + text)
+powershell -NoProfile -File scripts/net-audit.ps1 -Out audit.jsonl         # run next to it: outbound TCP of the process tree
+```
+
+The recording proxy now also reads `/v1/messages` (Anthropic SSE: usage, stop reason, first token); the timings
+below come from there. The proxy sits in front of the server, upstream of the relay, so it sees the stream as llama.cpp
+produced it. Maximum concurrent model requests: **1** in every run.
+
+### Results (final sweep, all scenarios in one run)
+
+| # | scenario | result | requests | tools | prompt / completion tokens | wall s |
+|---|---|---|---|---|---|---|
+| 1 | simple reply + title | pass | 2 | – | 17,702 / 8 | 105 (cold: 17,649 tokens, first token 79.7 s) |
+| 2 | read + summarise | pass | 2 | Read | 35,497 / 93 | 14 |
+| 3 | edit a file | pass | 3 | Read, Edit | 53,621 / 240 | 116 |
+| 5 | `node -v` in the shell | pass | 2 | Bash | 35,410 / 59 | 20 |
+| 7 | todo list | pass | 6 | TodoWrite ×3, Write ×2, Bash | 109,653 / 611 | 60 |
+| 8 | ask a question | pass | 3 | AskUserQuestion, Write | 53,492 / 168 | 20 |
+| 9 | subagent (Explore) | pass | 5 | Agent (child: Grep, Glob, Read) | 68,766 / 481 | 45 |
+| 11 | plan mode | pass | 7 | Glob, Read, Write (plan file), ExitPlanMode, Edit, Bash | 137,653 / 803 | 76 |
+| 12 | schedule via the app's MCP tool | **fail** | 3 | schedule_task ×2 | 53,648 / 262 | 26 |
+| 14 | `/cost`, `/compact`, facts survive | pass | 5 | – | 89,544 / 525 | 71 |
+
+Scenario 12 failed because the model called `schedule_task` a second time right after a successful result (two
+identical schedules). Of 8 repeats, 7 passed (the other miss: the model chose `59 8 * * 1-5`). Scenario 7 (todo list) is
+model-dependent: in about half of all runs the model does the work without calling TodoWrite although it was asked to;
+it passed in 4 of the 5 runs made with the final code (3 of 6 with an experimental stronger prompt line, which was not kept).
+After their fixes, scenario 9 passed 5 of 5 runs and scenario 11 passed 5 of 5; 1, 2, 3, 5, 8 and 14 passed in the final sweep.
+Prompt tokens add up over requests; most of each request is the cached prefix.
+
+### Prompt size and latency
+
+* First turn **17.6–17.7k tokens**: tool definitions ≈15k (Claude Code's 22 + 4 `obsidian` MCP tools), context block ≈2k,
+  system prompt 614 (lean) / 1,329 (full) → first turn ≈ 17.6k / ≈ 18.3k.
+* The full Claude Code prompt (`--sysprompt full`, scenarios 1, 2, 5: all pass) is 18.4k tokens on the first turn and
+  starts uncached for every new folder (first token 41 s each time); lean keeps the tool block cached across sessions.
+* Cold first token (nothing cached): 30–80 s on the shared local GPU. With the previous session's prefix still in the
+  server's cache (15.6k tokens): **4–10 s**. Follow-up requests of a turn: 2–6 s (only the new tokens are processed).
+* A subagent starts with its own prompt (different tools and system prompt): 1.7–10.8k uncached tokens, 7–50 s to its first token.
+* A WebFetch summary was one 30k-token request (140 s cold).
+
+### Zero Anthropic traffic (`scripts/net-audit.ps1`)
+
+The script reads `netstat -ano -p tcp` every 0.3 s and keeps every connection owned by the core process or any of its
+descendants (claude.exe, the shells it starts, git, ...), one row per (process, remote address, port).
+
+| Run | Duration | Samples | Processes in the tree | Remote endpoints |
+|---|---|---|---|---|
+| scenarios 9 (subagent) + 14 (`/cost`, `/compact`) | 159 s | 223 | 14 | **none** |
+| the whole final sweep above | 566 s | 777 | 80 | **none** |
+| scenario 10 (WebSearch + WebFetch, as a positive control) | 214 s | – | – | 2, both deliberate |
+
+Only loopback appears: `claude.exe` has exactly one peer, the relay's port on 127.0.0.1; the core talks to the relay,
+the recording proxy and `llama-server` on :8080. In the web scenario the two remote endpoints were
+`node.exe → 52.149.246.39:443` (duckduckgo.com, the app's own `web_search` tool) and `claude.exe → 208.80.154.224:443`
+(en.wikipedia.org, the page WebFetch was asked to read); `api.anthropic.com` and `claude.ai` (160.79.104.10) never
+appeared. The WebFetch page summary was generated by the local model. All 38 model requests of the final sweep went to
+the local model (`qwen3.6-35b-a3b-uncensored`; 37 via `/v1/messages`, the title via `/v1/chat/completions`). Limits:
+TCP only, and a connection that opens and closes between two samples is missed; the earlier spike used a logging
+`HTTPS_PROXY` for that (`docs/research/claude-agent-sdk.md`).
+
+### Bugs the real model exposed (fixed, each with a regression test in `tests/unit/engine`)
+
+1. Claude Code 2.1.296 runs subagents in the background by default: two model requests at once on one GPU and a model that
+   polled with `SendMessage` (221 s). The `PreToolUse` hook now defaults `run_in_background` to false (45–120 s).
+2. In plan mode the engine asked the user instead of denying a change, so one click let the model edit files before
+   `ExitPlanMode`; plan-mode denials are enforced now (only Claude Code's own plan file is writable).
+3. The plan file (`<config dir>/plans/*.md`) was listed in the Changes panel.
+4. `/compact` re-emitted the earlier `/cost` output as a second message.
+5. `/cost` showed a dollar price for a local model; it now says "local model, not billed".
+6. A tool call the model wrote as text (`<TodoWrite><parameter=todos>…`) ended the turn; the relay now repairs it
+   (`engine/recover.ts`; the fallback parser also accepts the tool-name tag).
+7. Harness/test: `rmSync` of the sample project could fail while Windows still held the folder; the parked-GPU expiry test
+   asserted before the ledger was updated (race under load).

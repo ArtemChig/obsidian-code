@@ -1,6 +1,6 @@
 // Real-model end-to-end scenarios against the user's LOCAL llama-server (SPEC §6 "Real-model E2E").
 //
-//   npx tsx scripts/e2e-real.ts [scenario...] [--thinking] [--base http://127.0.0.1:8080] [--out results.json] [--keep]
+//   npx tsx scripts/e2e-real.ts [scenario...] [--engine builtin|claude-code] [--thinking] [--base http://127.0.0.1:8080] [--out results.json] [--keep]
 //
 // Scenarios are numbers or names (e.g. `3 edit 13`); none = all. Runs the core standalone (createCore) with a temp data
 // dir, a temp sample project per scenario, and talks to it over WebSocket exactly like the UI. Permission prompts are
@@ -24,7 +24,7 @@ import { createCore, type CoreHandle } from '../src/core/index';
 import { lastUserText, startMockLlm, type MockLlm, type MockRequest, type MockTurn } from '../tests/fixtures/mock-llm/server';
 import type { NativeBridge } from '../src/core/contracts';
 import type { CoreEventName, CoreEvents, RpcMethod, RpcParams, RpcResult } from '../src/shared/protocol';
-import type { Message, PermissionMode, Session, SessionSummary, ToolUseBlock } from '../src/shared/types';
+import type { EngineId, Message, PermissionMode, Session, SessionSummary, ToolUseBlock } from '../src/shared/types';
 
 // ───────────────────────────── args ─────────────────────────────
 
@@ -37,12 +37,19 @@ function opt(name: string): string | undefined {
 const BASE = (opt('base') ?? 'http://127.0.0.1:8080').replace(/\/+$/, '');
 const THINKING = flag('thinking');
 const KEEP = flag('keep');
+/** Write every recorded model request body next to --out (<out>.requests.json) for debugging. */
+const DUMP = flag('dump');
+/** claude-code engine system prompt: 'lean' (default, the app's compact prompt) or 'full' (Claude Code's own preset). */
+const SYSPROMPT = opt('sysprompt') === 'full' ? 'claude_code' : 'lean';
 /** Use the user's real ~/.claude memory + skills (importClaudeConfig) to measure the real-life prompt size. */
 const USER_CONFIG = flag('user-config');
 const OUT = opt('out');
+/** Engine for the scenario sessions (sessions.create {engine}); default = the app default (builtin). */
+const ENGINE = opt('engine');
+if (ENGINE && ENGINE !== 'builtin' && ENGINE !== 'claude-code') { console.error(`--engine must be builtin or claude-code (got ${ENGINE})`); process.exit(2); }
 /** Run the harness against tests/fixtures/mock-llm instead of the real server (self-check). */
 const MOCK = flag('mock');
-const optValues = new Set(['--base', '--out'].map((f) => opt(f.slice(2))).filter((v): v is string => !!v));
+const optValues = new Set(['--base', '--out', '--engine', '--sysprompt'].map((f) => opt(f.slice(2))).filter((v): v is string => !!v));
 const selectors = argv.filter((a) => !a.startsWith('--') && !optValues.has(a));
 
 // ───────────────────────────── recording proxy ─────────────────────────────
@@ -64,6 +71,10 @@ interface ProxyRecord {
   /** Raw `<tool_call>` / `<function=` text seen in content deltas (template parse failure → fallback parser). */
   textToolCallLeak?: boolean;
   nativeToolCalls: number;
+  /** Anthropic Messages request (claude-code engine); body.system / body.messages follow that schema. */
+  anthropic?: boolean;
+  /** First 1500 chars of generated text (kept for --dump / failure analysis). */
+  text?: string;
 }
 
 interface Proxy { url: string; records: ProxyRecord[]; active(): number; maxActive(): number; close(): Promise<void> }
@@ -78,14 +89,15 @@ async function startProxy(target: string): Promise<Proxy> {
       const chunks: Buffer[] = [];
       for await (const c of req) chunks.push(c as Buffer);
       const raw = Buffer.concat(chunks);
-      const isChat = (req.url ?? '').startsWith('/v1/chat/completions');
+      // OpenAI-style chat (builtin engine) and Anthropic Messages (claude-code engine, via the core's shim)
+      const isChat = (req.url ?? '').startsWith('/v1/chat/completions') || /^\/v1\/messages(\?|$)/.test(req.url ?? '');
       const ctrl = new AbortController();
       let finished = false;
       let rec: ProxyRecord | undefined;
       if (isChat) {
         let body: ProxyRecord['body'] = {};
         try { body = JSON.parse(raw.toString('utf8')) as ProxyRecord['body']; } catch { /* keep {} */ }
-        rec = { seq: ++seq, startedAt: Date.now(), body, nativeToolCalls: 0 };
+        rec = { seq: ++seq, startedAt: Date.now(), body, nativeToolCalls: 0, anthropic: (req.url ?? '').startsWith('/v1/messages') };
         records.push(rec);
         active++;
         maxActive = Math.max(maxActive, active);
@@ -133,6 +145,30 @@ async function startProxy(target: string): Promise<Proxy> {
               try { j = JSON.parse(data) as Record<string, unknown>; } catch { continue; }
               if (j.timings) rec.timings = j.timings as ProxyRecord['timings'];
               if (j.usage) rec.usage = j.usage as ProxyRecord['usage'];
+              if (rec.anthropic) {
+                // Anthropic SSE: message_start{message.usage} · content_block_start/delta · message_delta{delta.stop_reason, usage}
+                const type = String(j.type ?? '');
+                const mu = (j.message as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number } } | undefined)?.usage;
+                if (type === 'message_start' && mu) {
+                  rec.timings = { ...rec.timings, prompt_n: mu.input_tokens ?? rec.timings?.prompt_n, cache_n: mu.cache_read_input_tokens ?? rec.timings?.cache_n };
+                }
+                const blk = j.content_block as { type?: string } | undefined;
+                const dl = j.delta as { type?: string; text?: string; thinking?: string; stop_reason?: string } | undefined;
+                if ((type === 'content_block_start' && blk) || (type === 'content_block_delta' && dl && (dl.text || dl.thinking))) {
+                  if (rec.firstTokenMs === undefined) rec.firstTokenMs = Date.now() - rec.startedAt;
+                }
+                if (type === 'content_block_start' && blk?.type === 'tool_use') rec.nativeToolCalls++;
+                if (type === 'content_block_delta' && dl?.type === 'text_delta') {
+                  if ((rec.text?.length ?? 0) < 1500) rec.text = (rec.text ?? '') + (dl.text ?? '');
+                  if (/<tool_call>|<function=|<parameter=/.test(dl.text ?? '')) rec.textToolCallLeak = true;
+                }
+                if (type === 'message_delta') {
+                  if (dl?.stop_reason) rec.finishReason = dl.stop_reason;
+                  const ou = (j.usage as { output_tokens?: number; input_tokens?: number; cache_read_input_tokens?: number } | undefined);
+                  if (ou) rec.timings = { ...rec.timings, predicted_n: ou.output_tokens ?? rec.timings?.predicted_n, prompt_n: ou.input_tokens ?? rec.timings?.prompt_n, cache_n: ou.cache_read_input_tokens ?? rec.timings?.cache_n };
+                }
+                continue;
+              }
               const choice = (j.choices as { delta?: Record<string, unknown>; finish_reason?: string }[] | undefined)?.[0];
               if (choice?.finish_reason) rec.finishReason = choice.finish_reason;
               const d = choice?.delta;
@@ -294,6 +330,8 @@ class H {
   readonly failures: string[] = [];
   readonly sessions: string[] = [];
   readonly errors: string[] = [];
+  /** Permission prompts the harness auto-answered (tool + short input), for diagnosing plan/permission behaviour. */
+  readonly asked: string[] = [];
   project = '';
   reqStart = 0;
   private offs: (() => void)[] = [];
@@ -305,6 +343,9 @@ class H {
     rmSync(this.project, { recursive: true, force: true });
     makeProject(this.project);
     this.reqStart = this.proxy.records.length;
+    this.offs.push(this.client.on('permission.requested', (p) => {
+      if (this.sessions.includes(p.sessionId)) this.asked.push(`${p.toolName} ${clip(JSON.stringify(p.input), 90)}`);
+    }));
     this.offs.push(this.client.on('error', (e) => {
       if (!e.sessionId || this.sessions.includes(e.sessionId)) this.errors.push(e.message);
     }));
@@ -327,7 +368,7 @@ class H {
 
   /** A fixed title skips the title-generation request (keeps us at one request at a time); autoTitle keeps it. */
   async newSession(opts: { permissionMode?: PermissionMode; thinking?: boolean; autoTitle?: boolean } = {}): Promise<SessionSummary> {
-    const s = await this.client.rpc('sessions.create', { cwd: this.project, title: opts.autoTitle ? undefined : `e2e ${this.scenarioId}`, permissionMode: opts.permissionMode });
+    const s = await this.client.rpc('sessions.create', { cwd: this.project, title: opts.autoTitle ? undefined : `e2e ${this.scenarioId}`, permissionMode: opts.permissionMode, engine: ENGINE as EngineId | undefined });
     this.sessions.push(s.id);
     if (opts.thinking !== undefined && opts.thinking !== s.thinking) await this.client.rpc('chat.setThinking', { sessionId: s.id, thinking: opts.thinking });
     return s;
@@ -563,7 +604,9 @@ const scenarios: Scenario[] = [
       const exitIdx = blocks.findIndex((b) => b.name === 'ExitPlanMode' && b.status === 'done');
       h.check(exitIdx >= 0, `ExitPlanMode called (${blocks.map((b) => `${b.name}:${b.status}`).join(',')})`);
       h.check(!!planSeen.trim(), `plan presented (${clip(planSeen, 80)})`);
-      const earlyEdits = blocks.slice(0, Math.max(0, exitIdx)).filter((b) => ['Edit', 'Write', 'MultiEdit'].includes(b.name) && b.status === 'done');
+      // Claude Code writes the plan itself to <config dir>/plans/*.md while planning: that file is allowed in plan mode
+      const isPlanFile = (b: ToolUseBlock) => /[\\/]plans[\\/][^\\/]+\.md$/i.test(String(b.input.file_path ?? ''));
+      const earlyEdits = blocks.slice(0, Math.max(0, exitIdx)).filter((b) => ['Edit', 'Write', 'MultiEdit'].includes(b.name) && b.status === 'done' && !(ENGINE === 'claude-code' && isPlanFile(b)));
       h.check(earlyEdits.length === 0, 'no edits executed before approval');
       h.check(s.permissionMode === 'acceptEdits', `mode switched to acceptEdits (is ${s.permissionMode})`);
       let out = '';
@@ -632,7 +675,11 @@ const scenarios: Scenario[] = [
       await h.send(s0.id, 'My favourite number is 7. Reply with just OK.');
       let s = await h.send(s0.id, '/cost');
       const cost = textOf(s.messages.at(-1));
-      h.check(Number(/Requests:\s*(\d+)/.exec(cost)?.[1] ?? 0) >= 3 && /Input tokens:/.test(cost), `/cost reports usage (${clip(cost, 120)})`);
+      // builtin: "Requests: n / Input tokens: …"; Claude Code's own /cost: "Total cost: … Usage by model: … N requests" (local model: not billed)
+      const costOk = ENGINE === 'claude-code'
+        ? /Total cost:\s+\$0\.00 \(local model, not billed\)/.test(cost) && /Usage by model:/.test(cost) && !/unknown models/.test(cost)
+        : Number(/Requests:\s*(\d+)/.exec(cost)?.[1] ?? 0) >= 3 && /Input tokens:/.test(cost);
+      h.check(costOk, `/cost reports usage (${clip(cost, 120)})`);
       s = await h.send(s0.id, '/compact');
       const echo = textOf(s.messages.at(-1));
       h.check(/compacted/i.test(echo), `/compact ran (${clip(echo, 80)})`);
@@ -698,6 +745,11 @@ async function runScenario(sc: Scenario, client: CoreClient, proxy: Proxy, root:
       status = 'error';
       h.errors.push(e instanceof Error ? e.message : String(e));
     }
+  }
+  if (h.asked.length) h.note(`permission prompts answered: ${h.asked.join(' | ')}`);
+  if (status !== 'pass') {
+    const main = await h.get(h.sessions[0] ?? '').catch(() => undefined);
+    if (main) h.note(`final assistant text: "${clip(finalText(main), 300)}" (session status ${main.status})`);
   }
   for (const id of h.sessions) await client.rpc('chat.interrupt', { sessionId: id }).catch(() => undefined);
   h.teardown();
@@ -781,6 +833,8 @@ async function main(): Promise<number> {
     defaultPermissionMode: 'default',
     thinkingByDefault: THINKING,
     importClaudeConfig: USER_CONFIG,
+    // the claude-code engine copies ~/.claude skills/agents/commands/CLAUDE.md by default: off here for reproducible runs
+    engine: { default: 'builtin', claudeCode: { systemPrompt: SYSPROMPT, importUserClaudeConfig: USER_CONFIG } },
     defaultCwd: root,
     notifications: false,
   }, null, 2));
@@ -809,7 +863,7 @@ async function main(): Promise<number> {
       if (!modelId) await sleep(500);
     }
     if (!modelId) throw new Error('local model never appeared in models.list');
-    console.log(`model: ${modelId} · thinking ${THINKING ? 'on' : 'off'} · temp dir ${root}`);
+    console.log(`engine: ${ENGINE ?? 'default'} · model: ${modelId} · thinking ${THINKING ? 'on' : 'off'} · temp dir ${root}`);
 
     for (const sc of chosen) {
       process.stdout.write(`▶ ${sc.id} ${sc.name} … `);
@@ -831,6 +885,7 @@ async function main(): Promise<number> {
   const firstAgent = proxy.records.find((r) => (r.body.tools?.length ?? 0) > 0);
   const summary = {
     server: mock ? `mock-llm (${mock.url})` : BASE,
+    engine: ENGINE ?? 'default',
     thinking: THINKING,
     maxConcurrentRequests: proxy.maxActive(),
     userConfig: USER_CONFIG,
@@ -853,9 +908,10 @@ async function main(): Promise<number> {
   if (summary.firstTurn) console.log(`first turn: ${summary.firstTurn.promptTokens} prompt tokens, first token after ${summary.firstTurn.firstTokenMs} ms`);
   const out = OUT ?? path.join(root, 'results.json');
   writeFileSync(out, JSON.stringify(summary, null, 2));
+  if (DUMP) writeFileSync(`${out}.requests.json`, JSON.stringify(proxy.records.map((r) => ({ seq: r.seq, anthropic: r.anthropic, finish: r.finishReason, timings: r.timings, text: r.text, body: r.body })), null, 1));
   console.log(`results: ${out}`);
   if (!KEEP && !OUT) { /* keep results.json; remove projects */ }
-  if (!KEEP) for (const sc of chosen) rmSync(path.join(root, `proj-${sc.id}`), { recursive: true, force: true });
+  if (!KEEP) for (const sc of chosen) { try { rmSync(path.join(root, `proj-${sc.id}`), { recursive: true, force: true, maxRetries: 5, retryDelay: 400 }); } catch { /* a just-killed child may still hold the dir on Windows */ } }
   if (down) return 3;
   return results.every((r) => r.status === 'pass' || r.status === 'skip') ? 0 : 1;
 }
