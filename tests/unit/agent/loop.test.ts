@@ -427,3 +427,52 @@ describe('agent loop', () => {
     expect(c2).toEqual([{ type: 'text', text: 'what is this' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } }]);
   });
 });
+
+describe('agent loop: thinking-only turns', () => {
+  it('auto-continues when the model ends a step with only reasoning (no answer, no tool call)', async () => {
+    h = await createHarness();
+    const s = h.createSession();
+    h.mock.enqueue(
+      { reasoning: 'Let me think hard about this and then... hm.' }, // thinking only — used to end the turn silently
+      { reasoning: 'OK now I will answer.', text: 'Here is the answer.' },
+    );
+    await h.agent.send(s.id, 'do it');
+    await h.waitIdle(s.id);
+    expect(chatRequests(h)).toHaveLength(2); // the loop re-prompted instead of stopping
+    const msgs = h.session(s.id).messages;
+    expect(msgs.at(-1)!.blocks.some((b) => b.type === 'text' && b.text.includes('Here is the answer.'))).toBe(true);
+    // the nudge is a hidden reminder, not a visible user turn
+    const reminders = msgs.filter((m) => m.role === 'user' && m.tag === 'hook');
+    expect(reminders).toHaveLength(1);
+    expect(h.session(s.id).status).toBe('idle');
+  });
+
+  it('recovers a tool call the model wrote inside its reasoning', async () => {
+    h = await createHarness();
+    await fs.writeFile(join(h.cwd, 'a.txt'), 'HELLO');
+    const s = h.createSession();
+    h.mock.enqueue(
+      { reasoning: `I should read the file. ${qwenXmlToolCall('Read', { file_path: 'a.txt' })}` }, // call is inside the thinking
+      { text: 'The file says HELLO.' },
+    );
+    await h.agent.send(s.id, 'read a.txt');
+    await h.waitIdle(s.id);
+    expect(tools(h, s.id).map((t) => t.name)).toEqual(['Read']);
+    const read = tools(h, s.id)[0]!;
+    expect(read.status).toBe('done');
+    expect(JSON.stringify(read.result)).toContain('HELLO');
+    expect(h.session(s.id).messages.at(-1)!.blocks.some((b) => b.type === 'text' && b.text.includes('HELLO'))).toBe(true);
+  });
+
+  it('a model that only ever thinks is stopped after a bounded number of continues', async () => {
+    h = await createHarness();
+    const s = h.createSession();
+    h.mock.setFallback({ reasoning: 'still thinking, no answer' }); // never produces text or a tool call
+    await h.agent.send(s.id, 'go');
+    await h.waitIdle(s.id, 15000);
+    // initial step + MAX_AUTO_CONTINUES (4) re-prompts = 5 model calls, then it gives up instead of looping forever
+    expect(chatRequests(h)).toHaveLength(5);
+    expect(h.session(s.id).status).toBe('idle');
+    expect(h.agent.isRunning(s.id)).toBe(false);
+  });
+});

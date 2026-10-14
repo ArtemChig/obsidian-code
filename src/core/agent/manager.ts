@@ -16,6 +16,7 @@ import type {
 } from '../../shared/types';
 import { isContextOverflow } from '../llm/errors';
 import type { ToolCallEvent } from '../llm/parser';
+import { parseTextToolCalls } from '../llm/textToolCalls';
 import { CheckpointStore, pathKey } from './checkpoints';
 import { BUILTIN_COMMANDS, INIT_PROMPT, isBuiltinCommand, parseSlashCommand } from './commands';
 import { isRealUserMessage, planCompaction, renderTranscript, SUMMARY_SYSTEM, summaryMessageText, summaryPrompt } from './compaction';
@@ -30,6 +31,14 @@ import {
 
 export const MAX_STEPS = 200;
 const MAX_STOP_HOOK_CONTINUES = 3;
+// A reasoning model sometimes emits a long thinking block and then stops (EOS) without any answer or tool call.
+// When that happens we nudge it to continue instead of ending the turn silently — bounded so a genuinely stuck
+// model can't loop forever.
+const MAX_AUTO_CONTINUES = 4;
+const CONTINUE_AFTER_THINKING_NOTE =
+  'You ended your turn with reasoning but produced no answer and called no tool. Continue now: either call a tool to make progress, or write your final answer to the user. Do not stop after thinking.';
+// Markup that signals the model wrote an actual tool call (not just mentioned a tool) inside its reasoning.
+const EMBEDDED_TOOL_CALL_RE = /<tool_call>|<function\s*=|<\|tool_call\|>|\barg_key\b/;
 const DEFAULT_MAX_TOOL_OUTPUT = 30_000;
 const DEFAULT_AUTO_COMPACT = 80;
 export const HEADLESS_NO_ANSWER = '(no answer — running unattended)';
@@ -85,6 +94,10 @@ interface StepResult { messageId: string; text: string; toolCalls: ToolCallEvent
 
 function textOfMessage(m: Message): string {
   return m.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('');
+}
+
+function thinkingOfMessage(m: Message): string {
+  return m.blocks.filter((b) => b.type === 'thinking').map((b) => (b as { text: string }).text).join('');
 }
 
 function clone<T>(v: T): T {
@@ -636,6 +649,7 @@ export class AgentManagerImpl implements AgentManager {
     const signal = rt.abort!.signal;
     let overflowRetried = false;
     let stopHookRuns = 0;
+    let autoContinues = 0;
     let finalText = '';
     let steps = 0;
     for (; steps < MAX_STEPS; steps++) {
@@ -669,6 +683,22 @@ export class AgentManagerImpl implements AgentManager {
       if (res.text) finalText = res.text;
       if (signal.aborted) return { ok: false, finalText, interrupted: true };
       if (!res.toolCalls.length) {
+        // The model may have written a real tool call inside its reasoning (some Qwen/GLM builds do this when they
+        // "decide" mid-thought). Recover and run it so the turn makes progress instead of ending.
+        const recovered = this.recoverToolCallsFromThinking(rt, res, specs);
+        if (recovered.length) {
+          const cont = await this.executeTools(rt, res.messageId, recovered, signal);
+          if (signal.aborted) return { ok: false, finalText, interrupted: true };
+          if (!cont || rt.stopAfterTools) return { ok: true, finalText };
+          continue;
+        }
+        // The model thought but produced no answer and called no tool — nudge it to continue instead of stopping
+        // silently (this is what the user otherwise has to do by typing "keep going"). Bounded by MAX_AUTO_CONTINUES.
+        if (!res.text.trim() && autoContinues < MAX_AUTO_CONTINUES) {
+          autoContinues++;
+          this.addReminder(rt.id, CONTINUE_AFTER_THINKING_NOTE);
+          continue;
+        }
         if (rt.depth === 0) {
           const h = await this.hook('Stop', { session_id: rt.id, stop_hook_active: stopHookRuns > 0, last_message: res.text }, s.cwd, signal);
           if (h.block && h.message && stopHookRuns < MAX_STOP_HOOK_CONTINUES) {
@@ -770,32 +800,7 @@ export class AgentManagerImpl implements AgentManager {
     }
     closeThinking();
 
-    // tool_use blocks (ids unique within the message)
-    const seen = new Set<string>();
-    for (const c of calls) {
-      let id = c.id || `call_${newId()}`;
-      while (seen.has(id)) id = `${id}_${seen.size}`;
-      seen.add(id);
-      c.id = id;
-      let input: Record<string, unknown> = {};
-      if (!c.error) {
-        try {
-          const parsed = JSON.parse(c.arguments || '{}');
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) input = parsed as Record<string, unknown>;
-          else c.error = 'Tool arguments must be a JSON object.';
-        } catch {
-          c.error = `Your tool call arguments were not valid JSON, so the call was NOT executed. Received: ${clipLine(c.arguments, 300)}`;
-        }
-      }
-      const block: ToolUseBlock = { type: 'tool_use', id, name: c.name, input, status: 'pending' };
-      const idx = this.mutate(rt.id, (s) => {
-        const m = this.findMessage(s, msg.id);
-        if (!m) return -1;
-        m.blocks.push(block);
-        return m.blocks.length - 1;
-      });
-      if (idx >= 0) this.emit('message.block', { sessionId: rt.id, messageId: msg.id, blockIndex: idx, block: clone(block) });
-    }
+    this.materializeToolCalls(rt.id, msg.id, calls);
 
     const usage = done?.usage;
     const meta: Message['meta'] = { model: model.ref.model, durationMs: Date.now() - started, promptTokens: usage?.promptTokens, completionTokens: usage?.completionTokens };
@@ -814,6 +819,54 @@ export class AgentManagerImpl implements AgentManager {
     this.emitSession(rt.id);
     const text = textOfMessage(this.findMessage(this.session(rt.id), msg.id) ?? msg);
     return { messageId: msg.id, text, toolCalls: calls, finishReason: done?.finishReason ?? 'stop' };
+  }
+
+  /** Append tool_use blocks for `calls` to the message and emit them. Mutates each call's id to be unique within the
+   *  message and flags invalid-JSON / non-object arguments with an error so they are reported, not executed. */
+  private materializeToolCalls(sessionId: string, messageId: string, calls: ToolCallEvent[]): void {
+    const seen = new Set<string>();
+    for (const b of this.findMessage(this.session(sessionId), messageId)?.blocks ?? []) {
+      if (b.type === 'tool_use') seen.add(b.id);
+    }
+    for (const c of calls) {
+      let id = c.id || `call_${newId()}`;
+      while (seen.has(id)) id = `${id}_${seen.size}`;
+      seen.add(id);
+      c.id = id;
+      let input: Record<string, unknown> = {};
+      if (!c.error) {
+        try {
+          const parsed = JSON.parse(c.arguments || '{}');
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) input = parsed as Record<string, unknown>;
+          else c.error = 'Tool arguments must be a JSON object.';
+        } catch {
+          c.error = `Your tool call arguments were not valid JSON, so the call was NOT executed. Received: ${clipLine(c.arguments, 300)}`;
+        }
+      }
+      const block: ToolUseBlock = { type: 'tool_use', id, name: c.name, input, status: 'pending' };
+      const idx = this.mutate(sessionId, (s) => {
+        const m = this.findMessage(s, messageId);
+        if (!m) return -1;
+        m.blocks.push(block);
+        return m.blocks.length - 1;
+      });
+      if (idx >= 0) this.emit('message.block', { sessionId, messageId, blockIndex: idx, block: clone(block) });
+    }
+  }
+
+  /** When a step ends with no tool calls and no answer, a model may have written a text-form tool call inside its
+   *  reasoning. Recover it (materializing blocks on the message) so the turn makes progress. Returns the recovered
+   *  calls, or an empty array when there is nothing to recover. */
+  private recoverToolCallsFromThinking(rt: Runtime, res: StepResult, specs: ChatToolSpec[]): ToolCallEvent[] {
+    if (res.toolCalls.length || res.text.trim()) return [];
+    const msg = this.findMessage(this.session(rt.id), res.messageId);
+    const thinking = msg ? thinkingOfMessage(msg) : '';
+    if (!thinking || !EMBEDDED_TOOL_CALL_RE.test(thinking)) return [];
+    const parsed = parseTextToolCalls(thinking, specs.length ? specs : undefined, () => `call_${newId()}`);
+    if (!parsed.calls.length) return [];
+    const calls: ToolCallEvent[] = parsed.calls.map((p) => ({ type: 'tool_call', id: p.id, name: p.name, arguments: p.arguments }));
+    this.materializeToolCalls(rt.id, res.messageId, calls);
+    return calls;
   }
 
   // ───────────────────────────── tools ─────────────────────────────

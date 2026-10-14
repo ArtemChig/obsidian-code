@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { normalizeUrl, webFetchTool } from '../../../src/core/tools/web-fetch';
-import { decodeDdgUrl, filterResults, parseDuckDuckGo, webSearchTool } from '../../../src/core/tools/web-search';
+import { decodeDdgUrl, filterResults, parseBing, parseDuckDuckGo, parseDuckDuckGoLite, webSearchTool } from '../../../src/core/tools/web-search';
 import { cleanupTempDirs, makeCtx, makeTempDir, OFFLINE } from './helpers';
 
 afterAll(cleanupTempDirs);
@@ -252,6 +252,19 @@ const DDG_HTML = `<html><body><div class="serp__results"><div id="links" class="
 <div class="result web-result"><h2 class="result__title"><a class="result__a" href="https://direct.example/page">Direct link</a></h2></div>
 </div></div></body></html>`;
 
+const LITE_HTML = `<html><body><table>
+<tr><td><a rel="nofollow" href="https://weather.example/orlando" class="result-link">Orlando Weather</a></td></tr>
+<tr><td class="result-snippet">Current conditions in Orlando, FL.</td></tr>
+<tr><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwttr.in%2FOrlando&amp;rut=z" class="result-link">wttr.in Orlando</a></td></tr>
+<tr><td class="result-snippet">Terminal weather.</td></tr>
+</table></body></html>`;
+
+const BING_HTML = `<html><body><ol id="b_results">
+<li class="b_algo"><h2><a href="https://www.weather.gov/mlb/">NWS Orlando</a></h2><div class="b_caption"><p>National Weather Service forecast.</p></div></li>
+<li class="b_algo"><h2><a href="https://wttr.in/Orlando">wttr.in</a></h2><div class="b_caption"><p>Weather for Orlando.</p></div></li>
+<li class="b_ad"><h2><a href="https://www.bing.com/ck/a?!&&u=aHR0cHM6Ly9hZC5leGFtcGxl">Ad</a></h2></li>
+</ol></body></html>`;
+
 describe('WebSearch (offline parsing and providers)', () => {
   it('parses DuckDuckGo HTML, decodes uddg redirects, skips ads', () => {
     const results = parseDuckDuckGo(DDG_HTML);
@@ -300,12 +313,51 @@ describe('WebSearch (offline parsing and providers)', () => {
     expect(filtered.content).not.toContain('docs.rs/crate');
   });
 
-  it('reports DuckDuckGo bot-detection clearly', async () => {
+  it('reports bot-detection clearly after every free engine fails', async () => {
     vi.stubGlobal('fetch', async () => new Response('<html><body><div class="anomaly-modal">unusual traffic</div></body></html>', { status: 202, headers: { 'content-type': 'text/html' } }));
     const r = await webSearchTool.run({ query: 'x' }, makeCtx(makeTempDir()));
     expect(r.isError).toBe(true);
-    expect(r.content).toContain('DuckDuckGo refused');
+    expect(r.content).toContain('every free search engine failed');
     expect(r.content).toContain('Settings');
+  });
+
+  it('falls back to DuckDuckGo Lite when the HTML endpoint resets the connection', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.startsWith('https://html.duckduckgo.com/')) throw Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNRESET' } });
+      if (u.startsWith('https://lite.duckduckgo.com/')) return new Response(LITE_HTML, { status: 200, headers: { 'content-type': 'text/html' } });
+      return new Response('', { status: 200 });
+    });
+    const r = await webSearchTool.run({ query: 'weather orlando' }, makeCtx(makeTempDir()));
+    expect(r.isError).toBeFalsy();
+    expect(r.content).toContain('(DuckDuckGo Lite)');
+    expect(r.content).toContain('[Orlando Weather](https://weather.example/orlando)');
+    // the HTML endpoint was retried once (reset) then Lite was tried
+    expect(calls.filter((c) => c.startsWith('https://html.duckduckgo.com/')).length).toBeGreaterThanOrEqual(2);
+    expect(calls.some((c) => c.startsWith('https://lite.duckduckgo.com/'))).toBe(true);
+  });
+
+  it('falls back to Bing when both DuckDuckGo endpoints return nothing', async () => {
+    vi.stubGlobal('fetch', async (url: string) => {
+      const u = String(url);
+      if (u.includes('duckduckgo.com')) return new Response('<html><body>no results</body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+      if (u.startsWith('https://www.bing.com/')) return new Response(BING_HTML, { status: 200, headers: { 'content-type': 'text/html' } });
+      return new Response('', { status: 200 });
+    });
+    const r = await webSearchTool.run({ query: 'orlando weather now' }, makeCtx(makeTempDir()));
+    expect(r.isError).toBeFalsy();
+    expect(r.content).toContain('(Bing)');
+    expect(r.content).toContain('[NWS Orlando](https://www.weather.gov/mlb/)');
+  });
+
+  it('parseDuckDuckGoLite and parseBing parse results and skip internal links', () => {
+    const lite = parseDuckDuckGoLite(LITE_HTML);
+    expect(lite[0]).toMatchObject({ title: 'Orlando Weather', url: 'https://weather.example/orlando' });
+    const bing = parseBing(BING_HTML);
+    expect(bing.map((b) => b.url)).toEqual(['https://www.weather.gov/mlb/', 'https://wttr.in/Orlando']);
+    expect(bing.some((b) => b.url.includes('bing.com'))).toBe(false); // ck/a ad/redirect skipped
   });
 
   it('Brave: uses the subscription token header and parses results', async () => {
@@ -347,7 +399,7 @@ describe('WebSearch (offline parsing and providers)', () => {
     expect(r.content).toContain('[Result One](https://one.example/a)\n   first snippet');
     expect(r.content).toContain('Result Two');
     expect(r.content).not.toContain('Blocked');
-    expect(r.content).toContain('(Searxng)');
+    expect(r.content).toContain('(SearXNG)');
   });
 
   it('falls back to DuckDuckGo with a note when the chosen provider is not configured', async () => {

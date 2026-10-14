@@ -110,10 +110,129 @@ async function searchDuckDuckGo(query: string, ctx: ToolContext): Promise<Search
     html = decodeBody(res.body, res.contentType);
     results = parseDuckDuckGo(html);
     if (results.length === 0 && (res.status !== 200 || blocked(html))) {
-      throw new Error(`DuckDuckGo refused the request (HTTP ${res.status}; probably rate limiting or bot detection). Try again later, or configure Brave/Tavily/SearXNG in Settings → Web search.`);
+      throw new Error(`refused the request (HTTP ${res.status}; probably rate limiting or bot detection)`);
     }
   }
   return results;
+}
+
+// ───────────────────────────── DuckDuckGo Lite ─────────────────────────────
+
+export function parseDuckDuckGoLite(html: string): SearchResult[] {
+  const out: SearchResult[] = [];
+  try {
+    const { document } = parseHTML(html) as any;
+    const links = [...document.querySelectorAll('a.result-link')];
+    const snippets = [...document.querySelectorAll('.result-snippet')].map((e: any) => clean(e.textContent));
+    links.forEach((a: any, i: number) => {
+      const url = decodeDdgUrl(a.getAttribute('href') ?? '');
+      const title = clean(a.textContent);
+      if (url && title) out.push({ title, url, snippet: snippets[i] || undefined });
+    });
+  } catch { /* fall through to regex */ }
+  if (out.length) return out;
+  const re = /<a[^>]*class="[^"]*result-link[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const url = decodeDdgUrl(m[1].replace(/&amp;/g, '&'));
+    const title = clean(m[2]);
+    if (url && title) out.push({ title, url });
+  }
+  return out;
+}
+
+async function searchDuckDuckGoLite(query: string, ctx: ToolContext): Promise<SearchResult[]> {
+  const res = await fetchBytes('https://lite.duckduckgo.com/lite/', {
+    signal: ctx.signal, method: 'POST', body: `q=${encodeURIComponent(query)}`,
+    headers: { Referer: 'https://lite.duckduckgo.com/', Accept: 'text/html', 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeoutMs: 20_000, maxBytes: 2 * 1024 * 1024,
+  });
+  const html = decodeBody(res.body, res.contentType);
+  const results = parseDuckDuckGoLite(html);
+  if (results.length === 0 && res.status !== 200) throw new Error(`refused the request (HTTP ${res.status})`);
+  return results;
+}
+
+// ───────────────────────────── Bing (HTML, no key) ─────────────────────────────
+
+export function parseBing(html: string): SearchResult[] {
+  const out: SearchResult[] = [];
+  const seen = new Set<string>();
+  const add = (url: string, title: string, snippet?: string) => {
+    if (!/^https?:\/\//i.test(url)) return;
+    try { if (new URL(url).hostname.toLowerCase().endsWith('bing.com')) return; } catch { return; } // skip ck/a redirects + internal
+    if (seen.has(url) || !title) return;
+    seen.add(url);
+    out.push({ title, url, snippet: snippet || undefined });
+  };
+  try {
+    const { document } = parseHTML(html) as any;
+    for (const li of document.querySelectorAll('li.b_algo')) {
+      const a = li.querySelector('h2 a') ?? li.querySelector('a');
+      if (!a) continue;
+      const snip = clean(li.querySelector('.b_caption p')?.textContent) || clean(li.querySelector('.b_algoSlug')?.textContent) || clean(li.querySelector('p')?.textContent);
+      add(a.getAttribute('href') ?? '', clean(a.textContent), snip);
+    }
+  } catch { /* fall through to regex */ }
+  if (out.length) return out;
+  const re = /<li class="b_algo"[\s\S]*?<h2>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) add(m[1].replace(/&amp;/g, '&'), clean(m[2]));
+  return out;
+}
+
+async function searchBing(query: string, ctx: ToolContext): Promise<SearchResult[]> {
+  const res = await fetchBytes(`https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=en-US&cc=US`, {
+    signal: ctx.signal, headers: { Referer: 'https://www.bing.com/', Accept: 'text/html', 'Accept-Language': 'en-US,en;q=0.9' },
+    timeoutMs: 20_000, maxBytes: 3 * 1024 * 1024,
+  });
+  const html = decodeBody(res.body, res.contentType);
+  const results = parseBing(html);
+  if (results.length === 0 && res.status !== 200) throw new Error(`refused the request (HTTP ${res.status})`);
+  return results;
+}
+
+// ───────────────────────────── free (no-key) search with fallback ─────────────────────────────
+
+function isTransientNetError(e: unknown): boolean {
+  const code = (e as { cause?: { code?: string } })?.cause?.code;
+  if (code && ['ECONNRESET', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'EAI_AGAIN', 'UND_ERR_SOCKET'].includes(code)) return true;
+  const msg = String((e as { message?: string })?.message ?? '');
+  return /reset|timed out|timeout|socket|fetch failed|network/i.test(msg);
+}
+
+const FREE_ENGINES: Array<{ name: string; run: (q: string, ctx: ToolContext) => Promise<SearchResult[]> }> = [
+  { name: 'DuckDuckGo', run: searchDuckDuckGo },
+  { name: 'DuckDuckGo Lite', run: searchDuckDuckGoLite },
+  { name: 'Bing', run: searchBing },
+];
+
+/** Try each no-key engine in order, retrying once on a transient reset, until one returns results.
+ *  Throws (with `.allEnginesFailed`) only when every engine failed or returned nothing. */
+export async function searchFree(
+  query: string, ctx: ToolContext,
+  engines: Array<{ name: string; run: (q: string, ctx: ToolContext) => Promise<SearchResult[]> }> = FREE_ENGINES,
+): Promise<{ results: SearchResult[]; engine: string; notes: string[] }> {
+  const errs: string[] = [];
+  for (const eng of engines) {
+    if (ctx.signal?.aborted) break;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const results = await eng.run(query, ctx);
+        if (results.length) return { results, engine: eng.name, notes: errs.length ? [`Tried other engines first: ${errs.join('; ')}.`] : [] };
+        errs.push(`${eng.name}: no results`);
+        break;
+      } catch (e) {
+        if (ctx.signal?.aborted) throw e;
+        if (attempt === 0 && isTransientNetError(e)) { await new Promise((r) => setTimeout(r, 500)); continue; }
+        errs.push(`${eng.name}: ${e instanceof Error ? e.message : String(e)}`);
+        break;
+      }
+    }
+  }
+  const err = new Error(`every free search engine failed — ${errs.join('; ')}. This is usually rate limiting; try again in a minute, or add a Brave/Tavily key (or a SearXNG URL) in Settings → Web search for reliable results.`);
+  (err as Error & { allEnginesFailed?: boolean }).allEnginesFailed = true;
+  throw err;
 }
 
 // ───────────────────────────── Brave / Tavily / SearXNG ─────────────────────────────
@@ -192,27 +311,34 @@ export const webSearchTool = defineTool<WebSearchInput>(
       }
 
       let results: SearchResult[];
+      let label: string;
       try {
         if (provider === 'brave' && ctx.secret('search.braveKey')) {
           results = await searchBrave(q, ctx.secret('search.braveKey')!, ctx);
+          label = 'Brave';
         } else if (provider === 'tavily' && ctx.secret('search.tavilyKey')) {
           results = await searchTavily(query, ctx.secret('search.tavilyKey')!, ctx, allowed, input.blocked_domains);
+          label = 'Tavily';
         } else if (provider === 'searxng' && ctx.settings?.search?.searxngUrl) {
           results = await searchSearxng(query, ctx.settings.search.searxngUrl, ctx);
+          label = 'SearXNG';
         } else {
           if (provider !== 'duckduckgo') {
-            notes.push(`(The "${provider}" search provider is not configured${provider === 'searxng' ? ' (no SearXNG URL)' : ' (no API key)'}; used DuckDuckGo instead.)`);
+            notes.push(`(The "${provider}" search provider is not configured${provider === 'searxng' ? ' (no SearXNG URL)' : ' (no API key)'}; used a free search engine instead.)`);
           }
-          used = 'duckduckgo';
-          results = await searchDuckDuckGo(q, ctx);
+          used = 'free';
+          const r = await searchFree(q, ctx);
+          results = r.results;
+          label = r.engine;
+          notes.push(...r.notes);
         }
       } catch (e) {
         if (ctx.signal?.aborted) return fail('Interrupted by user.');
+        if ((e as { allEnginesFailed?: boolean }).allEnginesFailed) return fail(`Web search failed: ${(e as Error).message}`);
         return fail(`Web search failed (${used}): ${e instanceof Error && !(e as { cause?: unknown }).cause ? e.message : friendlyFetchError(e, 20_000)}`);
       }
 
       results = filterResults(results, allowed, input.blocked_domains).slice(0, MAX_RESULTS);
-      const label = used === 'duckduckgo' ? 'DuckDuckGo' : used[0].toUpperCase() + used.slice(1);
       if (results.length === 0) {
         return ok(`No results found for "${query}" (${label}).${notes.length ? `\n${notes.join('\n')}` : ''}`, { display: { kind: 'search', query, results: [] } });
       }
