@@ -4,6 +4,10 @@ Every change to Obsidian Code ships as a release (`npm run release`), and the in
 UPDATE button. Version rule: patch (last number) = small fix · minor (second) = feature or bigger change ·
 major (first) = redesign or giant change.
 
+## v1.1.3 — 2026-10-14
+
+- GPU clock-in no longer fails when a cheap offer is grabbed by someone else first. The app now skips offers that were just taken ('no_such_ask') and re-searches for a fresh one, instead of giving up. (If it still fails, just press Try again.)
+
 ## v1.1.2 — 2026-10-14
 
 Two fixes for long tasks with the uncensored model.
