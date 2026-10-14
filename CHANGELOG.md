@@ -4,6 +4,10 @@ Every change to Obsidian Code ships as a release (`npm run release`), and the in
 UPDATE button. Version rule: patch (last number) = small fix · minor (second) = feature or bigger change ·
 major (first) = redesign or giant change.
 
+## v1.1.2 — 2026-10-14
+
+Two fixes for long tasks with the uncensored model.
+
 ## v1.1.1 — 2026-10-13
 
 - The chat header's context meter no longer shows a red CTX 100% for a Vast model while the GPU is off; it uses the model's real context size (or shows — when unknown).
