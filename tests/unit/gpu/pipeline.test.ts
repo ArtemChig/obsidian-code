@@ -164,6 +164,33 @@ describe('failure injection: the instance is destroyed every time', () => {
     expect(h.manager.history()).toHaveLength(0);
   });
 
+  it('offers taken before we rent them (404 no_such_ask) are skipped, and the next offer is rented', async () => {
+    h = await createHarness();
+    // the two cheapest offers are grabbed by someone else between search and rent; the third succeeds
+    h.vast.fail.createError = { status: 404, body: { success: false, error: 'no_such_ask', msg: 'Instance type by id 1001 is not available' } };
+    h.vast.fail.createErrorTimes = 2;
+    await h.manager.start();
+    await h.manager.clockIn({ profileId: 'light', modelId: TEST_MODEL });
+    expect(await h.manager.waitUntilReady(10_000)).toBe(true);
+    expect(h.manager.status().phase).toBe('ready');
+    expect(h.manager.status().pricePerHour).toBe(0.75); // the third offer, after the two cheaper ones churned
+    expect(h.vast.instances.size).toBe(1);
+    await h.manager.clockOut();
+    await expectAllDestroyed(h);
+  });
+
+  it('a real create error (not offer churn) fails without renting anything', async () => {
+    h = await createHarness();
+    h.vast.fail.createError = { status: 400, body: { success: false, error: 'bad_request', msg: 'Invalid disk size' } };
+    h.vast.fail.createErrorTimes = 100;
+    await h.manager.start();
+    await h.manager.clockIn({ profileId: 'light', modelId: TEST_MODEL });
+    expect(await h.manager.waitUntilReady(8000)).toBe(false);
+    expect(h.manager.status().phase).toBe('error');
+    expect(h.manager.status().lastError).toMatch(/Could not rent/);
+    expect(h.vast.instances.size).toBe(0);
+  });
+
   it('instance never boots → destroyed, next offer tried, max 2 attempts', async () => {
     h = await createHarness({ timings: { bootTimeoutMs: 300 } });
     h.vast.fail.neverBoot = true;

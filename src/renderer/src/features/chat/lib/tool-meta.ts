@@ -294,31 +294,15 @@ export const STATUS_LABEL: Record<ToolStatus, string> = {
   interrupted: 'Interrupted',
 };
 
-/** Whether a finished tool card starts expanded. */
+/** Whether a tool card starts expanded. Like Claude Code, completed results collapse to a one-line summary (expandable);
+ *  only interactive cards (a question / a plan to approve), a running shell's live output, and errors stay open. */
 export function defaultExpanded(tool: ToolUseBlock): boolean {
-  if (tool.status === 'error' && tool.name !== 'Read') return true;
   if (tool.status === 'awaiting_permission' || tool.status === 'pending') return false;
-  if (tool.status === 'running') return toolFamily(tool.name) === 'shell';
-  switch (toolFamily(tool.name)) {
-    case 'edit':
-    case 'write':
-    case 'notebook':
-    case 'todo':
-    case 'question':
-    case 'plan':
-    case 'task':
-      return true;
-    case 'shell': {
-      const d = tool.result?.display;
-      if (d?.kind === 'bash') return d.output.trim().length > 0 && (d.exitCode !== 0 || d.output.split('\n').length <= 14);
-      return false;
-    }
-    case 'search-web':
-    case 'web':
-      return true;
-    default:
-      return false;
-  }
+  const family = toolFamily(tool.name);
+  if (family === 'question' || family === 'plan') return true; // needs the user to see and act on it
+  if (tool.status === 'error' && tool.name !== 'Read') return true; // keep failures visible
+  if (tool.status === 'running') return family === 'shell'; // show a command's output while it runs
+  return false; // everything else collapses by default
 }
 
 /** Number of lines in a string (for "Show more" thresholds). */

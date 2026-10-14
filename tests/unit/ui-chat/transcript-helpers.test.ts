@@ -93,14 +93,20 @@ describe('tool defaults', () => {
     expect(toolFamily('mcp__x__y')).toBe('mcp');
   });
 
-  it('expands edits, errors and short shell output; collapses reads and pending permission', () => {
-    expect(defaultExpanded(tool('Edit', {}))).toBe(true);
+  it('collapses completed results by default (like Claude Code); keeps questions, plans, errors and running shells open', () => {
+    // completed results collapse to a one-line summary
+    expect(defaultExpanded(tool('Edit', {}))).toBe(false);
     expect(defaultExpanded(tool('Read', {}))).toBe(false);
+    expect(defaultExpanded(tool('Write', {}))).toBe(false);
+    expect(defaultExpanded(tool('TodoWrite', {}))).toBe(false);
+    expect(defaultExpanded(tool('WebSearch', {}))).toBe(false);
+    expect(defaultExpanded(tool('Bash', {}, { result: { content: '', display: { kind: 'bash', command: 'x', output: 'ok', exitCode: 0 } } }))).toBe(false);
+    // interactive + errors + live output stay open
+    expect(defaultExpanded(tool('AskUserQuestion', {}))).toBe(true);
+    expect(defaultExpanded(tool('ExitPlanMode', {}))).toBe(true);
     expect(defaultExpanded(tool('Write', {}, { status: 'error' }))).toBe(true);
-    expect(defaultExpanded(tool('Bash', {}, { status: 'awaiting_permission' }))).toBe(false);
     expect(defaultExpanded(tool('Bash', {}, { status: 'running' }))).toBe(true);
-    expect(defaultExpanded(tool('Bash', {}, { result: { content: '', display: { kind: 'bash', command: 'x', output: 'ok', exitCode: 0 } } }))).toBe(true);
-    expect(defaultExpanded(tool('Bash', {}, { result: { content: '', display: { kind: 'bash', command: 'x', output: '', exitCode: 0 } } }))).toBe(false);
+    expect(defaultExpanded(tool('Bash', {}, { status: 'awaiting_permission' }))).toBe(false);
   });
 
   it('planOutcome reads the ExitPlanMode result', () => {

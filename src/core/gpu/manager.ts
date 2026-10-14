@@ -187,6 +187,17 @@ function errMsg(err: unknown): string {
   return String(err);
 }
 
+/** True when the rent failed only because that specific offer was taken before we could rent it — a 404 no_such_ask
+ *  or a 410 "no longer available". Cheap churn: skip to the next offer, no instance was created. Excludes auth/key
+ *  errors (which Vast also returns as 404) so a bad API key is not mistaken for offer churn. */
+function isOfferGone(err: unknown): boolean {
+  if (!(err instanceof VastError) || err.isAuth) return false;
+  const text = `${err.code ?? ''} ${err.vastMsg ?? ''} ${err.message}`.toLowerCase();
+  if (/invalid user key|api key|unauthor|forbidden|\blogin\b/.test(text)) return false;
+  if (err.status === 410) return true;
+  return /no_such_ask|no longer available|not available|unavailable|cancel_unavail|already rented/.test(text);
+}
+
 function httpGetStatus(url: string, apiKey: string, timeoutMs: number): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.get(url, { agent: false, headers: { Authorization: `Bearer ${apiKey}`, Connection: 'close' }, timeout: timeoutMs }, (res) => {
@@ -1086,35 +1097,53 @@ export class GpuManagerImpl implements GpuManager {
       );
     }
 
-    let bootFailures = 0;
-    let createFailures = 0;
+    // Offer churn is the norm in a busy market: the cheapest listing is often taken in the split second between the
+    // search and the rent (Vast returns 404 no_such_ask / 410 no longer available). That costs nothing (no instance),
+    // so it must not count against the real-error budget, and when the list is exhausted by churn we re-search for a
+    // fresh one instead of giving up.
+    let bootFailures = 0;      // a rented machine that would not boot or connect — expensive, keep the cap low
+    let createFailures = 0;    // a real create error (bad request etc.) — likely a genuine problem
+    let gone = 0;              // offers taken before we could rent them — cheap churn
     let lastErr: unknown = null;
-    for (const offer of affordable) {
-      if (bootFailures >= 2 || createFailures >= 4) break;
-      this.checkAbort(signal);
-      if (!this.fitsBudget(model, offer)) continue;
-      const r = await this.rentAndBoot(offer, profile, model, diskGb, scripts, signal);
-      if (r.kind === 'ok') {
-        try {
-          await this.bringUp(r.inst, model, scripts, signal);
-          return;
-        } catch (err) {
-          // SSH never came up on this machine (live: a host that kept rejecting the app key for 5 min). That is the
-          // machine's problem, not the model's: keep its log, destroy it and rent the next offer (counts as a boot failure).
-          if (!(err instanceof SshUnreachableError) || signal.aborted) throw err;
-          const id = r.inst.id;
-          this.setMessage(`${errMsg(err)} Saving its log, destroying instance #${id} and trying another GPU…`);
-          await this.captureEvidence(errMsg(err));
-          await this.destroyActive('error');
-          this.notify('GPU machine unreachable', `${errMsg(err)} Instance #${id} was destroyed; trying another GPU.`, 'warning');
-          lastErr = err;
-          bootFailures++;
-          continue;
+    const tried = new Set<number>();
+    let pool = affordable;
+    for (let searchRound = 0; ; searchRound++) {
+      for (const offer of pool) {
+        if (bootFailures >= 2 || createFailures >= 4 || gone >= 20) break;
+        if (tried.has(offer.id)) continue;
+        tried.add(offer.id);
+        this.checkAbort(signal);
+        if (!this.fitsBudget(model, offer)) continue;
+        const r = await this.rentAndBoot(offer, profile, model, diskGb, scripts, signal);
+        if (r.kind === 'ok') {
+          try {
+            await this.bringUp(r.inst, model, scripts, signal);
+            return;
+          } catch (err) {
+            // SSH never came up on this machine (live: a host that kept rejecting the app key for 5 min). That is the
+            // machine's problem, not the model's: keep its log, destroy it and rent the next offer (a boot failure).
+            if (!(err instanceof SshUnreachableError) || signal.aborted) throw err;
+            const id = r.inst.id;
+            this.setMessage(`${errMsg(err)} Saving its log, destroying instance #${id} and trying another GPU…`);
+            await this.captureEvidence(errMsg(err));
+            await this.destroyActive('error');
+            this.notify('GPU machine unreachable', `${errMsg(err)} Instance #${id} was destroyed; trying another GPU.`, 'warning');
+            lastErr = err;
+            bootFailures++;
+            continue;
+          }
         }
+        lastErr = r.err;
+        if (r.kind === 'boot_failed') bootFailures++;
+        else if (isOfferGone(r.err)) gone++;        // cheap churn — doesn't count toward createFailures
+        else createFailures++;
       }
-      lastErr = r.err;
-      if (r.kind === 'create_failed') createFailures++;
-      else bootFailures++;
+      if (bootFailures >= 2 || createFailures >= 4 || gone >= 20 || offerId || searchRound >= 2) break;
+      // the list churned out from under us — get a fresh one and keep going
+      this.setPhase('searching', `Offers changed; searching ${profile.label} again…`);
+      const fresh = (await this.findOffers(profile, model, diskGb, offerId, signal)).filter((o) => this.fitsBudget(model, o) && !tried.has(o.id));
+      if (!fresh.length) break;
+      pool = fresh;
     }
     throw new Error(`Could not rent a working GPU: ${errMsg(lastErr ?? 'no offer could be rented')}`);
   }
