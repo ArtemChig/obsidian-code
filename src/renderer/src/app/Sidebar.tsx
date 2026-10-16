@@ -1,16 +1,21 @@
 // Left sidebar (240 px) + collapsed icon rail. Owner: ui-foundation.
 // M13 (reference .s2-rail): same #000 ground, a single --rule hairline on the right, no fills. Mono cap section labels,
 // 28 px rows, selected row = acc-wash + 2 px cold-white left edge, counts/times in mono --t3.
-// New session, search, Pinned + project groups (relative time, live dot, unread dot, context menu),
-// nav (Scheduled / Activity / GPU / Settings) and the GPU widget.
+// New session, search, Pinned + categories + project groups (collapse, rename, reorder by drag and drop, context menus),
+// session rows (relative time, live dot, unread dot, context menu),
+// nav (Scheduled / Activity / GPU / Settings) and the GPU widget. The grouping is state/sidebar-model.ts.
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
   CalendarClock,
-  ChevronRight,
+  Check,
   Copy,
   Cpu,
   Ellipsis,
+  FolderInput,
   FolderOpen,
+  FolderPlus,
   GitFork,
   House,
   PanelLeftClose,
@@ -18,15 +23,15 @@ import {
   Pencil,
   Pin,
   PinOff,
-  Plus,
   Search,
   Settings,
   SquarePen,
   Trash2,
+  Undo2,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SessionSummary } from '@shared/types';
 import { IconButton } from '@renderer/components/ui/button';
 import { ConfirmDialog } from '@renderer/components/ui/dialog';
@@ -34,18 +39,7 @@ import { StatusDot } from '@renderer/components/ui/feedback';
 import { Input } from '@renderer/components/ui/input';
 import { Shortcut } from '@renderer/components/ui/kbd';
 import { ScrollArea, SectionLabel } from '@renderer/components/ui/layout';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/menu';
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@renderer/components/ui/menu';
 import { RelativeTime } from '@renderer/components/ui/time';
 import { Tooltip } from '@renderer/components/ui/tooltip';
 import { canRevealFiles, showItemInFolder } from '@renderer/lib/bridge';
@@ -56,21 +50,38 @@ import {
   deleteSession,
   forkSession,
   goHome,
+  moveSessionToCategory,
   navigate,
+  openNewCategory,
   openPalette,
   openSession,
   renameSession,
   searchSessions,
   setPinned,
+  stepSession,
   toggleSidebar,
 } from '@renderer/state/actions';
-import { useRunningActivityCount, useSidebarModel, useWaitingSessionIds, type SessionGroup } from '@renderer/state/selectors';
+import { AutoClockOutMenuItems, useAutoClockOutAvailable } from '@renderer/features/gpu/AutoClockOut';
+import { useRunningActivityCount, useSidebarModel, useWaitingSessionIds } from '@renderer/state/selectors';
 import { SyncFailed, useSyncError } from '@renderer/features/settings/core-missing';
 import { useSchedules } from '@renderer/state/activity';
 import { useSessions } from '@renderer/state/sessions';
+import { useSidebarPrefs } from '@renderer/state/sidebar';
+import { groupSessions, pinnedGroup, stepAvailability, type SessionGroup } from '@renderer/state/sidebar-model';
 import { useUi, type Route } from '@renderer/state/ui';
 import { GpuRailButton, GpuWidget } from './GpuWidget';
 import { SHORTCUTS } from './shortcuts';
+import { endDrag, startDrag, useSidebarDrag } from './sidebar-dnd';
+import {
+  CONTEXT_PARTS,
+  DeleteGroupDialog,
+  DROPDOWN_PARTS,
+  GroupBlock,
+  InlineRename,
+  refocus,
+  skipTextFields,
+  type MenuParts,
+} from './SidebarGroups';
 
 // ───────────────────────────── Session row ─────────────────────────────
 
@@ -88,10 +99,16 @@ function SessionIndicator({ s, waiting, unread }: { s: SessionSummary; waiting: 
   return null;
 }
 
-function SessionMenuItems({ s, actions, Item, Sep }: { s: SessionSummary; actions: RowActions; Item: typeof DropdownMenuItem | typeof ContextMenuItem; Sep: typeof DropdownMenuSeparator }) {
+function SessionMenuItems({ s, actions, parts, kind }: { s: SessionSummary; actions: RowActions; parts: MenuParts; kind: 'context' | 'dropdown' }) {
+  const { Item, Sep, Sub, SubTrigger, SubContent } = parts;
+  const prefs = useSidebarPrefs();
+  const clockedIn = useAutoClockOutAvailable();
+  // Menus mount when they open, so this is computed once per opening.
+  const steps = useMemo(() => stepAvailability(groupSessions(useSessions.getState().sessions, '', prefs), s.id), [prefs, s.id]);
+  const current = s.category && prefs.categories.some((c) => c.id === s.category) ? s.category : null;
   return (
     <>
-      <Item icon={Pencil} onSelect={() => actions.onRename(s)}>
+      <Item icon={Pencil} shortcut="F2" onSelect={() => actions.onRename(s)}>
         Rename
       </Item>
       <Item icon={s.pinned ? PinOff : Pin} onSelect={() => void setPinned(s.id, !s.pinned)}>
@@ -100,6 +117,33 @@ function SessionMenuItems({ s, actions, Item, Sep }: { s: SessionSummary; action
       <Item icon={GitFork} onSelect={() => void forkSession(s.id)}>
         Fork session
       </Item>
+      <Sep />
+      <Sub>
+        <SubTrigger icon={FolderInput}>Move to category</SubTrigger>
+        <SubContent data-testid="move-to-category-menu">
+          {prefs.categories.map((c) => (
+            <Item key={c.id} trailing={c.id === current ? <Check size={13} aria-hidden className="text-t1" /> : undefined} onSelect={() => void moveSessionToCategory(s.id, c.id)}>
+              {c.name}
+            </Item>
+          ))}
+          {prefs.categories.length ? <Sep /> : null}
+          <Item icon={FolderPlus} onSelect={() => openNewCategory({ sessionId: s.id })}>
+            New category…
+          </Item>
+          {current ? (
+            <Item icon={Undo2} onSelect={() => void moveSessionToCategory(s.id, null)}>
+              Back to its folder group
+            </Item>
+          ) : null}
+        </SubContent>
+      </Sub>
+      <Item icon={ArrowUp} shortcut="Alt+Up" disabled={!steps.up} onSelect={() => void stepSession(s.id, -1)}>
+        Move up
+      </Item>
+      <Item icon={ArrowDown} shortcut="Alt+Down" disabled={!steps.down} onSelect={() => void stepSession(s.id, 1)}>
+        Move down
+      </Item>
+      <Sep />
       <Item icon={Copy} onSelect={() => void navigator.clipboard?.writeText(s.cwd)}>
         Copy folder path
       </Item>
@@ -107,6 +151,12 @@ function SessionMenuItems({ s, actions, Item, Sep }: { s: SessionSummary; action
         <Item icon={FolderOpen} onSelect={() => showItemInFolder(s.cwd)}>
           Reveal folder
         </Item>
+      ) : null}
+      {clockedIn && s.kind !== 'subagent' ? (
+        <>
+          <Sep />
+          <AutoClockOutMenuItems sessionId={s.id} kind={kind} />
+        </>
       ) : null}
       <Sep />
       <Item icon={Trash2} danger onSelect={() => actions.onDelete(s)}>
@@ -116,40 +166,13 @@ function SessionMenuItems({ s, actions, Item, Sep }: { s: SessionSummary; action
   );
 }
 
-function RenameInput({ s, onDone }: { s: SessionSummary; onDone: () => void }) {
-  const [value, setValue] = useState(s.title);
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    ref.current?.focus();
-    ref.current?.select();
-  }, []);
-  const commit = () => {
-    if (value.trim() && value.trim() !== s.title) void renameSession(s.id, value);
-    onDone();
-  };
-  return (
-    <input
-      ref={ref}
-      value={value}
-      aria-label="Session title"
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') commit();
-        if (e.key === 'Escape') onDone();
-        e.stopPropagation();
-      }}
-      className="h-[22px] min-w-0 flex-1 rounded-[2px] border border-acc bg-s1 px-1.5 text-[12px] text-t1 outline-none"
-    />
-  );
-}
-
 function SessionRow({
   s,
   active,
   unread,
   waiting,
   renaming,
+  draggable,
   actions,
   onRenameDone,
 }: {
@@ -158,19 +181,31 @@ function SessionRow({
   unread: boolean;
   waiting: boolean;
   renaming: boolean;
+  /** Drag and drop reorders / moves rows (off while searching or renaming). */
+  draggable: boolean;
   actions: RowActions;
   onRenameDone: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const dragging = useSidebarDrag((st) => st.item?.kind === 'session' && st.item.id === s.id);
+  const mark = useSidebarDrag((st) => (st.mark?.kind === 'row' && st.mark.id === s.id ? (st.mark.after ? 'after' : 'before') : null));
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
+      <ContextMenuTrigger asChild onContextMenu={skipTextFields}>
         <div
           role="button"
           tabIndex={0}
           aria-current={active ? 'page' : undefined}
           data-testid="session-row"
+          data-session-id={s.id}
           title={s.title}
+          draggable={draggable && !renaming}
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', s.title);
+            startDrag({ kind: 'session', id: s.id });
+          }}
+          onDragEnd={endDrag}
           onClick={() => !renaming && openSession(s.id)}
           onDoubleClick={() => actions.onRename(s)}
           onKeyDown={(e) => {
@@ -180,18 +215,23 @@ function SessionRow({
               openSession(s.id);
             } else if (e.key === 'F2') {
               actions.onRename(s);
+            } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && draggable) {
+              e.preventDefault();
+              void stepSession(s.id, e.key === 'ArrowUp' ? -1 : 1).then(() => refocus(`[data-session-id="${CSS.escape(s.id)}"]`));
             }
           }}
           className={cn(
             'ob-transition group relative flex h-7 cursor-default select-none items-center gap-[9px] pl-4 pr-2 text-[12px] tracking-[-0.012em] outline-offset-[-1px]',
             active ? 'ob-nav-on' : 'text-t2 hover:bg-hov hover:text-t1',
+            dragging && 'opacity-40',
           )}
         >
+          {mark ? <span aria-hidden className={cn('pointer-events-none absolute inset-x-4 z-10 h-[2px] bg-acc', mark === 'before' ? 'top-0' : 'bottom-0')} /> : null}
           <span className="flex w-[9px] shrink-0 items-center justify-center">
             <SessionIndicator s={s} waiting={waiting} unread={unread && !active} />
           </span>
           {renaming ? (
-            <RenameInput s={s} onDone={onRenameDone} />
+            <InlineRename value={s.title} label="Session title" onCommit={(v) => void renameSession(s.id, v)} onDone={onRenameDone} />
           ) : (
             <span className={cn('min-w-0 flex-1 truncate', unread && !active && 'font-medium text-t1')}>{s.title || 'Untitled'}</span>
           )}
@@ -213,7 +253,7 @@ function SessionRow({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={6} onClick={(e) => e.stopPropagation()}>
-                  <SessionMenuItems s={s} actions={actions} Item={DropdownMenuItem} Sep={DropdownMenuSeparator} />
+                  <SessionMenuItems s={s} actions={actions} parts={DROPDOWN_PARTS} kind="dropdown" />
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
@@ -221,32 +261,9 @@ function SessionRow({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <SessionMenuItems s={s} actions={actions} Item={ContextMenuItem as typeof DropdownMenuItem} Sep={ContextMenuSeparator as typeof DropdownMenuSeparator} />
+        <SessionMenuItems s={s} actions={actions} parts={CONTEXT_PARTS} kind="context" />
       </ContextMenuContent>
     </ContextMenu>
-  );
-}
-
-// ───────────────────────────── Groups ─────────────────────────────
-
-function GroupHeader({ label, title, count, collapsed, onToggle, onNew }: { label: ReactNode; title?: string; count: number; collapsed: boolean; onToggle: () => void; onNew?: () => void }) {
-  return (
-    <div className="group/header flex h-7 items-center gap-1 pl-4 pr-2">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={!collapsed}
-        title={title}
-        className="ob-cap ob-transition flex min-w-0 flex-1 items-center gap-1 rounded-[2px] text-left hover:text-t2"
-      >
-        <span className="truncate">{label}</span>
-        <ChevronRight size={10} aria-hidden className={cn('shrink-0 opacity-0 transition-transform group-hover/header:opacity-100', !collapsed && 'rotate-90')} />
-      </button>
-      {collapsed ? <span className="font-mono text-[9.5px] tracking-[0.02em] text-t3">{count}</span> : null}
-      {onNew ? (
-        <IconButton label="New session in this folder" icon={Plus} size="xs" className="opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100" onClick={onNew} />
-      ) : null}
-    </div>
   );
 }
 
@@ -320,7 +337,9 @@ export function Sidebar() {
 
 function SidebarFull() {
   const query = useUi((s) => s.sidebarQuery);
+  const searching = query.trim().length > 0;
   const model = useSidebarModel(query);
+  const prefs = useSidebarPrefs();
   const activeId = useSessions((s) => s.activeSessionId);
   const route = useUi((s) => s.route);
   const unread = useSessions((s) => s.unread);
@@ -330,8 +349,20 @@ function SidebarFull() {
   const runningActivity = useRunningActivityCount();
   const enabledSchedules = useSchedules((s) => s.tasks.filter((t) => t.enabled).length);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  const [deleteGroup, setDeleteGroup] = useState<SessionGroup | null>(null);
+  const collapsedKeys = useMemo(() => new Set(prefs.collapsed), [prefs.collapsed]);
+
+  // A drag that ends outside any group (or whose row was re-rendered away) must not leave a marker behind.
+  useEffect(() => {
+    window.addEventListener('dragend', endDrag);
+    window.addEventListener('drop', endDrag);
+    return () => {
+      window.removeEventListener('dragend', endDrag);
+      window.removeEventListener('drop', endDrag);
+    };
+  }, []);
 
   const actions: RowActions = useMemo(
     () => ({
@@ -341,13 +372,12 @@ function SidebarFull() {
     [],
   );
 
-  const toggleGroup = (key: string) =>
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const groups: SessionGroup[] = useMemo(() => {
+    const pinned = pinnedGroup(model);
+    return pinned ? [pinned, ...model.groups] : model.groups;
+  }, [model]);
+  const allCollapsed = groups.length > 0 && groups.every((g) => collapsedKeys.has(g.key));
+  const anyCollapsed = groups.some((g) => collapsedKeys.has(g.key));
 
   const renderRows = (list: SessionSummary[]) =>
     list.map((s) => (
@@ -358,27 +388,37 @@ function SidebarFull() {
         unread={!!unread[s.id]}
         waiting={waiting.has(s.id)}
         renaming={renamingId === s.id}
+        draggable={!searching}
         actions={actions}
         onRenameDone={() => setRenamingId(null)}
       />
     ));
 
-  const renderGroup = (g: SessionGroup) => {
-    const isCollapsed = collapsedGroups.has(g.key) && !query;
-    return (
-      <div key={g.key} className="mt-3">
-        <GroupHeader
-          label={g.name}
-          title={g.cwd}
-          count={g.sessions.length}
-          collapsed={isCollapsed}
-          onToggle={() => toggleGroup(g.key)}
-          onNew={() => void createSession({ cwd: g.cwd })}
-        />
-        {!isCollapsed ? <div className="flex flex-col gap-px">{renderRows(g.sessions)}</div> : null}
-      </div>
-    );
+  // The delete dialog works on the group's sessions as stored, not as a search shows them.
+  const askDeleteGroup = (g: SessionGroup) => {
+    const full = groupSessions(useSessions.getState().sessions, '', prefs).groups.find((x) => x.key === g.key);
+    setDeleteGroup(full ?? g);
   };
+
+  const renderGroup = (g: SessionGroup) => (
+    <GroupBlock
+      key={g.key}
+      group={g}
+      index={g.kind === 'pinned' ? -1 : model.groups.findIndex((x) => x.key === g.key)}
+      groupCount={model.groups.length}
+      collapsed={collapsedKeys.has(g.key) && !searching}
+      searching={searching}
+      renaming={renamingGroup === g.key}
+      allCollapsed={allCollapsed}
+      anyCollapsed={anyCollapsed}
+      onRenameStart={() => setRenamingGroup(g.key)}
+      onRenameDone={() => setRenamingGroup(null)}
+      onDelete={() => askDeleteGroup(g)}
+      onNewCategory={() => openNewCategory({ afterKey: g.kind === 'pinned' ? undefined : g.key })}
+    >
+      {renderRows(g.sessions)}
+    </GroupBlock>
+  );
 
   return (
     <aside
@@ -419,7 +459,16 @@ function SidebarFull() {
       </div>
 
       <ScrollArea className="min-h-0 flex-1" viewportClassName="pb-3">
-        <div className="flex flex-col">
+        <div
+          className="flex flex-col"
+          onDragOver={(e) => {
+            // Between groups there is nothing to drop on: no marker.
+            if (!(e.target as Element).closest('[data-group-key]')) useSidebarDrag.setState({ mark: null });
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) useSidebarDrag.setState({ mark: null });
+          }}
+        >
           <button
             type="button"
             onClick={goHome}
@@ -434,14 +483,7 @@ function SidebarFull() {
             Home
           </button>
 
-          {model.pinned.length ? (
-            <div className="mt-3">
-              <GroupHeader label="Pinned" count={model.pinned.length} collapsed={collapsedGroups.has('__pinned') && !query} onToggle={() => toggleGroup('__pinned')} />
-              {!(collapsedGroups.has('__pinned') && !query) ? <div className="flex flex-col gap-px">{renderRows(model.pinned)}</div> : null}
-            </div>
-          ) : null}
-
-          {model.groups.map(renderGroup)}
+          {groups.map(renderGroup)}
 
           {loaded && model.total === 0 ? (
             <div className="px-4 py-6 text-center text-[11.5px] text-t3">{query ? 'No sessions match.' : 'No sessions yet.'}</div>
@@ -477,6 +519,7 @@ function SidebarFull() {
           if (deleteTarget) await deleteSession(deleteTarget.id);
         }}
       />
+      <DeleteGroupDialog group={deleteGroup} onClose={() => setDeleteGroup(null)} />
     </aside>
   );
 }

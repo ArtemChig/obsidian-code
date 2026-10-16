@@ -121,6 +121,27 @@ describe('model registry', () => {
     expect(r.pickDefault()).toEqual({ provider: 'custom:c1', model: 'some-model' });
   });
 
+  it('a settings change re-probes the providers, except one that only changes the sidebar layout (Settings.ui)', async () => {
+    const { ctx } = makeCtx({});
+    const r = reg(ctx);
+    let probes = 0;
+    r.register({
+      id: 'vast',
+      info: () => ({ id: 'vast', label: 'Vast GPU', status: 'offline', baseUrl: null }),
+      endpoint: () => null,
+      listModels: async () => { probes++; return []; },
+    });
+    await r.refresh();
+    const base = probes;
+    const settle = () => new Promise((res) => setTimeout(res, 250));
+    ctx.settings.update({ ui: { sidebar: { groupOrder: [], groupNames: {}, categories: [], collapsed: ['pinned'] } } } as Partial<Settings>);
+    await settle();
+    expect(probes).toBe(base); // collapsing a group is no reason to ask the model servers again
+    ctx.settings.update({ shell: 'cmd' });
+    await settle();
+    expect(probes).toBeGreaterThan(base);
+  });
+
   it('keeps last-known models (with the new status) when the provider drops', async () => {
     const { ctx } = makeCtx({});
     const r = reg(ctx);

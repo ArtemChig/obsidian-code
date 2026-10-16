@@ -20,6 +20,8 @@ export interface UiStore {
   settingsSection: string | null;
   /** Keyboard shortcuts reference dialog. */
   shortcutsOpen: boolean;
+  /** The "New category" dialog: open while set (afterKey = the group it goes under, sessionId = a session to put in it). */
+  newCategory: { afterKey?: string; sessionId?: string } | null;
 }
 
 const STORAGE_KEY = 'obsidian-code.ui.v1';
@@ -91,6 +93,7 @@ export const useUi = create<UiStore>(() => ({
   sidebarQuery: '',
   settingsSection: null,
   shortcutsOpen: false,
+  newCategory: null,
   ...loadPersisted(),
 }));
 

@@ -270,7 +270,15 @@ export function createModelRegistry(ctx: CoreContext, options: RegistryOptions =
   function ensureSettingsSub(): void {
     if (settingsUnsub || !ctx.settings?.onChange) return;
     try {
-      settingsUnsub = ctx.settings.onChange(() => { scheduleRefresh(50); });
+      // The sidebar layout (Settings.ui) changes on every collapse / drag and affects no provider: no re-probe for it.
+      const withoutUi = (s: Settings | undefined): string => (s ? JSON.stringify({ ...s, ui: undefined }) : '');
+      let last = withoutUi(ctx.settings.get?.());
+      settingsUnsub = ctx.settings.onChange((s) => {
+        const key = withoutUi(s);
+        if (s && key === last) return;
+        last = key;
+        scheduleRefresh(50);
+      });
     } catch { /* ignore */ }
   }
 

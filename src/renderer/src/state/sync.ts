@@ -9,6 +9,7 @@ import { useModels } from './models';
 import { addRecord, removeRecord, toRecord, usePending } from './pending';
 import { reconcileQueued, setQueued, useSessions } from './sessions';
 import { useSettings } from './settings';
+import { sidebarSavePending } from './sidebar';
 import { toast } from './toasts';
 import { createEntry, reduceEntry, TRANSCRIPT_EVENTS, type TranscriptEventName } from './transcript';
 
@@ -190,7 +191,10 @@ export function bindEvents(): () => void {
   on('gpu.status', (status) => useGpu.setState({ status }));
   on('schedules.updated', (tasks) => useSchedules.setState({ tasks, loaded: true }));
   on('activity.updated', (items) => useActivity.setState({ items, loaded: true }));
-  on('settings.updated', (settings) => useSettings.setState({ settings }));
+  on('settings.updated', (settings) =>
+    // The sidebar layout of a save that is still in flight stays as shown (its own echo follows).
+    useSettings.setState((st) => ({ settings: sidebarSavePending() && st.settings ? { ...settings, ui: st.settings.ui } : settings })),
+  );
 
   on('notification', (n) => toast({ title: n.title, body: n.body, level: n.level, sessionId: n.sessionId }));
   on('error', (e) => toast({ title: 'Error', body: e.message, level: 'error', sessionId: e.sessionId }));

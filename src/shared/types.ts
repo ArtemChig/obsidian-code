@@ -79,6 +79,10 @@ export interface SessionSummary {
   /** Missing = 'builtin' (sessions created before engines existed). */
   engine?: EngineId;
   pinned?: boolean;
+  /** Id of the user-made sidebar category this session sits in (Settings.ui.sidebar.categories); absent = its folder group. */
+  category?: string;
+  /** Manual position inside its sidebar group (smaller = higher). Absent = not placed by hand: newest activity first, above the placed ones. */
+  order?: number;
   usage: UsageTotals;
 }
 
@@ -406,6 +410,27 @@ export interface McpServerConfig {
   enabled?: boolean;
 }
 
+/** A user-made sidebar group: it holds sessions from any folder. Its place in the list is in SidebarPrefs.groupOrder. */
+export interface SidebarCategory {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+/**
+ * How the sidebar groups are arranged. A group is addressed by its key: "f:<folder, lower-case>" for the group of a
+ * project folder (derived from the sessions), "c:<id>" for a category (see src/shared/sidebar.ts), "pinned" for Pinned.
+ */
+export interface SidebarPrefs {
+  /** Display order of the groups. Groups not listed (new ones) come first, newest activity first. */
+  groupOrder: string[];
+  /** Display names of folder groups ("f:" keys); a folder group without an entry shows its folder name. */
+  groupNames: Record<string, string>;
+  categories: SidebarCategory[];
+  /** Keys of the collapsed groups (remembered across restarts). */
+  collapsed: string[];
+}
+
 export interface Settings {
   defaultModel: ModelRef | null;
   defaultPermissionMode: PermissionMode;
@@ -457,6 +482,7 @@ export interface Settings {
   autoCompactPercent: number; // compact when prompt tokens exceed this % of context
   notifications: boolean;
   launchAtLogin: boolean;
+  ui: { sidebar: SidebarPrefs };
   engine: {
     /** Engine for new sessions. */
     default: EngineId;
