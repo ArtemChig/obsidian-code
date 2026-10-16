@@ -53,6 +53,8 @@ function EditableTitle({ session }: { session: SessionSummary }) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
+        // the box's own right-click menu (Paste…), not the header's
+        onContextMenu={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();

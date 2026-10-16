@@ -79,7 +79,6 @@ import {
   GroupBlock,
   InlineRename,
   refocus,
-  skipTextFields,
   type MenuParts,
 } from './SidebarGroups';
 
@@ -160,7 +159,7 @@ export function SessionMenuItems({ s, actions, parts, kind }: { s: SessionSummar
         </>
       ) : null}
       <Sep />
-      <Item icon={Trash2} danger onSelect={() => actions.onDelete(s)}>
+      <Item icon={Trash2} danger shortcut="Del" onSelect={() => actions.onDelete(s)}>
         Delete…
       </Item>
     </>
@@ -192,7 +191,7 @@ function SessionRow({
   const mark = useSidebarDrag((st) => (st.mark?.kind === 'row' && st.mark.id === s.id ? (st.mark.after ? 'after' : 'before') : null));
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild onContextMenu={skipTextFields}>
+      <ContextMenuTrigger asChild>
         <div
           role="button"
           tabIndex={0}
@@ -216,6 +215,8 @@ function SessionRow({
               openSession(s.id);
             } else if (e.key === 'F2') {
               actions.onRename(s);
+            } else if (e.key === 'Delete') {
+              actions.onDelete(s);
             } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && draggable) {
               e.preventDefault();
               void stepSession(s.id, e.key === 'ArrowUp' ? -1 : 1).then(() => refocus(`[data-session-id="${CSS.escape(s.id)}"]`));

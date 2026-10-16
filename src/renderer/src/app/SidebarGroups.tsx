@@ -80,11 +80,6 @@ export const CONTEXT_PARTS = {
   SubContent: ContextMenuSubContent,
 } as unknown as MenuParts;
 
-/** A right-click inside a text field (a rename box) is the field's own menu. */
-export function skipTextFields(e: MouseEvent<HTMLElement>): void {
-  if (e.target instanceof Element && e.target.closest('input, textarea')) e.preventDefault();
-}
-
 /** Give keyboard focus back to the element that carries `selector` once the list has re-rendered (a moved row loses it). */
 export function refocus(selector: string): void {
   requestAnimationFrame(() => document.querySelector<HTMLElement>(selector)?.focus());
@@ -126,6 +121,8 @@ export function InlineRename({ value, label, onCommit, onDone }: { value: string
       aria-label={label}
       data-testid="inline-rename"
       onChange={(e) => setText(e.target.value)}
+      // a right-click in the box is the box's own menu (Paste…), not the row's / header's
+      onContextMenu={(e) => e.stopPropagation()}
       onBlur={() => {
         if (Date.now() - born.current < 150) requestAnimationFrame(() => ref.current?.focus());
         else finish(true);
@@ -217,7 +214,7 @@ function GroupMenuItems({ parts, ...p }: GroupMenuProps & { parts: MenuParts }) 
       {!pinned ? (
         <>
           <Sep />
-          <Item icon={Trash2} danger onSelect={p.onDelete}>
+          <Item icon={Trash2} danger shortcut="Del" onSelect={p.onDelete}>
             Delete…
           </Item>
         </>
@@ -270,6 +267,9 @@ export function GroupBlock(p: GroupBlockProps) {
     if (e.key === 'F2') {
       e.preventDefault();
       p.onRenameStart();
+    } else if (e.key === 'Delete') {
+      e.preventDefault();
+      p.onDelete();
     } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !searching) {
       e.preventDefault();
       void moveGroup(group.key, e.key === 'ArrowUp' ? -1 : 1).then(() => refocus(selector));
@@ -334,7 +334,7 @@ export function GroupBlock(p: GroupBlockProps) {
     >
       {slot ? <span aria-hidden className={cn('pointer-events-none absolute inset-x-4 z-10 h-[2px] bg-acc', slot === 'top' ? '-top-[7px]' : '-bottom-[7px]')} /> : null}
       <ContextMenu>
-        <ContextMenuTrigger asChild onContextMenu={skipTextFields}>
+        <ContextMenuTrigger asChild>
           <div
             data-testid="group-header"
             draggable={draggable}

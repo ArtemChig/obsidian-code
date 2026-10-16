@@ -73,6 +73,18 @@ describe('sidebar layout actions (demo core)', () => {
     expect((await coreSidebar()).collapsed).toEqual([]);
   });
 
+  it('Collapse all leaves Pinned out while nothing is pinned (it must not come back folded)', async () => {
+    const pinned = Object.values(useSessions.getState().sessions).filter((x: { pinned?: boolean }) => x.pinned);
+    for (const p of pinned) await rpc.request('sessions.setPinned', { id: (p as { id: string }).id, pinned: false });
+    await waitFor(() => !Object.values(useSessions.getState().sessions).some((x: { pinned?: boolean }) => x.pinned));
+    await setAllGroupsCollapsed(true);
+    const keys = (await coreSidebar()).collapsed;
+    expect(keys).not.toContain('pinned');
+    expect(keys).toContain(KH);
+    await setAllGroupsCollapsed(false);
+    for (const p of pinned) await rpc.request('sessions.setPinned', { id: (p as { id: string }).id, pinned: true });
+  });
+
   it('renames a folder group (a display name only) and gives the folder name back on an empty name', async () => {
     await renameGroup({ key: KH, kind: 'folder' }, '  Hearth   app ');
     expect(model().groups.find((g) => g.key === KH)).toMatchObject({ name: 'Hearth app', renamed: true });

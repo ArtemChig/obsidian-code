@@ -211,7 +211,7 @@ function GenericToolCard({ tool, cwd, className }: ToolCardProps) {
   // M13: no card, no frame. A 28 px row on a sub-hairline (status dot · mono verb · title in ink · mono meta · chevron);
   // the body opens below it in an --s1 well with one hairline.
   return (
-    <div data-testid="tool-card" data-tool={tool.name} data-status={tool.status} className={cn('min-w-0 border-b border-rule2', className)}>
+    <div data-testid="tool-card" data-tool={tool.name} data-tool-id={tool.id} data-status={tool.status} className={cn('min-w-0 border-b border-rule2', className)}>
       <div className={cn('ob-transition group/header -mx-2 flex items-center px-2', expandable && 'hover:bg-hov')}>
         <button
           type="button"

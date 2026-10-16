@@ -256,6 +256,18 @@ test.describe('sidebar groups (demo mode)', () => {
     await page.keyboard.press('Alt+ArrowUp');
     await expect.poll(() => rowTitles(hearth)).toEqual([first[0], first[1]]);
     await expect(hearth.getByTestId('session-row').first()).toBeFocused(); // the moved row keeps the keyboard focus
+
+    // the Delete key asks to delete the focused session / group (and Cancel keeps it)
+    await page.keyboard.press('Delete');
+    const dialog = page.getByRole('dialog', { name: 'Delete session?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(hearth.getByTestId('session-row')).toHaveCount(2);
+    await header(page, 'hearth').getByTestId('group-toggle').focus();
+    await page.keyboard.press('Delete');
+    await expect(page.getByRole('dialog', { name: 'Delete 2 sessions?' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(hearth.getByTestId('session-row')).toHaveCount(2);
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

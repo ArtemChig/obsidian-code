@@ -93,6 +93,9 @@ test.describe('ui-chat (demo mode)', () => {
     await expect(view.getByTestId('compact-divider')).toBeVisible();
     await expect(view.getByTestId('thinking-block').first()).toContainText('Thought for 8');
     await expect(view.getByTestId('image-thumb').first()).toBeVisible();
+    // Finished tool results are collapsed by default: open them all to see their bodies.
+    const closed = view.locator('[data-testid="tool-card"] button[aria-expanded="false"]:not([disabled])');
+    for (let i = 0; i < 40 && (await closed.count()) > 0; i++) await closed.first().click();
     await expect(view.getByTestId('diff-view').first()).toBeVisible();
     await expect(view.getByTestId('terminal').first()).toBeVisible();
     await expect(view.getByTestId('search-results')).toBeVisible();
@@ -358,6 +361,14 @@ test.describe('ui-chat (demo mode)', () => {
     await expect(page.getByRole('menuitem', { name: /^Rewind to here/ })).toHaveCount(0);
     await page.getByRole('menuitem', { name: /^Copy as Markdown/ }).click();
     await expect.poll(clip).not.toBe('');
+
+    // a tool card: its command can be copied (and its output)
+    const bash = page.locator('[data-testid="tool-card"][data-tool="Bash"][data-status="done"]').first();
+    await bash.getByRole('button').first().click({ button: 'right' });
+    await expect(page.getByRole('menuitem', { name: /^Copy command/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Copy output/ })).toBeVisible();
+    await page.getByRole('menuitem', { name: /^Copy command/ }).click();
+    await expect.poll(clip).toMatch(/\S/);
 
     // selected text can be copied on its own
     await user.getByText('stale SSH tunnel').first().dblclick();

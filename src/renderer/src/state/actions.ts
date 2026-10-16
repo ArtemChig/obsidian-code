@@ -259,9 +259,10 @@ export function toggleGroupCollapsed(key: string): Promise<boolean> {
   return updateSidebarPrefs({ collapsed: collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key] });
 }
 
-/** Collapse or expand every group (Pinned included). */
+/** Collapse or expand every group (Pinned too while something is pinned: it must not come back folded later). */
 export function setAllGroupsCollapsed(collapsed: boolean): Promise<boolean> {
-  return updateSidebarPrefs({ collapsed: collapsed ? [PINNED_GROUP, ...currentGroupKeys()] : [] });
+  const anyPinned = Object.values(useSessions.getState().sessions).some((s) => s.pinned && s.kind !== 'subagent');
+  return updateSidebarPrefs({ collapsed: collapsed ? [...(anyPinned ? [PINNED_GROUP] : []), ...currentGroupKeys()] : [] });
 }
 
 export async function moveGroup(key: string, delta: -1 | 1): Promise<boolean> {
