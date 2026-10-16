@@ -71,3 +71,9 @@ export async function runScheduleNow(task: ScheduledTask): Promise<string | null
     return null;
   }
 }
+
+/** A paused copy named "<name> (copy)": it does not run a second time until the user has changed and enabled it. */
+export async function duplicateSchedule(task: ScheduledTask): Promise<ScheduledTask | null> {
+  const { id: _id, createdAt: _created, lastRunAt: _at, lastRunSessionId: _session, lastRunStatus: _status, lastRunMessage: _message, nextRunAt: _next, ...rest } = task;
+  return createSchedule({ ...rest, name: `${task.name} (copy)`.slice(0, 100), enabled: false });
+}

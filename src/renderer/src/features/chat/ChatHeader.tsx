@@ -25,6 +25,13 @@ function EditableTitle({ session }: { session: SessionSummary }) {
   useEffect(() => {
     if (!editing) setValue(session.title);
   }, [session.title, editing]);
+  // "Rename" from the menu strip or the palette
+  const renameRequest = useUi((s) => s.renameRequest);
+  useEffect(() => {
+    if (renameRequest?.sessionId !== session.id) return;
+    useUi.setState({ renameRequest: null });
+    setEditing(true);
+  }, [renameRequest, session.id]);
   useEffect(() => {
     if (editing) {
       input.current?.focus();

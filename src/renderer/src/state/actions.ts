@@ -152,6 +152,12 @@ export async function renameSession(id: string, title: string): Promise<SessionS
   }
 }
 
+/** Open the session and start editing its title in the chat header. */
+export function requestRename(sessionId: string): void {
+  openSession(sessionId);
+  useUi.setState({ renameRequest: { sessionId, at: Date.now() } });
+}
+
 export async function setPinned(id: string, pinned: boolean): Promise<SessionSummary | null> {
   const prev = useSessions.getState().sessions[id];
   if (prev) upsert({ ...prev, pinned });

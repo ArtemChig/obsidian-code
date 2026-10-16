@@ -59,6 +59,18 @@ export function transcriptMarkdown(session: SessionSummary, messages: Message[],
   return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }
 
+/** Markdown for one message (right-click → Copy as Markdown): its text, tool calls as bullets, images as notes. */
+export function messageMarkdown(m: Message): string {
+  const out: string[] = [];
+  for (const b of m.blocks) {
+    if (b.type === 'text' && b.text.trim()) out.push(b.text.trim(), '');
+    else if (b.type === 'tool_use') out.push(toolLine(b));
+    else if (b.type === 'image') out.push(`*[image: ${b.name ?? b.mediaType}]*`, '');
+  }
+  if (m.role === 'assistant' && m.meta?.interrupted) out.push('', '*(interrupted)*');
+  return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
+}
+
 /** A file name for the export: the title, made safe for Windows. */
 export function exportFileName(title: string): string {
   const base = (title || 'session').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'session';

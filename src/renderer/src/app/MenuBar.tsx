@@ -6,21 +6,27 @@ import {
   Cpu,
   Download,
   FolderOpen,
+  GitFork,
   Info,
   Keyboard,
   LogOut,
   Minimize2,
   PanelLeft,
   PanelRight,
+  Pencil,
+  Pin,
+  PinOff,
   Power,
   RefreshCw,
   Search,
   Settings,
   Square,
   SquarePen,
+  Trash2,
   Undo2,
 } from 'lucide-react';
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ConfirmDialog } from '@renderer/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -35,11 +41,25 @@ import { getBridge, isElectron, pickFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { copySessionMarkdown, exportSessionMarkdown } from '@renderer/features/chat/session-actions';
 import { insertIntoComposer, stopTurn } from '@renderer/features/chat/state';
-import { createSession, navigate, openPalette, openSettings, sendMessage, setPermissionMode, toggleRightPanel, toggleSidebar } from '@renderer/state/actions';
+import {
+  createSession,
+  deleteSession,
+  forkSession,
+  navigate,
+  openPalette,
+  openSettings,
+  requestRename,
+  sendMessage,
+  setPermissionMode,
+  setPinned,
+  toggleRightPanel,
+  toggleSidebar,
+} from '@renderer/state/actions';
 import { GPU_BUSY_PHASES, isGpuClockedIn, useGpu } from '@renderer/state/gpu';
 import { useActiveSession } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { toast } from '@renderer/state/toasts';
+import { truncate } from '@renderer/lib/format';
 import { useUi } from '@renderer/state/ui';
 import { checkForUpdates, useUpdates } from '@renderer/state/updates';
 import { AutoClockOutMenuItems } from '@renderer/features/gpu/AutoClockOut';
@@ -138,6 +158,7 @@ export function MenuBar() {
   const gpuOn = phase !== 'off' && phase !== 'error';
   const electron = isElectron();
   const updatesOn = useUpdates((s) => s.snapshot !== null && s.snapshot.state.status !== 'unsupported');
+  const [deleting, setDeleting] = useState(false);
 
   return (
     <nav aria-label="Application menu" data-testid="menubar" className="flex h-[var(--ob-menubar-h)] shrink-0 items-center gap-px border-b border-rule px-2">
@@ -196,6 +217,16 @@ export function MenuBar() {
           Compact
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuItem icon={Pencil} disabled={!session} onSelect={() => session && requestRename(session.id)}>
+          Rename
+        </DropdownMenuItem>
+        <DropdownMenuItem icon={session?.pinned ? PinOff : Pin} disabled={!session || session.kind === 'subagent'} onSelect={() => session && void setPinned(session.id, !session.pinned)}>
+          {session?.pinned ? 'Unpin' : 'Pin'}
+        </DropdownMenuItem>
+        <DropdownMenuItem icon={GitFork} disabled={!session || session.kind === 'subagent'} onSelect={() => session && void forkSession(session.id)}>
+          Fork session
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem icon={Download} disabled={!session} onSelect={() => session && void exportSessionMarkdown(session.id)}>
           Export as Markdown
         </DropdownMenuItem>
@@ -204,6 +235,10 @@ export function MenuBar() {
         </DropdownMenuItem>
         <DropdownMenuItem icon={Undo2} disabled={!session || busy} hint="/rewind" onSelect={() => session && insertIntoComposer(session.id, '/rewind')}>
           Rewind…
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem icon={Trash2} danger disabled={!session || session.kind === 'subagent'} onSelect={() => setDeleting(true)}>
+          Delete session…
         </DropdownMenuItem>
       </Menu>
 
@@ -241,6 +276,17 @@ export function MenuBar() {
         <Hint label="New session" keys={SHORTCUTS.newSession} onClick={() => void createSession()} />
         <Hint label="Command" keys={SHORTCUTS.palette} onClick={() => openPalette()} testId="palette-trigger" />
       </div>
+      <ConfirmDialog
+        open={deleting && !!session}
+        onOpenChange={setDeleting}
+        title="Delete session?"
+        description={session ? `“${truncate(session.title, 60)}” and its transcript will be deleted. This can’t be undone.` : undefined}
+        confirmLabel="Delete"
+        danger
+        onConfirm={async () => {
+          if (session) await deleteSession(session.id);
+        }}
+      />
     </nav>
   );
 }

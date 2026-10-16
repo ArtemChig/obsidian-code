@@ -8,12 +8,16 @@ import {
   ClipboardCopy,
   Cpu,
   Download,
+  FolderPlus,
   GitFork,
   Keyboard,
   House,
   MessageSquare,
   PanelLeft,
   PanelRight,
+  Pencil,
+  Pin,
+  PinOff,
   Power,
   RefreshCw,
   Search,
@@ -40,8 +44,11 @@ import {
   forkSession,
   goHome,
   navigate,
+  openNewCategory,
   openSession,
   refreshModels,
+  requestRename,
+  setPinned,
   switchModel,
   toggleRightPanel,
   toggleSidebar,
@@ -149,6 +156,9 @@ function RootPage({ go }: { go: (p: Page) => void }) {
         <CommandItem icon={Search} onSelect={() => go('sessions')} keywords={['find', 'open', 'session']}>
           Search sessions…
         </CommandItem>
+        <CommandItem icon={FolderPlus} onSelect={run(() => openNewCategory())} keywords={['group', 'folder', 'sidebar', 'organize']}>
+          New category…
+        </CommandItem>
         <CommandItem icon={PanelLeft} shortcut={SHORTCUTS.sidebar} onSelect={run(() => toggleSidebar())} keywords={['sidebar', 'collapse']}>
           Toggle sidebar
         </CommandItem>
@@ -175,6 +185,14 @@ function RootPage({ go }: { go: (p: Page) => void }) {
           {current.kind !== 'subagent' ? (
             <CommandItem icon={GitFork} onSelect={run(() => void forkSession(current.id))} keywords={['fork', 'branch', 'duplicate']}>
               Fork session
+            </CommandItem>
+          ) : null}
+          <CommandItem icon={Pencil} onSelect={run(() => requestRename(current.id))} keywords={['title', 'name']}>
+            Rename session
+          </CommandItem>
+          {current.kind !== 'subagent' ? (
+            <CommandItem icon={current.pinned ? PinOff : Pin} onSelect={run(() => void setPinned(current.id, !current.pinned))} keywords={['pin', 'unpin', 'favorite']}>
+              {current.pinned ? 'Unpin session' : 'Pin session'}
             </CommandItem>
           ) : null}
         </CommandGroup>

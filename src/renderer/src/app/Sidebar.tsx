@@ -85,7 +85,7 @@ import {
 
 // ───────────────────────────── Session row ─────────────────────────────
 
-interface RowActions {
+export interface RowActions {
   onRename: (s: SessionSummary) => void;
   onDelete: (s: SessionSummary) => void;
 }
@@ -99,7 +99,8 @@ function SessionIndicator({ s, waiting, unread }: { s: SessionSummary; waiting: 
   return null;
 }
 
-function SessionMenuItems({ s, actions, parts, kind }: { s: SessionSummary; actions: RowActions; parts: MenuParts; kind: 'context' | 'dropdown' }) {
+/** The rows of a session's menu (the sidebar's right-click and "..." menus, and Home's recent list). */
+export function SessionMenuItems({ s, actions, parts, kind }: { s: SessionSummary; actions: RowActions; parts: MenuParts; kind: 'context' | 'dropdown' }) {
   const { Item, Sep, Sub, SubTrigger, SubContent } = parts;
   const prefs = useSidebarPrefs();
   const clockedIn = useAutoClockOutAvailable();

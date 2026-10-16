@@ -6,10 +6,14 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { EngineId, ModelRef, SessionSummary } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
+import { ConfirmDialog } from '@renderer/components/ui/dialog';
 import { EmptyState, ProgressBar, StatusDot } from '@renderer/components/ui/feedback';
 import { Textarea } from '@renderer/components/ui/input';
 import { SectionLabel } from '@renderer/components/ui/layout';
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -21,11 +25,11 @@ import { LiveDuration, RelativeTime } from '@renderer/components/ui/time';
 import { Tooltip } from '@renderer/components/ui/tooltip';
 import { pickFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
-import { basename, formatMoney, formatPerHour, pluralize, shortModelName, shortenPath, sameModel } from '@renderer/lib/format';
+import { basename, formatMoney, formatPerHour, pluralize, shortModelName, shortenPath, sameModel, truncate } from '@renderer/lib/format';
 import { EngineMenuItems } from '@renderer/features/chat/composer/EngineSelector';
 import { ModelNotice } from '@renderer/features/chat/composer/ModelNotice';
 import { SyncFailed, useSyncError } from '@renderer/features/settings/core-missing';
-import { createSession, navigate, openSession, refreshModels, sendMessage } from '@renderer/state/actions';
+import { createSession, deleteSession, navigate, openSession, refreshModels, requestRename, sendMessage } from '@renderer/state/actions';
 import { useGpu } from '@renderer/state/gpu';
 import { useModels } from '@renderer/state/models';
 import { findModel, useModelGroups, useRecentSessions, useWaitingSessionIds } from '@renderer/state/selectors';
@@ -34,6 +38,8 @@ import { useSettings } from '@renderer/state/settings';
 import { engineLabel, useEngines } from '@renderer/state/engines';
 import { AutoClockOutMenu } from '@renderer/features/gpu/AutoClockOut';
 import { GPU_PHASE_LABEL, gpuPrimaryAction, gpuTone, useLiveGpuCost, useModelLabel } from './GpuWidget';
+import { SessionMenuItems, type RowActions } from './Sidebar';
+import { CONTEXT_PARTS } from './SidebarGroups';
 
 function greeting(d = new Date()): string {
   const h = d.getHours();
@@ -202,50 +208,57 @@ function SessionGlyph({ s, waiting, unread }: { s: SessionSummary; waiting: bool
   return <MessageSquare size={12} aria-hidden className="text-t3" />;
 }
 
-function SessionLine({ s, waiting }: { s: SessionSummary; waiting: boolean }) {
+function SessionLine({ s, waiting, actions }: { s: SessionSummary; waiting: boolean; actions: RowActions }) {
   const models = useModels((st) => st.models);
   const unread = useSessions((st) => !!st.unread[s.id]);
   const info = findModel(models, s.model);
   const modelName = info?.label ?? (s.model ? shortModelName(s.model.model) : null);
   const needsYou = waiting || s.status === 'waiting';
   return (
-    <button
-      type="button"
-      onClick={() => openSession(s.id)}
-      data-testid="home-session"
-      className="ob-transition group flex w-full items-center gap-3 border-b border-rule2 px-2 py-2.5 text-left hover:bg-hov"
-    >
-      <span className="flex w-3 shrink-0 items-center justify-center">
-        <SessionGlyph s={s} waiting={waiting} unread={unread} />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className={cn('truncate text-[12.5px] tracking-[-0.016em]', unread || needsYou ? 'font-medium text-t1' : 'text-t1')}>{s.title || 'Untitled'}</span>
-          {needsYou ? (
-            <Badge tone="warning" variant="outline">
-              Needs you
-            </Badge>
-          ) : null}
-        </div>
-        <div className="flex min-w-0 items-center gap-1.5 font-mono text-[9.5px] tracking-[0.01em] text-t3">
-          <span className="shrink-0 text-t2">{basename(s.cwd)}</span>
-          {modelName ? (
-            <>
-              <span aria-hidden className="opacity-50">/</span>
-              <span className="truncate">{modelName}</span>
-            </>
-          ) : null}
-          {s.usage.requests ? (
-            <>
-              <span aria-hidden className="opacity-50">/</span>
-              <span className="shrink-0">{pluralize(s.usage.requests, 'turn')}</span>
-            </>
-          ) : null}
-        </div>
-      </div>
-      <RelativeTime ts={s.updatedAt} className="shrink-0 font-mono text-[9.5px] tracking-[0.02em] text-t3" />
-      <ArrowRight size={12} aria-hidden className="-ml-1 shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={() => openSession(s.id)}
+          data-testid="home-session"
+          className="ob-transition group flex w-full items-center gap-3 border-b border-rule2 px-2 py-2.5 text-left hover:bg-hov"
+        >
+          <span className="flex w-3 shrink-0 items-center justify-center">
+            <SessionGlyph s={s} waiting={waiting} unread={unread} />
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={cn('truncate text-[12.5px] tracking-[-0.016em]', unread || needsYou ? 'font-medium text-t1' : 'text-t1')}>{s.title || 'Untitled'}</span>
+              {needsYou ? (
+                <Badge tone="warning" variant="outline">
+                  Needs you
+                </Badge>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 items-center gap-1.5 font-mono text-[9.5px] tracking-[0.01em] text-t3">
+              <span className="shrink-0 text-t2">{basename(s.cwd)}</span>
+              {modelName ? (
+                <>
+                  <span aria-hidden className="opacity-50">/</span>
+                  <span className="truncate">{modelName}</span>
+                </>
+              ) : null}
+              {s.usage.requests ? (
+                <>
+                  <span aria-hidden className="opacity-50">/</span>
+                  <span className="shrink-0">{pluralize(s.usage.requests, 'turn')}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <RelativeTime ts={s.updatedAt} className="shrink-0 font-mono text-[9.5px] tracking-[0.02em] text-t3" />
+          <ArrowRight size={12} aria-hidden className="-ml-1 shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent data-testid="home-session-menu">
+        <SessionMenuItems s={s} actions={actions} parts={CONTEXT_PARTS} kind="context" />
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -255,6 +268,9 @@ function RecentSessions() {
   const sessionsError = useSyncError('sessions');
   const total = useSessions((s) => Object.values(s.sessions).filter((x) => x.kind !== 'subagent').length);
   const waiting = useWaitingSessionIds();
+  const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
+  // Rename opens the session with its title ready to edit
+  const actions: RowActions = { onRename: (s) => requestRename(s.id), onDelete: setDeleteTarget };
   return (
     <section aria-label="Recent sessions" className="min-w-0">
       <SectionLabel rule action={total ? <span className="font-mono text-[9.5px] tracking-[0.02em] text-t3">{total}</span> : undefined}>
@@ -275,13 +291,24 @@ function RecentSessions() {
         ) : recent.length ? (
           <div className="flex flex-col">
             {recent.map((s) => (
-              <SessionLine key={s.id} s={s} waiting={waiting.has(s.id)} />
+              <SessionLine key={s.id} s={s} waiting={waiting.has(s.id)} actions={actions} />
             ))}
           </div>
         ) : (
           <EmptyState size="sm" icon={MessageSquare} title="No sessions yet" description="Describe a task above to start your first session." />
         )}
       </div>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title="Delete session?"
+        description={deleteTarget ? `“${truncate(deleteTarget.title, 60)}” and its transcript will be deleted. This can’t be undone.` : undefined}
+        confirmLabel="Delete"
+        danger
+        onConfirm={async () => {
+          if (deleteTarget) await deleteSession(deleteTarget.id);
+        }}
+      />
     </section>
   );
 }

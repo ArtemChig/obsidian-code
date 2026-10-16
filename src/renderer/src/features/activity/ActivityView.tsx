@@ -4,6 +4,7 @@ import {
   Bot,
   CalendarClock,
   CircleStop,
+  Copy,
   Cpu,
   ListChecks,
   MessageCircleQuestion,
@@ -20,6 +21,7 @@ import { Button } from '@renderer/components/ui/button';
 import { ConfirmDialog } from '@renderer/components/ui/dialog';
 import { EmptyState, Skeleton, StatusDot } from '@renderer/components/ui/feedback';
 import { SectionLabel } from '@renderer/components/ui/layout';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@renderer/components/ui/menu';
 import { Tabs, TabsList, TabsTrigger } from '@renderer/components/ui/tabs';
 import { LiveDuration, RelativeTime } from '@renderer/components/ui/time';
 import { cn } from '@renderer/lib/cn';
@@ -28,6 +30,7 @@ import { navigate, openSession, stopActivity } from '@renderer/state/actions';
 import { useActivity } from '@renderer/state/activity';
 import { usePending } from '@renderer/state/pending';
 import { useSessions } from '@renderer/state/sessions';
+import { copyToClipboard } from '../chat/session-actions';
 import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from '../settings/core-missing';
 import { ViewHeader } from '../settings/view-kit';
 import {
@@ -274,62 +277,87 @@ function Row({ item, parent, sessionTitle, onStop }: { item: ActivityItem; paren
   const status = item.status;
   const context = item.kind === 'subagent' && parent ? `in ${parent}` : item.kind === 'shell' && sessionTitle ? `from ${sessionTitle}` : null;
   return (
-    <li className={cn(COLS, 'ob-transition min-h-8 border-b border-rule2 py-1 hover:bg-hov')} data-testid="activity-row" data-kind={item.kind} data-status={status}>
-      <StatusDot status={status} pulse={status === 'running'} size={6} label={STATUS_LABEL[status]} />
-      <div className="flex min-w-0 items-center gap-2">
-        <Icon size={13} aria-hidden className="shrink-0 text-t3" />
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <li className={cn(COLS, 'ob-transition min-h-8 border-b border-rule2 py-1 hover:bg-hov')} data-testid="activity-row" data-kind={item.kind} data-status={status}>
+          <StatusDot status={status} pulse={status === 'running'} size={6} label={STATUS_LABEL[status]} />
+          <div className="flex min-w-0 items-center gap-2">
+            <Icon size={13} aria-hidden className="shrink-0 text-t3" />
+            {target ? (
+              <button type="button" onClick={target.run} className="min-w-0 truncate text-left text-[12px] font-medium tracking-[-0.012em] text-t1 hover:underline" title={item.title}>
+                {item.title}
+              </button>
+            ) : (
+              <span className="min-w-0 truncate text-[12px] font-medium tracking-[-0.012em] text-t1" title={item.title}>
+                {item.title}
+              </span>
+            )}
+            {item.detail || context ? (
+              <span className="ob-mn min-w-0 flex-1 truncate" title={[item.detail, context].filter(Boolean).join(' · ')}>
+                {item.detail ? <b className={cn('font-normal', item.kind === 'shell' || item.kind === 'subagent' ? 'text-t2' : 'text-t3')}>{item.detail}</b> : null}
+                {item.detail && context ? <span className="opacity-[.42]"> / </span> : null}
+                {context}
+              </span>
+            ) : null}
+          </div>
+          <span className="hidden @min-[760px]:block">
+            <Badge tone="neutral">{KIND_LABEL[item.kind]}</Badge>
+          </span>
+          <span
+            className={cn(
+              'hidden text-[11.5px] tracking-[-0.01em] @min-[760px]:block',
+              status === 'running' ? 'text-live' : status === 'waiting' ? 'text-warn' : status === 'error' ? 'text-err' : 'text-t2',
+            )}
+          >
+            {STATUS_LABEL[status]}
+          </span>
+          <span className="ob-tabular hidden truncate font-mono text-[10.5px] tracking-[-0.02em] text-t2 @min-[760px]:block">
+            {live ? (
+              <LiveDuration since={item.startedAt} format="compact" className="text-t1" />
+            ) : item.endedAt ? (
+              <span title="Total run time">
+                {formatDuration(item.endedAt - item.startedAt)} <span className="text-t3">· <RelativeTime ts={item.endedAt} ago /></span>
+              </span>
+            ) : (
+              <RelativeTime ts={item.startedAt} />
+            )}
+          </span>
+          <div className="flex items-center justify-end gap-1.5">
+            {live ? (
+              <Button size="sm" variant="danger" icon={CircleStop} data-testid="activity-stop" aria-label={`Stop ${item.title}`} onClick={onStop}>
+                Stop
+              </Button>
+            ) : null}
+            {target ? (
+              <Button size="sm" variant="secondary" data-testid="activity-open" aria-label={`Open ${item.title}`} onClick={target.run}>
+                Open
+              </Button>
+            ) : null}
+          </div>
+        </li>
+      </ContextMenuTrigger>
+      <ContextMenuContent data-testid="activity-menu">
         {target ? (
-          <button type="button" onClick={target.run} className="min-w-0 truncate text-left text-[12px] font-medium tracking-[-0.012em] text-t1 hover:underline" title={item.title}>
-            {item.title}
-          </button>
-        ) : (
-          <span className="min-w-0 truncate text-[12px] font-medium tracking-[-0.012em] text-t1" title={item.title}>
-            {item.title}
-          </span>
-        )}
-        {item.detail || context ? (
-          <span className="ob-mn min-w-0 flex-1 truncate" title={[item.detail, context].filter(Boolean).join(' · ')}>
-            {item.detail ? <b className={cn('font-normal', item.kind === 'shell' || item.kind === 'subagent' ? 'text-t2' : 'text-t3')}>{item.detail}</b> : null}
-            {item.detail && context ? <span className="opacity-[.42]"> / </span> : null}
-            {context}
-          </span>
-        ) : null}
-      </div>
-      <span className="hidden @min-[760px]:block">
-        <Badge tone="neutral">{KIND_LABEL[item.kind]}</Badge>
-      </span>
-      <span
-        className={cn(
-          'hidden text-[11.5px] tracking-[-0.01em] @min-[760px]:block',
-          status === 'running' ? 'text-live' : status === 'waiting' ? 'text-warn' : status === 'error' ? 'text-err' : 'text-t2',
-        )}
-      >
-        {STATUS_LABEL[status]}
-      </span>
-      <span className="ob-tabular hidden truncate font-mono text-[10.5px] tracking-[-0.02em] text-t2 @min-[760px]:block">
-        {live ? (
-          <LiveDuration since={item.startedAt} format="compact" className="text-t1" />
-        ) : item.endedAt ? (
-          <span title="Total run time">
-            {formatDuration(item.endedAt - item.startedAt)} <span className="text-t3">· <RelativeTime ts={item.endedAt} ago /></span>
-          </span>
-        ) : (
-          <RelativeTime ts={item.startedAt} />
-        )}
-      </span>
-      <div className="flex items-center justify-end gap-1.5">
-        {live ? (
-          <Button size="sm" variant="danger" icon={CircleStop} data-testid="activity-stop" aria-label={`Stop ${item.title}`} onClick={onStop}>
-            Stop
-          </Button>
-        ) : null}
-        {target ? (
-          <Button size="sm" variant="secondary" data-testid="activity-open" aria-label={`Open ${item.title}`} onClick={target.run}>
+          <ContextMenuItem icon={SquareArrowOutUpRight} onSelect={target.run}>
             Open
-          </Button>
+          </ContextMenuItem>
         ) : null}
-      </div>
-    </li>
+        {live ? (
+          <ContextMenuItem icon={CircleStop} danger onSelect={onStop}>
+            Stop
+          </ContextMenuItem>
+        ) : null}
+        {target || live ? <ContextMenuSeparator /> : null}
+        <ContextMenuItem icon={Copy} onSelect={() => void copyToClipboard(item.title, 'Title')}>
+          Copy title
+        </ContextMenuItem>
+        {item.detail ? (
+          <ContextMenuItem icon={Copy} onSelect={() => void copyToClipboard(item.detail as string, 'Details')}>
+            Copy details
+          </ContextMenuItem>
+        ) : null}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

@@ -8,7 +8,6 @@ import { EmptyState, ProgressBar, Spinner, StatusDot } from '@renderer/component
 import { Input } from '@renderer/components/ui/input';
 import { SectionLabel } from '@renderer/components/ui/layout';
 import { RelativeTime } from '@renderer/components/ui/time';
-import { Tooltip } from '@renderer/components/ui/tooltip';
 import { cn } from '@renderer/lib/cn';
 import { basename, dirname, pluralize } from '@renderer/lib/format';
 import { errorMessage, rpc } from '@renderer/lib/rpc';
@@ -21,6 +20,7 @@ import { Elapsed } from './ui';
 import { TodoChecklist } from './tools/bodies';
 import { DiffStat, DiffView } from './tools/DiffView';
 import { FileActions } from './tools/FileActions';
+import { FileMenu } from './tools/FileMenu';
 
 function PanelLoading() {
   return (
@@ -97,24 +97,26 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
           const rel = displayPath(f.path, cwd);
           const dir = dirname(rel.replace(/\\/g, '/'));
           return (
-            <li key={f.path} className="ob-transition group/row flex items-center border-b border-rule2 pr-2 hover:bg-hov">
-              <button
-                type="button"
-                onClick={() => setSelected(f.path)}
-                data-testid="changed-file"
-                className="group flex h-8 min-w-0 flex-1 items-center gap-2.5 pl-4 text-left"
-                title={f.path}
-              >
-                {f.isNew ? <FilePlus size={13} aria-label="New file" className="shrink-0 text-ok" /> : <FileDiff size={13} aria-hidden className="shrink-0 text-t3" />}
-                <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                  <span className="shrink-0 truncate text-[12px] tracking-[-0.012em] text-t1">{basename(rel)}</span>
-                  {dir && dir !== rel ? <span className="min-w-0 truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{dir}</span> : null}
-                </span>
-                <DiffStat additions={f.additions} deletions={f.deletions} className="shrink-0" />
-                <ChevronRight size={12} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
-              </button>
-              <FileActions path={f.path} cwd={cwd} className="pl-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100" />
-            </li>
+            <FileMenu key={f.path} sessionId={sessionId} path={f.path} cwd={cwd}>
+              <li className="ob-transition group/row flex items-center border-b border-rule2 pr-2 hover:bg-hov">
+                <button
+                  type="button"
+                  onClick={() => setSelected(f.path)}
+                  data-testid="changed-file"
+                  className="group flex h-8 min-w-0 flex-1 items-center gap-2.5 pl-4 text-left"
+                  title={f.path}
+                >
+                  {f.isNew ? <FilePlus size={13} aria-label="New file" className="shrink-0 text-ok" /> : <FileDiff size={13} aria-hidden className="shrink-0 text-t3" />}
+                  <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                    <span className="shrink-0 truncate text-[12px] tracking-[-0.012em] text-t1">{basename(rel)}</span>
+                    {dir && dir !== rel ? <span className="min-w-0 truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{dir}</span> : null}
+                  </span>
+                  <DiffStat additions={f.additions} deletions={f.deletions} className="shrink-0" />
+                  <ChevronRight size={12} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+                <FileActions path={f.path} cwd={cwd} className="pl-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100" />
+              </li>
+            </FileMenu>
           );
         })}
       </ul>
@@ -270,7 +272,7 @@ function Dir({ sessionId, cwd, dir, depth }: { sessionId: string; cwd: string; d
         const isOpen = !!open[e.path];
         return (
           <li key={e.path} role="treeitem" aria-expanded={e.isDir ? isOpen : undefined} aria-selected={false}>
-            <Tooltip content={e.isDir ? undefined : 'Insert @mention in the composer'} side="left" disabled={e.isDir}>
+            <FileMenu sessionId={sessionId} path={e.path} cwd={cwd} isDir={e.isDir} tooltip={{ content: e.isDir ? undefined : 'Insert @mention in the composer', side: 'left', disabled: e.isDir }}>
               <button
                 type="button"
                 data-testid={e.isDir ? 'file-dir' : 'file-entry'}
@@ -298,7 +300,7 @@ function Dir({ sessionId, cwd, dir, depth }: { sessionId: string; cwd: string; d
                 <span className="min-w-0 flex-1 truncate">{e.name}</span>
                 {!e.isDir ? <AtSign size={11} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" /> : null}
               </button>
-            </Tooltip>
+            </FileMenu>
             {e.isDir && isOpen ? <Dir sessionId={sessionId} cwd={cwd} dir={e.path} depth={depth + 1} /> : null}
           </li>
         );
@@ -343,17 +345,19 @@ function FileSearch({ sessionId, cwd, query }: { sessionId: string; cwd: string;
         const norm = f.replace(/\\/g, '/');
         return (
           <li key={f}>
-            <button
-              type="button"
-              data-testid="file-entry"
-              onClick={() => insertIntoComposer(sessionId, mentionFor(norm))}
-              className="ob-transition group flex h-7 w-full items-center gap-2.5 border-b border-rule2 px-4 text-left hover:bg-hov"
-            >
-              <File size={13} aria-hidden className="shrink-0 text-t3" />
-              <span className="shrink-0 text-[12px] tracking-[-0.012em] text-t1">{basename(norm)}</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{dirname(norm) !== norm ? dirname(norm) : ''}</span>
-              <AtSign size={11} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
-            </button>
+            <FileMenu sessionId={sessionId} path={norm} cwd={cwd}>
+              <button
+                type="button"
+                data-testid="file-entry"
+                onClick={() => insertIntoComposer(sessionId, mentionFor(norm))}
+                className="ob-transition group flex h-7 w-full items-center gap-2.5 border-b border-rule2 px-4 text-left hover:bg-hov"
+              >
+                <File size={13} aria-hidden className="shrink-0 text-t3" />
+                <span className="shrink-0 text-[12px] tracking-[-0.012em] text-t1">{basename(norm)}</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-[9.5px] tracking-[0.01em] text-t3">{dirname(norm) !== norm ? dirname(norm) : ''}</span>
+                <AtSign size={11} aria-hidden className="shrink-0 text-t3 opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
+            </FileMenu>
           </li>
         );
       })}

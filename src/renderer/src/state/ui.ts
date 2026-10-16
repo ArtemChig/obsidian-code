@@ -22,6 +22,8 @@ export interface UiStore {
   shortcutsOpen: boolean;
   /** The "New category" dialog: open while set (afterKey = the group it goes under, sessionId = a session to put in it). */
   newCategory: { afterKey?: string; sessionId?: string } | null;
+  /** Ask the chat header to start editing this session's title (menu strip / palette "Rename"). */
+  renameRequest: { sessionId: string; at: number } | null;
 }
 
 const STORAGE_KEY = 'obsidian-code.ui.v1';
@@ -94,6 +96,7 @@ export const useUi = create<UiStore>(() => ({
   settingsSection: null,
   shortcutsOpen: false,
   newCategory: null,
+  renameRequest: null,
   ...loadPersisted(),
 }));
 
