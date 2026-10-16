@@ -5,6 +5,7 @@
 // nav (Scheduled / Activity / GPU / Settings) and the GPU widget.
 import {
   Activity,
+  Boxes,
   CalendarClock,
   ChevronRight,
   Copy,
@@ -462,6 +463,7 @@ function SidebarFull() {
         <NavRow icon={CalendarClock} label="Scheduled" route="schedules" count={enabledSchedules || undefined} />
         <NavRow icon={Activity} label="Activity" route="activity" count={runningActivity || undefined} />
         <NavRow icon={Cpu} label="GPU" route="gpu" />
+        <NavRow icon={Boxes} label="Models" route="models" />
         <NavRow icon={Settings} label="Settings" route="settings" shortcut={SHORTCUTS.settings} />
       </nav>
       <GpuWidget />
@@ -521,6 +523,7 @@ function SidebarRail() {
         ) : null}
       </span>
       <GpuRailButton />
+      <RailButton icon={Boxes} label="Models" route="models" />
       <RailButton icon={Settings} label="Settings" route="settings" shortcut={SHORTCUTS.settings} />
       <div className="flex-1" />
       <Tooltip content="Expand sidebar" shortcut={SHORTCUTS.sidebar} side="right">
