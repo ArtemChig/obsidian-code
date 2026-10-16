@@ -10,7 +10,7 @@
 //   UPDATE_E2E=1 npx playwright test tests/e2e/update-e2e.spec.ts        (UPDATE_E2E_REUSE=1 keeps/reuses the builds)
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -108,6 +108,8 @@ test('packaged build: update feed config is the private GitHub repo, unsigned (n
 
 test('unpacked build without a test feed: updates are off and no button shows', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'oc-upd-off-'));
+  // A fresh data dir would open the first-run setup over the app: mark it done.
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ setupDone: true }));
   const app = await electron.launch({ executablePath: exeA, args: [], env: { ...process.env, OBSIDIAN_CODE_DATA_DIR: dataDir, ELECTRON_RENDERER_URL: '', OBSIDIAN_UPDATE_TEST_FEED: '' }, timeout: 90_000 });
   try {
     const page = await app.firstWindow();
@@ -126,6 +128,8 @@ test('A finds B, one click downloads it, shuts down gracefully and triggers the 
   const log: string[] = [];
   const { server, url } = await serveFeed(outB, log);
   const dataDir = mkdtempSync(join(tmpdir(), 'oc-upd-data-'));
+  // A fresh data dir would open the first-run setup over the app: mark it done.
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ setupDone: true }));
   const localAppData = mkdtempSync(join(tmpdir(), 'oc-upd-local-'));
   const app = await electron.launch({
     executablePath: exeA,

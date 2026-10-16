@@ -52,6 +52,8 @@ test('claude-code engine runs a turn inside the Electron app on the local model'
   test.skip(!(await localServerUp()), `local llama-server at ${LOCAL} is unreachable`);
   mkdirSync(shots, { recursive: true });
   const dataDir = mkdtempSync(join(tmpdir(), 'obsidian-code-cc-'));
+  // A fresh data dir would open the first-run setup over the app: mark it done.
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ setupDone: true }));
   const project = join(mkdtempSync(join(tmpdir(), 'oc cc-')), 'cc project');
   mkdirSync(project, { recursive: true });
   writeFileSync(join(project, 'README.md'), '# cc\n');

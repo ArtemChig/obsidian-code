@@ -62,6 +62,8 @@ test('packaged build: renders, core, ripgrep from app.asar.unpacked, bootstrap s
   test.skip(!existsSync(exe), `packaged build not found at ${exe} (run npm run dist)`);
   mkdirSync(shots, { recursive: true });
   const dataDir = mkdtempSync(join(tmpdir(), 'obsidian-code-pkg-'));
+  // A fresh data dir would open the first-run setup over the app: mark it done.
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ setupDone: true }));
   const project = join(mkdtempSync(join(tmpdir(), 'oc pkg-')), 'grep target');
   mkdirSync(project, { recursive: true });
   writeFileSync(join(project, 'a.txt'), 'nothing to see\nsay hello to the world\n');

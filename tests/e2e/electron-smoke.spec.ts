@@ -41,6 +41,14 @@ test('electron app launches and shows the Obsidian Code window', async () => {
     await expect(window.getByTestId('status-version')).toContainText(version);
     await expect(window.getByTestId('update-button')).toHaveCount(0);
 
+    // A fresh install (no Vast.ai key) opens the first-run setup; Skip closes it for good (Settings.setupDone).
+    await expect(window.getByTestId('setup-wizard')).toBeVisible();
+    await window.getByTestId('setup-skip').click();
+    await expect(window.getByTestId('setup-wizard')).toHaveCount(0);
+    await expect
+      .poll(() => (JSON.parse(readFileSync(join(dataDir, 'settings.json'), 'utf8')) as { setupDone?: boolean }).setupDone)
+      .toBe(true);
+
     await window.screenshot({ path: join(__dirname, 'screenshots', 'smoke.png') });
   } finally {
     await app.close();

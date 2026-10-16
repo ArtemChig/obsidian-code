@@ -112,6 +112,8 @@ test('real app: local model, tools, palettes, views, settings, clean quit', asyn
   mkdirSync(shots, { recursive: true });
 
   const dataDir = mkdtempSync(join(tmpdir(), 'obsidian-code-real-'));
+  // A fresh data dir would open the first-run setup over the app: mark it done.
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ setupDone: true }));
   // A project folder with spaces and a long-ish path (Windows quoting, truncation in the UI).
   const project = join(mkdtempSync(join(tmpdir(), 'oc proj-')), 'My Project With Spaces', 'feature-branch-workspace');
   mkdirSync(join(project, 'src'), { recursive: true });

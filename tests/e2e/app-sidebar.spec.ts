@@ -3,7 +3,7 @@
 // and manual order. No model is needed (sessions are created and moved, never run).
 //
 //   npm run build && npx playwright test tests/e2e/app-sidebar.spec.ts
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
@@ -60,6 +60,8 @@ const groupNames = (page: Page): Promise<string[]> => page.getByTestId('group-to
 test('the sidebar layout survives a restart', async () => {
   test.setTimeout(180_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'obsidian-code-e2e-sidebar-'));
+  // A fresh data dir would open the first-run setup over the app: mark it done.
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ setupDone: true }));
   const base = mkdtempSync(join(tmpdir(), 'oc-proj-'));
   const alpha = join(base, 'alpha');
   const beta = join(base, 'beta');
