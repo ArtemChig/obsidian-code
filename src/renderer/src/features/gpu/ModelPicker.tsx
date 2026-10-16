@@ -1,5 +1,5 @@
 // Model list for the selected GPU profile: 28 px table rows with an Uncensored <-> Standard segmented control. Owner: ui-views.
-import { FlaskConical, RefreshCw } from 'lucide-react';
+import { Boxes, FlaskConical, RefreshCw } from 'lucide-react';
 import type { CatalogModel, GpuProfile } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
@@ -30,12 +30,14 @@ export interface ModelPickerProps {
   onSelect: (modelId: string) => void;
   onSwitch: (modelId: string) => void;
   onRetryCatalog: () => void;
+  /** Open the Models view (browse Hugging Face, add models). */
+  onBrowse?: () => void;
 }
 
 /** Shared grid of the header and the rows: mark · model · build · size · context · warm-up. */
 const COLS = 'grid grid-cols-[12px_minmax(0,1.5fr)_minmax(0,1fr)_64px_52px_112px] items-center gap-3 px-2';
 
-export function ModelPicker({ profile, catalog, catalogError, selectedId, currentId, canSwitch, switching, showTest, pricePerHour, onShowTest, onSelect, onSwitch, onRetryCatalog }: ModelPickerProps) {
+export function ModelPicker({ profile, catalog, catalogError, selectedId, currentId, canSwitch, switching, showTest, pricePerHour, onShowTest, onSelect, onSwitch, onRetryCatalog, onBrowse }: ModelPickerProps) {
   if (!catalog) {
     return (
       <div className="py-3" data-testid="gpu-model-picker">
@@ -77,7 +79,14 @@ export function ModelPicker({ profile, catalog, catalogError, selectedId, curren
           <span className="text-[12.5px] font-medium tracking-[-0.016em] text-t1">Model for {profile.label}</span>
           <span className="truncate text-[11px] text-t3">Flip the toggle to get the other build of the same model.</span>
         </div>
-        <VariantToggle variant={variant} enabled={variants} profileLabel={profile.label} onChange={setVariant} />
+        <div className="flex shrink-0 items-center gap-2">
+          {onBrowse ? (
+            <Button size="sm" variant="ghost" icon={Boxes} onClick={onBrowse} data-testid="gpu-browse-models">
+              Browse models…
+            </Button>
+          ) : null}
+          <VariantToggle variant={variant} enabled={variants} profileLabel={profile.label} onChange={setVariant} />
+        </div>
       </div>
 
       <div role="radiogroup" aria-label="GPU model" className="-mx-2">
@@ -208,6 +217,7 @@ function ModelRow({
       <div className="flex min-w-0 items-center gap-2">
         <span className={cn('truncate text-[12px] tracking-[-0.012em]', selected ? 'font-medium text-t1' : 'text-t1')}>{name}</span>
         {isDefault ? <Badge tone="neutral">default</Badge> : null}
+        {model.source === 'user' ? <Badge tone="accent">added</Badge> : null}
         {isCurrent ? <Badge tone="success">running</Badge> : null}
         {model.experimental ? (
           <Tooltip content="Young llama.cpp support. If it fails to load, the clock-in falls back to a stable model on the same machine.">

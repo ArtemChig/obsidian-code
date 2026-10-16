@@ -39,7 +39,7 @@ Dark-only. Lucide icons only (13–16 px, stroke 1.5 is set globally, colour `--
 |---|---|
 | `design/`, `components/ui/`, `lib/`, `state/`, `app/`, `main.tsx`, `index.html`, this guide | ui-foundation |
 | `features/chat/**` | ui-chat |
-| `features/{gpu,activity,schedules,settings}/**` | ui-views |
+| `features/{gpu,models,activity,schedules,settings}/**` | ui-views |
 
 The shell imports exactly these, so keep the names and props:
 
@@ -48,8 +48,8 @@ The shell imports exactly these, so keep the names and props:
 export function ChatView(props: { sessionId: string }): JSX.Element  // fills the main area: use "flex h-full flex-col"
 // features/chat/panels.tsx (right panel tabs; the container and tabs bar are already provided)
 export function ChangesPanel(p: { sessionId: string }); TodosPanel; AgentsPanel; FilesPanel
-// features/gpu/GpuView.tsx, features/activity/ActivityView.tsx, features/schedules/SchedulesView.tsx, features/settings/SettingsView.tsx
-export function GpuView(); ActivityView(); SchedulesView(); SettingsView()
+// features/gpu/GpuView.tsx, features/models/ModelsView.tsx, features/activity/ActivityView.tsx, features/schedules/SchedulesView.tsx, features/settings/SettingsView.tsx
+export function GpuView(); ModelsView(); ActivityView(); SchedulesView(); SettingsView()
 ```
 
 Shell layout (top → bottom): **title bar** 34 px (brand diamond + `OBSIDIAN CODE`, centred document title) · **menu strip**
@@ -197,7 +197,7 @@ ready-made selectors.
 | `useSettings` | `settings`, `system` (system.info), `secrets` (presence map) |
 | `useActivity` / `useSchedules` | `items` / `tasks` (live through `activity.updated` / `schedules.updated`) |
 | `useConnection` | `mode` 'core'/'demo'/'none' · `state.status` (open/reconnecting/…) · `ready` |
-| `useUi` | `route` 'session'/'gpu'/'activity'/'schedules'/'settings' · `sidebarCollapsed` · `rightPanelOpen` · `rightPanelTab` · `paletteOpen` · `settingsSection` · `shortcutsOpen` |
+| `useUi` | `route` 'session'/'gpu'/'models'/'activity'/'schedules'/'settings' · `sidebarCollapsed` · `rightPanelOpen` · `rightPanelTab` · `paletteOpen` · `settingsSection` · `shortcutsOpen` |
 | `useUpdates` (`state/updates`) | `snapshot: UpdateSnapshot \| null` (`@shared/updates`: state idle/checking/available/not-available/downloading/downloaded/installing/error/unsupported, `currentVersion`, `lastCheckedAt`, `tokenSource`, `releaseUrl`) · `source` 'electron'/'demo'. null = no updater (browser) → hide update UI. Actions: `checkForUpdates()`, `installUpdate()`; `useStartUpdate()` (app/UpdateButton) adds the GPU confirm |
 | `useToasts` | toast queue |
 
@@ -268,6 +268,9 @@ running subagent `s-sse-explore`), `s-perm` (waiting on a Bash permission `perm-
   Useful test ids: `app-title`, `titlebar`, `menubar`, `menu-<file|view|session|gpu|help>`, `view-title`, `status-bar`,
   `status-connection`, `status-gpu`, `sidebar` (`data-collapsed`), `session-row`, `new-session`, `nav-<route>`, `gpu-widget`,
   `gpu-clock-button`, `right-panel`, `home`, `quick-start`, `palette-trigger`, `update-button` (`data-status`),
-  `update-version`, `status-version`, `settings-updates`.
+  `update-version`, `status-version`, `settings-updates`. Models view: `models-view`, `models-tab-<browse|favorites|mine|recommended>`, `models-search`,
+  `models-row` (`data-repo`), `models-detail` (`data-repo`), `models-variant` (`data-quant`, `data-fits`, `data-recommended`), `models-add`,
+  `models-add-recommended`, `models-favorite` (`data-on`), `models-mine-row`, `models-remove`, `models-restore-default`; the GPU view's picker has
+  `gpu-browse-models`. In demo mode `?hub=error` / `?hub=slow` show the Hugging Face error and loading states (see `features/models/demo.ts`).
   Put your screenshots next to the reference shots in `docs/design/m-13-obsidian/shots/` and iterate on spacing, alignment
   and contrast until they read as the same design language before you hand off.

@@ -23,7 +23,7 @@ import http from 'node:http';
 import type { CoreContext, GpuManager, LlmProvider } from '../contracts';
 import type { CatalogModel, GpuOffer, GpuPhase, GpuProfile, GpuServerMode, GpuSessionRecord, GpuStatus, Settings } from '../../shared/types';
 import {
-  catalogModels, defaultModelForProfile, diskGbFor, estimateWarmupCost, experimentalFallback, getCatalogModel, CATALOG,
+  catalogModels, defaultModelForProfile, diskGbFor, estimateWarmupCost, experimentalFallback, getCatalogModel, isUserModel, serverCatalog,
 } from './catalog';
 import { CONTAINER_LOG_SECTION, evidenceCommand, formatFailureLog, latestFailureLog, parseEvidence, redactSecrets, saveFailureLog } from './failure-log';
 import { GpuLedger, costFor, round4, type ActiveInstance, type ParkedInstance } from './ledger';
@@ -139,6 +139,8 @@ export const DEFAULT_VAST_SETTINGS: Settings['vast'] = {
   image: 'ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561',
   localPort: 18080,
   extraLlamaArgs: [],
+  userModels: [],
+  favoriteRepos: [],
   autoClockOut: { default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 },
 };
 
@@ -718,6 +720,7 @@ export class GpuManagerImpl implements GpuManager {
     this.clearServerMode();
     this.setPhase('switching', `Switching to ${model.label}…`, 0);
     this.runJob('switch', async (signal) => {
+      if (isUserModel(model)) await this.uploadConfigSh();
       await this.runSwitchCommand(model.id);
       this.active!.modelId = model.id;
       this.active!.bandwidthUsd = round4(this.active!.bandwidthUsd + model.sizeGb * this.active!.inetDownCostPerGb);
@@ -1205,7 +1208,8 @@ export class GpuManagerImpl implements GpuManager {
       bootMaxMinutes: bootMaxMinutesFor(model),
       nonce,
       bootstrap: scripts.bootstrap,
-      configSh: renderConfigSh(CATALOG, vs.extraLlamaArgs),
+      // Built-ins + the chosen model; a later live switch uploads the full list first (see switchModel).
+      configSh: renderConfigSh(serverCatalog(model.id), vs.extraLlamaArgs),
     });
     const attemptStart = this.now();
     const tracked = this.ledger.active;
@@ -1663,16 +1667,26 @@ export class GpuManagerImpl implements GpuManager {
     const files: [string, string][] = [
       ['onstart.sh', scripts.onstart],
       ['bootstrap.sh', scripts.bootstrap],
-      ['config.sh', renderConfigSh(CATALOG, vs.extraLlamaArgs)],
+      ['config.sh', renderConfigSh(catalogModels(), vs.extraLlamaArgs)],
     ];
-    for (const [name, content] of files) {
-      const r = await ssh.exec(`mkdir -p /root/oc && base64 -d > /root/oc/${name}.tmp && mv -f /root/oc/${name}.tmp /root/oc/${name}`, {
-        stdin: `${Buffer.from(content, 'utf8').toString('base64')}\n`,
-        timeoutMs: 60_000,
-      });
-      if (r.code !== 0) throw new Error(`Uploading ${name} failed: ${r.stderr.trim() || `exit ${r.code}`}`);
-    }
+    for (const [name, content] of files) await this.writeServerFile(name, content);
     await ssh.exec('cd /root/oc && setsid nohup bash /root/oc/onstart.sh >/dev/null 2>&1 </dev/null &', { timeoutMs: 30_000 });
+  }
+
+  /** Write one file into /root/oc over SSH: temp file + mv, the content travels base64 on stdin (never in the command line). */
+  private async writeServerFile(name: string, content: string): Promise<void> {
+    const ssh = this.ssh;
+    if (!ssh?.isConnected()) throw new Error('SSH is not connected');
+    const r = await ssh.exec(`mkdir -p /root/oc && base64 -d > /root/oc/${name}.tmp && mv -f /root/oc/${name}.tmp /root/oc/${name}`, {
+      stdin: `${Buffer.from(content, 'utf8').toString('base64')}\n`,
+      timeoutMs: 60_000,
+    });
+    if (r.code !== 0) throw new Error(`Uploading ${name} failed: ${r.stderr.trim() || `exit ${r.code}`}`);
+  }
+
+  /** The server's config.sh lists the built-ins and the model rented for; a model added since (or not rented for) is sent before switching to it. */
+  private async uploadConfigSh(): Promise<void> {
+    await this.writeServerFile('config.sh', renderConfigSh(catalogModels(), this.vastSettings().extraLlamaArgs));
   }
 
   private async runSwitchCommand(modelId: string): Promise<void> {

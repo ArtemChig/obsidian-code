@@ -79,6 +79,10 @@ export function resetDemoRegistry(): void {
   handlerOverrides.clear();
 }
 
+function noDemoHub(method: string): never {
+  throw new RpcError(`The model browser demo data is not loaded (${method}).`, 'demo_error', method);
+}
+
 function keyOf(item: unknown): string | null {
   if (!item || typeof item !== 'object') return null;
   const o = item as Record<string, unknown>;
@@ -629,6 +633,13 @@ export class DemoTransport implements RpcTransport {
       }
       return { ok: true as const };
     },
+
+    // model browser: the real implementations are registered by features/models/demo.ts (recorded Hugging Face responses)
+    'hub.search': () => noDemoHub('hub.search'),
+    'hub.details': () => noDemoHub('hub.details'),
+    'hub.addModel': () => noDemoHub('hub.addModel'),
+    'hub.removeModel': () => noDemoHub('hub.removeModel'),
+    'hub.setFavorite': () => noDemoHub('hub.setFavorite'),
 
     // settings & secrets
     'settings.get': () => this.data.settings,

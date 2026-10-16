@@ -1,6 +1,6 @@
 // Wires core events into the stores and (re)fetches state on every (re)connect. Owner: ui-foundation.
 import type { CoreEvents } from '@shared/protocol';
-import type { Session, SessionSummary } from '@shared/types';
+import type { Session, SessionSummary, Settings } from '@shared/types';
 import { errorMessage, rpc } from '../lib/rpc';
 import { useActivity, useSchedules } from './activity';
 import { SYNC_RESOURCE_LABEL, useConnection, type SyncResource } from './connection';
@@ -162,6 +162,27 @@ function removeSession(sessionId: string): void {
   });
 }
 
+// ───────────────────────────── GPU catalog follows the settings ─────────────────────────────
+
+/**
+ * What the GPU catalog is derived from: the models the user added and the profiles they are planned against. When it
+ * changes (a model was added or removed, a profile edited) the loaded catalog is stale and is fetched again.
+ */
+export function catalogInputsKey(settings: Settings | null | undefined): string {
+  if (!settings) return '';
+  return JSON.stringify([settings.vast.userModels, settings.vast.profiles.map((p) => [p.id, p.numGpus, p.minGpuRamGb])]);
+}
+
+function onSettingsUpdated(settings: Settings): void {
+  const prev = useSettings.getState().settings;
+  useSettings.setState({ settings });
+  if (!useGpu.getState().catalog || catalogInputsKey(prev) === catalogInputsKey(settings)) return;
+  rpc
+    .request('gpu.catalog', {})
+    .then((catalog) => useGpu.setState({ catalog }))
+    .catch(() => undefined); // the next view that needs the catalog loads it again
+}
+
 // ───────────────────────────── Event binding ─────────────────────────────
 
 let unbindAll: (() => void) | null = null;
@@ -190,7 +211,7 @@ export function bindEvents(): () => void {
   on('gpu.status', (status) => useGpu.setState({ status }));
   on('schedules.updated', (tasks) => useSchedules.setState({ tasks, loaded: true }));
   on('activity.updated', (items) => useActivity.setState({ items, loaded: true }));
-  on('settings.updated', (settings) => useSettings.setState({ settings }));
+  on('settings.updated', onSettingsUpdated);
 
   on('notification', (n) => toast({ title: n.title, body: n.body, level: n.level, sessionId: n.sessionId }));
   on('error', (e) => toast({ title: 'Error', body: e.message, level: 'error', sessionId: e.sessionId }));

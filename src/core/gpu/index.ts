@@ -21,3 +21,6 @@ export {
 export { DEFAULT_GPU_PROFILES, defaultProfiles, findProfile } from './profiles';
 export { VastClient, VastError, buildOfferQuery, toGpuOffer, APP_LABEL, VAST_DEFAULT_BASE_URL } from './vast-client';
 export { VastProvider } from './provider';
+export { HubClient, HubError } from './hub';
+export { bindUserCatalog, createModelBrowser, ModelBrowserError } from './model-browser';
+export { setUserCatalogModels, userCatalogModels, builtinCatalogModels, serverCatalog, isUserModel } from './catalog';

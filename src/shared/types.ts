@@ -238,6 +238,10 @@ export interface CatalogModel {
   notes?: string;
   experimental?: boolean;
   verifiedAt?: string; // ISO date the repo/files were last verified to exist
+  /** `builtin` = the recommended list shipped with the app; `user` = added by the user from the Hugging Face model browser. */
+  source?: 'builtin' | 'user';
+  /** Quant label of a user-added model ("Q4_K_M", "UD-Q5_K_XL"). */
+  quant?: string;
 }
 
 export type GpuPhase =
@@ -432,6 +436,10 @@ export interface Settings {
     image: string;            // docker image for the server
     localPort: number;        // tunnel port on this PC
     extraLlamaArgs: string[];
+    /** Models the user added from Hugging Face (Models view). Validated on every load and update (src/shared/user-models.ts). */
+    userModels: CatalogModel[];
+    /** Hugging Face repos the user starred in the model browser ("owner/name"), newest first. */
+    favoriteRepos: string[];
     /** Auto clock-out: `default` arms a global watch at every clock-in; the minutes are the limits of every watch. */
     autoClockOut: {
       default: AutoClockOutChoice;

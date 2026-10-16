@@ -1,0 +1,305 @@
+{
+ "_id": "6a7d8038d813eea1a14a8db4",
+ "id": "unsloth/Qwen3.8-27B-GGUF",
+ "private": false,
+ "tags": [
+  "gguf",
+  "qwen3_5",
+  "unsloth",
+  "base_model:Qwen/Qwen3.8-27B",
+  "base_model:quantized:Qwen/Qwen3.8-27B",
+  "license:apache-2.0",
+  "endpoints_compatible",
+  "region:us",
+  "imatrix",
+  "conversational"
+ ],
+ "downloads": 6663225,
+ "likes": 5128,
+ "modelId": "unsloth/Qwen3.8-27B-GGUF",
+ "author": "unsloth",
+ "sha": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+ "lastModified": "2026-08-20T12:04:25.000Z",
+ "gated": false,
+ "disabled": false,
+ "config": {
+  "architectures": [
+   "Qwen3_5ForConditionalGeneration"
+  ],
+  "model_type": "qwen3_5"
+ },
+ "cardData": {
+  "base_model": [
+   "Qwen/Qwen3.8-27B"
+  ],
+  "license": "apache-2.0",
+  "tags": [
+   "unsloth"
+  ]
+ },
+ "gguf": {
+  "total": 27320697856,
+  "architecture": "qwen35",
+  "context_length": 262144,
+  "quantize_imatrix_file": "Qwen3.8-27B-GGUF/imatrix_unsloth.gguf",
+  "bos_token": "<|endoftext|>",
+  "eos_token": "<|im_end|>",
+  "totalFileSize": 16056478688
+ },
+ "siblings": [
+  {
+   "rfilename": ".gitattributes",
+   "size": 4175
+  },
+  {
+   "rfilename": "BF16/Qwen3.8-27B-BF16-00001-of-00002.gguf",
+   "size": 49986159616,
+   "lfs": {
+    "size": 49986159616,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/Qwen3.8-27B-BF16-00002-of-00002.gguf",
+   "size": 4671576000,
+   "lfs": {
+    "size": 4671576000,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "MTP/mtp-Qwen3.8-27B-Q4_0.gguf",
+   "size": 1369590656,
+   "lfs": {
+    "size": 1369590656,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-Q4_0.gguf",
+   "size": 16056478688,
+   "lfs": {
+    "size": 16056478688,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-Q4_1.gguf",
+   "size": 17540705248,
+   "lfs": {
+    "size": 17540705248,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-Q8_0.gguf",
+   "size": 29047086048,
+   "lfs": {
+    "size": 29047086048,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-IQ1_M.gguf",
+   "size": 6729166848,
+   "lfs": {
+    "size": 6729166848,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-IQ1_S.gguf",
+   "size": 6192222208,
+   "lfs": {
+    "size": 6192222208,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-IQ2_S.gguf",
+   "size": 8371970048,
+   "lfs": {
+    "size": 8371970048,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-IQ2_XXS.gguf",
+   "size": 7266070528,
+   "lfs": {
+    "size": 7266070528,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-IQ3_S.gguf",
+   "size": 12040883104,
+   "lfs": {
+    "size": 12040883104,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-IQ3_XXS.gguf",
+   "size": 10934860704,
+   "lfs": {
+    "size": 10934860704,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-IQ4_XS.gguf",
+   "size": 14252845984,
+   "lfs": {
+    "size": 14252845984,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q2_K_XL.gguf",
+   "size": 9828981664,
+   "lfs": {
+    "size": 9828981664,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q3_K_XL.gguf",
+   "size": 13146393504,
+   "lfs": {
+    "size": 13146393504,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q4_K_M.gguf",
+   "size": 16464440224,
+   "lfs": {
+    "size": 16464440224,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q4_K_S.gguf",
+   "size": 15358213024,
+   "lfs": {
+    "size": 15358213024,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q4_K_XL.gguf",
+   "size": 17559178144,
+   "lfs": {
+    "size": 17559178144,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q5_K_M.gguf",
+   "size": 19771509664,
+   "lfs": {
+    "size": 19771509664,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q5_K_S.gguf",
+   "size": 18665753504,
+   "lfs": {
+    "size": 18665753504,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q5_K_XL.gguf",
+   "size": 20876938144,
+   "lfs": {
+    "size": 20876938144,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q6_K.gguf",
+   "size": 21983677344,
+   "lfs": {
+    "size": 21983677344,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q6_K_L.gguf",
+   "size": 24193919904,
+   "lfs": {
+    "size": 24193919904,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q6_K_M.gguf",
+   "size": 23088409504,
+   "lfs": {
+    "size": 23088409504,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q6_K_XL.gguf",
+   "size": 25299061664,
+   "lfs": {
+    "size": 25299061664,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q8_K_L.gguf",
+   "size": 28045695904,
+   "lfs": {
+    "size": 28045695904,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Qwen3.8-27B-UD-Q8_K_XL.gguf",
+   "size": 31457991680,
+   "lfs": {
+    "size": 31457991680,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "README.md",
+   "size": 7455
+  },
+  {
+   "rfilename": "config.json",
+   "size": 3760
+  },
+  {
+   "rfilename": "imatrix_unsloth.gguf",
+   "size": 13642656,
+   "lfs": {
+    "size": 13642656,
+    "pointerSize": 133
+   }
+  },
+  {
+   "rfilename": "mmproj-BF16.gguf",
+   "size": 931146432,
+   "lfs": {
+    "size": 931146432,
+    "pointerSize": 134
+   }
+  },
+  {
+   "rfilename": "mmproj-F16.gguf",
+   "size": 927607488,
+   "lfs": {
+    "size": 927607488,
+    "pointerSize": 134
+   }
+  }
+ ],
+ "createdAt": "2026-08-13T08:28:40.000Z",
+ "usedStorage": 1053655307648
+}

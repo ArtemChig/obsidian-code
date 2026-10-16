@@ -253,6 +253,18 @@ export interface GpuManager {
   dispose(): Promise<void>;
 }
 
+/** Model browser (src/core/gpu/model-browser.ts): Hugging Face search + the user's added models and favorites. */
+export interface ModelBrowserApi {
+  search(params: import('../shared/hub').HubSearchParams, opts?: { refresh?: boolean }): Promise<import('../shared/hub').HubSearchResult>;
+  details(repo: string, opts?: { refresh?: boolean }): Promise<import('../shared/hub').HubModelDetail>;
+  /** Add (or replace) a model: `quant` is a variant id (first file path) or a quant label. Refuses gated repos. */
+  addModel(p: { repo: string; quant: string; withVision?: boolean }): Promise<import('../shared/types').CatalogModel>;
+  /** Remove a model the user added (never a built-in, never one the GPU is using). */
+  removeModel(id: string): void;
+  /** Returns the favorites after the change (newest first). */
+  setFavorite(repo: string, favorite: boolean): string[];
+}
+
 /** Auto clock-out (src/core/gpu/auto-clockout.ts): clocks the GPU out when the agent finished or stopped responding. */
 export interface AutoClockOutApi {
   /** The armed watches, with their live countdown. */
@@ -300,6 +312,8 @@ export interface CoreContext {
   gpu: GpuManager;
   /** Absent in minimal test contexts. */
   autoClockOut?: AutoClockOutApi;
+  /** Absent in minimal test contexts. */
+  modelBrowser?: ModelBrowserApi;
   scheduler: SchedulerApi;
   activity: ActivityRegistry;
   /** Native integrations injected by Electron main (no-ops in standalone/browser mode). */

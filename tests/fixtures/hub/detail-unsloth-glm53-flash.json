@@ -1,0 +1,759 @@
+{
+ "_id": "6a8ef65b58482bb8b9d2a681",
+ "id": "unsloth/GLM-5.3-Flash-GGUF",
+ "private": false,
+ "pipeline_tag": "text-generation",
+ "tags": [
+  "gguf",
+  "unsloth",
+  "glm5_next",
+  "text-generation",
+  "en",
+  "zh",
+  "arxiv:2602.15763",
+  "base_model:zai-org/GLM-5.3-Flash",
+  "base_model:quantized:zai-org/GLM-5.3-Flash",
+  "license:mit",
+  "endpoints_compatible",
+  "region:us",
+  "conversational"
+ ],
+ "downloads": 958322,
+ "likes": 483,
+ "modelId": "unsloth/GLM-5.3-Flash-GGUF",
+ "author": "unsloth",
+ "sha": "a38483c8cd5df544f53d70fb281afe97369d5ab6",
+ "lastModified": "2026-10-05T22:23:39.000Z",
+ "gated": false,
+ "disabled": false,
+ "widgetData": [
+  {
+   "text": "Hi, what can you help me with?"
+  },
+  {
+   "text": "What is 84 * 3 / 2?"
+  },
+  {
+   "text": "Tell me an interesting fact about the universe!"
+  },
+  {
+   "text": "Explain quantum computing in simple terms."
+  }
+ ],
+ "config": {},
+ "cardData": {
+  "language": [
+   "en",
+   "zh"
+  ],
+  "license": "mit",
+  "pipeline_tag": "text-generation",
+  "base_model": [
+   "zai-org/GLM-5.3-Flash"
+  ],
+  "tags": [
+   "unsloth",
+   "glm5_next"
+  ]
+ },
+ "gguf": {
+  "total": 320759404382,
+  "architecture": "glm5-next",
+  "context_length": 1048576,
+  "bos_token": "[gMASK]",
+  "eos_token": "<|endoftext|>",
+  "totalFileSize": 641641064288
+ },
+ "siblings": [
+  {
+   "rfilename": ".gitattributes",
+   "size": 9483
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00001-of-00014.gguf",
+   "size": 9429728,
+   "lfs": {
+    "size": 9429728,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00002-of-00014.gguf",
+   "size": 48155668736,
+   "lfs": {
+    "size": 48155668736,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00003-of-00014.gguf",
+   "size": 49289812544,
+   "lfs": {
+    "size": 49289812544,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00004-of-00014.gguf",
+   "size": 49315393792,
+   "lfs": {
+    "size": 49315393792,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00005-of-00014.gguf",
+   "size": 49998245760,
+   "lfs": {
+    "size": 49998245760,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00006-of-00014.gguf",
+   "size": 49492991520,
+   "lfs": {
+    "size": 49492991520,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00007-of-00014.gguf",
+   "size": 49289812544,
+   "lfs": {
+    "size": 49289812544,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00008-of-00014.gguf",
+   "size": 49596568192,
+   "lfs": {
+    "size": 49596568192,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00009-of-00014.gguf",
+   "size": 49315393792,
+   "lfs": {
+    "size": 49315393792,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00010-of-00014.gguf",
+   "size": 49289812544,
+   "lfs": {
+    "size": 49289812544,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00011-of-00014.gguf",
+   "size": 49622149440,
+   "lfs": {
+    "size": 49622149440,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00012-of-00014.gguf",
+   "size": 49289812544,
+   "lfs": {
+    "size": 49289812544,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00013-of-00014.gguf",
+   "size": 49355397280,
+   "lfs": {
+    "size": 49355397280,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "BF16/GLM-5.3-Flash-BF16-00014-of-00014.gguf",
+   "size": 49620575872,
+   "lfs": {
+    "size": 49620575872,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00001-of-00008.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00002-of-00008.gguf",
+   "size": 49665857344,
+   "lfs": {
+    "size": 49665857344,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00003-of-00008.gguf",
+   "size": 49822821280,
+   "lfs": {
+    "size": 49822821280,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00004-of-00008.gguf",
+   "size": 49849652064,
+   "lfs": {
+    "size": 49849652064,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00005-of-00008.gguf",
+   "size": 49974608352,
+   "lfs": {
+    "size": 49974608352,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00006-of-00008.gguf",
+   "size": 49840638624,
+   "lfs": {
+    "size": 49840638624,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00007-of-00008.gguf",
+   "size": 49831834720,
+   "lfs": {
+    "size": 49831834720,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00008-of-00008.gguf",
+   "size": 41987123840,
+   "lfs": {
+    "size": 41987123840,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "README.md",
+   "size": 8377
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-BF16-00001-of-00014.gguf_file",
+   "size": 9429728,
+   "lfs": {
+    "size": 9429728,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-Q8_0-00001-of-00008.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-IQ1_M-00001-of-00003.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-IQ1_S-00001-of-00003.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-IQ3_XXS-00001-of-00004.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-IQ4_XS-00001-of-00005.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-Q2_K_XL-00001-of-00004.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-Q3_K_XL-00001-of-00004.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-Q4_K_XL-00001-of-00006.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-Q5_K_XL-00001-of-00006.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/GLM-5.3-Flash-UD-Q6_K_XL-00001-of-00007.gguf_file",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/mmproj-BF16.gguf_file",
+   "size": 1164010176,
+   "lfs": {
+    "size": 1164010176,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "Shard_Rewrite/mmproj-F16.gguf_file",
+   "size": 1128047296,
+   "lfs": {
+    "size": 1128047296,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "UD-IQ1_M/GLM-5.3-Flash-UD-IQ1_M-00001-of-00003.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-IQ1_M/GLM-5.3-Flash-UD-IQ1_M-00002-of-00003.gguf",
+   "size": 49996246592,
+   "lfs": {
+    "size": 49996246592,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ1_M/GLM-5.3-Flash-UD-IQ1_M-00003-of-00003.gguf",
+   "size": 47573668096,
+   "lfs": {
+    "size": 47573668096,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ1_S/GLM-5.3-Flash-UD-IQ1_S-00001-of-00003.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-IQ1_S/GLM-5.3-Flash-UD-IQ1_S-00002-of-00003.gguf",
+   "size": 49621122496,
+   "lfs": {
+    "size": 49621122496,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ1_S/GLM-5.3-Flash-UD-IQ1_S-00003-of-00003.gguf",
+   "size": 43456692608,
+   "lfs": {
+    "size": 43456692608,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00002-of-00004.gguf",
+   "size": 49896298080,
+   "lfs": {
+    "size": 49896298080,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00003-of-00004.gguf",
+   "size": 49248507840,
+   "lfs": {
+    "size": 49248507840,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00004-of-00004.gguf",
+   "size": 2690716000,
+   "lfs": {
+    "size": 2690716000,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00001-of-00004.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00002-of-00004.gguf",
+   "size": 49261511584,
+   "lfs": {
+    "size": 49261511584,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00003-of-00004.gguf",
+   "size": 49075832480,
+   "lfs": {
+    "size": 49075832480,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00004-of-00004.gguf",
+   "size": 22020797792,
+   "lfs": {
+    "size": 22020797792,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00001-of-00005.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00002-of-00005.gguf",
+   "size": 49989334176,
+   "lfs": {
+    "size": 49989334176,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00003-of-00005.gguf",
+   "size": 49607025280,
+   "lfs": {
+    "size": 49607025280,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00004-of-00005.gguf",
+   "size": 49486530144,
+   "lfs": {
+    "size": 49486530144,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00005-of-00005.gguf",
+   "size": 7729791616,
+   "lfs": {
+    "size": 7729791616,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00001-of-00004.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00002-of-00004.gguf",
+   "size": 49294975936,
+   "lfs": {
+    "size": 49294975936,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00003-of-00004.gguf",
+   "size": 49949266048,
+   "lfs": {
+    "size": 49949266048,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00004-of-00004.gguf",
+   "size": 9466399584,
+   "lfs": {
+    "size": 9466399584,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00001-of-00004.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00002-of-00004.gguf",
+   "size": 49609243584,
+   "lfs": {
+    "size": 49609243584,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00003-of-00004.gguf",
+   "size": 49623486016,
+   "lfs": {
+    "size": 49623486016,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00004-of-00004.gguf",
+   "size": 48293762496,
+   "lfs": {
+    "size": 48293762496,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00001-of-00006.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00002-of-00006.gguf",
+   "size": 49198039200,
+   "lfs": {
+    "size": 49198039200,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00003-of-00006.gguf",
+   "size": 49988626304,
+   "lfs": {
+    "size": 49988626304,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00004-of-00006.gguf",
+   "size": 48700701344,
+   "lfs": {
+    "size": 48700701344,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00005-of-00006.gguf",
+   "size": 49026026752,
+   "lfs": {
+    "size": 49026026752,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00006-of-00006.gguf",
+   "size": 2784497888,
+   "lfs": {
+    "size": 2784497888,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00001-of-00006.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00002-of-00006.gguf",
+   "size": 48806959328,
+   "lfs": {
+    "size": 48806959328,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00003-of-00006.gguf",
+   "size": 48557435712,
+   "lfs": {
+    "size": 48557435712,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00004-of-00006.gguf",
+   "size": 49317045120,
+   "lfs": {
+    "size": 49317045120,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00005-of-00006.gguf",
+   "size": 49317045120,
+   "lfs": {
+    "size": 49317045120,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00006-of-00006.gguf",
+   "size": 44298171744,
+   "lfs": {
+    "size": 44298171744,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00001-of-00007.gguf",
+   "size": 9429984,
+   "lfs": {
+    "size": 9429984,
+    "pointerSize": 132
+   }
+  },
+  {
+   "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00002-of-00007.gguf",
+   "size": 49354106688,
+   "lfs": {
+    "size": 49354106688,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00003-of-00007.gguf",
+   "size": 48109732704,
+   "lfs": {
+    "size": 48109732704,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00004-of-00007.gguf",
+   "size": 49515348992,
+   "lfs": {
+    "size": 49515348992,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00005-of-00007.gguf",
+   "size": 48930700352,
+   "lfs": {
+    "size": 48930700352,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00006-of-00007.gguf",
+   "size": 49077752288,
+   "lfs": {
+    "size": 49077752288,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00007-of-00007.gguf",
+   "size": 46836040800,
+   "lfs": {
+    "size": 46836040800,
+    "pointerSize": 136
+   }
+  },
+  {
+   "rfilename": "imatrix_unsloth.gguf_file",
+   "size": 512687616,
+   "lfs": {
+    "size": 512687616,
+    "pointerSize": 134
+   }
+  },
+  {
+   "rfilename": "mmproj-BF16.gguf",
+   "size": 1164010176,
+   "lfs": {
+    "size": 1164010176,
+    "pointerSize": 135
+   }
+  },
+  {
+   "rfilename": "mmproj-F16.gguf",
+   "size": 1128047296,
+   "lfs": {
+    "size": 1128047296,
+    "pointerSize": 135
+   }
+  }
+ ],
+ "createdAt": "2026-08-26T14:21:15.000Z",
+ "usedStorage": 2547994796597
+}

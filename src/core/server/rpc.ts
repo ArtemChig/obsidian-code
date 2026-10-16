@@ -4,9 +4,12 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { HUB_PIPELINE_TAGS, HUB_SORTS, type HubPipelineTag, type HubSort } from '../../shared/hub';
 import type { RpcMethod, RpcMethods, RpcParams, RpcResult } from '../../shared/protocol';
 import type { EngineId, ModelRef, PermissionMode, Session, SessionSummary, Settings, ToolUseBlock } from '../../shared/types';
 import type { CoreContext } from '../contracts';
+import { HubError } from '../gpu/hub';
+import { ModelBrowserError } from '../gpu/model-browser';
 import { toSummary } from '../store/sessions';
 import { listDir, readTextFile, searchFiles } from './files';
 
@@ -22,6 +25,17 @@ function gpuHoldsInstance(ctx: CoreContext): boolean {
     return false;
   }
   return st.instanceId != null || (st.phase !== 'off' && st.phase !== 'error') || !!st.parked;
+}
+
+/** Run a model-browser call; Hugging Face and refusal errors keep their (already friendly) message and get a code. */
+async function browser<T>(fn: () => T | Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof RpcError) throw err;
+    if (err instanceof HubError || err instanceof ModelBrowserError) throw new RpcError(err.message, err.code);
+    throw err;
+  }
 }
 
 export class RpcError extends Error {
@@ -154,6 +168,11 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
     }
     ctx.sessions.delete(id);
     ctx.bus.emit('session.deleted', { sessionId: id });
+  };
+
+  const modelBrowser = (): NonNullable<CoreContext['modelBrowser']> => {
+    if (!ctx.modelBrowser) throw new RpcError('The model browser is not available.', 'unavailable');
+    return ctx.modelBrowser;
   };
 
   const handlers: RpcHandlers = {
@@ -415,6 +434,45 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
       } catch (err) {
         throw new RpcError(err instanceof Error ? err.message : String(err), 'invalid_state');
       }
+    },
+
+    // ── model browser
+    'hub.search': (params) => {
+      const p = obj(params);
+      const sort = optStr(p, 'sort');
+      if (sort !== undefined && !HUB_SORTS.includes(sort as HubSort)) throw new RpcError(`Invalid params: "sort" must be one of ${HUB_SORTS.join(', ')}`, 'invalid_params');
+      const tag = optStr(p, 'pipelineTag');
+      if (tag !== undefined && !HUB_PIPELINE_TAGS.includes(tag as HubPipelineTag)) {
+        throw new RpcError(`Invalid params: "pipelineTag" must be one of ${HUB_PIPELINE_TAGS.join(', ')}`, 'invalid_params');
+      }
+      return browser(() =>
+        modelBrowser().search(
+          { query: optStr(p, 'query'), sort: sort as HubSort | undefined, pipelineTag: tag as HubPipelineTag | undefined, limit: optNum(p, 'limit'), cursor: optStr(p, 'cursor') },
+          { refresh: p.refresh === true },
+        ),
+      );
+    },
+    'hub.details': (params) => {
+      const p = obj(params);
+      return browser(() => modelBrowser().details(reqStr(p, 'repo'), { refresh: p.refresh === true }));
+    },
+    'hub.addModel': (params) => {
+      const p = obj(params);
+      const args = { repo: reqStr(p, 'repo'), quant: reqStr(p, 'quant'), withVision: p.withVision === true };
+      return browser(() => modelBrowser().addModel(args));
+    },
+    'hub.removeModel': (params) => {
+      const id = reqStr(obj(params), 'id');
+      return browser(() => {
+        modelBrowser().removeModel(id);
+        return { ok: true as const };
+      });
+    },
+    'hub.setFavorite': (params) => {
+      const p = obj(params);
+      if (typeof p.favorite !== 'boolean') throw new RpcError('Invalid params: "favorite" must be a boolean', 'invalid_params');
+      const repo = reqStr(p, 'repo');
+      return browser(() => ({ favorites: modelBrowser().setFavorite(repo, p.favorite as boolean) }));
     },
 
     // ── scheduler

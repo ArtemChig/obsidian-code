@@ -2,7 +2,7 @@
 // Layout preferences persist to localStorage (best-effort).
 import { create } from 'zustand';
 
-export type Route = 'session' | 'gpu' | 'activity' | 'schedules' | 'settings';
+export type Route = 'session' | 'gpu' | 'models' | 'activity' | 'schedules' | 'settings';
 export type RightPanelTab = 'changes' | 'todos' | 'agents' | 'files';
 
 export interface UiStore {
@@ -120,6 +120,7 @@ useUi.subscribe((s, prev) => {
 export const ROUTE_TITLES: Record<Route, string> = {
   session: 'Sessions',
   gpu: 'GPU',
+  models: 'Models',
   activity: 'Activity',
   schedules: 'Scheduled',
   settings: 'Settings',

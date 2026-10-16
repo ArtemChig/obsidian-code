@@ -10,6 +10,8 @@
 //     non-experimental model on the same instance if the experimental one fails to load.
 
 import type { CatalogModel } from '../../shared/types';
+import { sanitizeUserModels, withCurrentProfiles } from '../../shared/user-models';
+import type { FitProfile } from '../../shared/model-fit';
 
 export const CATALOG: readonly CatalogModel[] = [
   {
@@ -303,13 +305,64 @@ export const WARMUP_DOWNLOAD_MBPS = 150;
 /** Fixed overhead for instance boot + SSH + weight loading, in seconds. */
 export const WARMUP_OVERHEAD_SEC = 180;
 
-/** A fresh copy of the catalog (callers may mutate their copy freely). */
+// ───────────────────────────── Built-in + user models ─────────────────────────────
+// CATALOG above is the built-in, recommended list and never changes. Models the user added from Hugging Face
+// (Settings.vast.userModels) are registered here by the core (setUserCatalogModels, on start and on every settings
+// change), so every lookup below sees both. Built-ins come first; entries carry `source` ('builtin' | 'user').
+
+const BUILTIN: readonly CatalogModel[] = CATALOG.map((m) => ({ ...m, source: 'builtin' as const }));
+const BUILTIN_IDS: ReadonlySet<string> = new Set(CATALOG.map((m) => m.id));
+let userModels: readonly CatalogModel[] = [];
+
+/**
+ * Register the user's added models. They are re-validated here (a built-in id can never be shadowed) and, when
+ * `profiles` is given, their `profiles` are recomputed from the current GPU profiles' VRAM.
+ */
+export function setUserCatalogModels(models: readonly CatalogModel[], profiles?: readonly FitProfile[]): void {
+  const clean = sanitizeUserModels(models, BUILTIN_IDS);
+  userModels = profiles ? withCurrentProfiles(clean, profiles) : clean;
+}
+
+/** The registered user models (copies). */
+export function userCatalogModels(): CatalogModel[] {
+  return userModels.map(copyModel);
+}
+
+/** The built-in models only (copies, tagged `source: 'builtin'`). */
+export function builtinCatalogModels(): CatalogModel[] {
+  return BUILTIN.map(copyModel);
+}
+
+export function isUserModel(m: Pick<CatalogModel, 'source'>): boolean {
+  return m.source === 'user';
+}
+
+function all(): readonly CatalogModel[] {
+  return userModels.length === 0 ? BUILTIN : [...BUILTIN, ...userModels];
+}
+
+function copyModel(m: CatalogModel): CatalogModel {
+  return { ...m, files: [...m.files], llamaArgs: [...m.llamaArgs], profiles: [...m.profiles] };
+}
+
+/**
+ * The models config.sh must know on a server that is being rented for `modelId`: every built-in plus the chosen user
+ * model. (A live switch uploads the full list over SSH first, so the instance env stays small however many models the
+ * user added.)
+ */
+export function serverCatalog(modelId?: string): CatalogModel[] {
+  const extra = modelId ? userModels.find((m) => m.id === modelId) : undefined;
+  return (extra ? [...BUILTIN, extra] : [...BUILTIN]).map(copyModel);
+}
+
+/** A fresh copy of the catalog: built-ins first, then the user's models (callers may mutate their copy freely). */
 export function catalogModels(): CatalogModel[] {
-  return CATALOG.map((m) => ({ ...m, files: [...m.files], llamaArgs: [...m.llamaArgs], profiles: [...m.profiles] }));
+  return all().map(copyModel);
 }
 
 export function getCatalogModel(id: string): CatalogModel | undefined {
-  return CATALOG.find((m) => m.id === id);
+  const m = all().find((x) => x.id === id);
+  return m ? copyModel(m) : undefined;
 }
 
 export function requireCatalogModel(id: string): CatalogModel {
@@ -328,7 +381,7 @@ export function isTestModel(m: CatalogModel): boolean {
 
 /** Models recommended for a profile (test models excluded unless includeTest). */
 export function modelsForProfile(profileId: string, opts: { includeTest?: boolean } = {}): CatalogModel[] {
-  return CATALOG.filter((m) => m.profiles.includes(profileId) && (opts.includeTest || !isTestModel(m)));
+  return all().filter((m) => m.profiles.includes(profileId) && (opts.includeTest || !isTestModel(m)));
 }
 
 /**
@@ -340,7 +393,7 @@ export function siblingVariant(modelId: string, variant: 'uncensored' | 'standar
   const m = getCatalogModel(modelId);
   if (!m) return undefined;
   if (m.variant === variant) return m;
-  const candidates = CATALOG.filter((c) => c.family === m.family && c.variant === variant);
+  const candidates = all().filter((c) => c.family === m.family && c.variant === variant);
   if (candidates.length === 0) return undefined;
   const overlap = (c: CatalogModel) => c.profiles.filter((p) => m.profiles.includes(p)).length;
   return [...candidates].sort((a, b) => overlap(b) - overlap(a) || Math.abs(a.sizeGb - m.sizeGb) - Math.abs(b.sizeGb - m.sizeGb))[0];
@@ -375,7 +428,8 @@ export function defaultModelForProfile(profileId: string, defaultModelId: string
 export function experimentalFallback(modelId: string, totalVramGb: number): CatalogModel | undefined {
   const m = getCatalogModel(modelId);
   if (!m || !isExperimental(m)) return undefined;
-  const pool = CATALOG.filter(
+  // Built-ins only: the app never swaps in a model the user added by themselves behind their back.
+  const pool = BUILTIN.filter(
     (c) => !isExperimental(c) && !isTestModel(c) && c.id !== m.id && c.minTotalVramGb <= totalVramGb && c.profiles.some((p) => m.profiles.includes(p)),
   );
   return pool.find((c) => c.variant === m.variant) ?? pool[0];

@@ -73,6 +73,12 @@ const CALLS = {
   'gpu.testKey': {},
   'gpu.autoClockOut.get': {},
   'gpu.autoClockOut.set': { mode: 'both' },
+  // answered by features/models/demo.ts when it is loaded (the demo core only has stubs for them)
+  'hub.search': {},
+  'hub.details': { repo: 'unsloth/Qwen3.8-27B-GGUF' },
+  'hub.addModel': { repo: 'unsloth/Qwen3.8-27B-GGUF', quant: 'Q8_0' },
+  'hub.removeModel': { id: 'hf-nothing' },
+  'hub.setFavorite': { repo: 'a/b', favorite: true },
   'schedules.list': {},
   'schedules.create': { name: 'n', prompt: 'p', cwd: 'C:\\x', schedule: '0 * * * *', oneShot: false, enabled: true, model: null, permissionMode: 'default', allowAutoClockIn: false },
   'schedules.update': { id: 'sch-audit', patch: { enabled: false } },

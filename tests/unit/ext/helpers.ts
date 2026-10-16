@@ -18,7 +18,7 @@ export function defaultSettings(patch: Partial<Settings> = {}): Settings {
     custom: [],
     vast: {
       profiles: [], monthlyBudget: 100, idleMinutes: 20, heartbeatMinutes: 5, maxSessionHours: 6, clockOutOnQuit: true,
-      clockOutMode: 'destroy', parkMaxDays: 3, image: '', localPort: 18080, extraLlamaArgs: [],
+      clockOutMode: 'destroy', parkMaxDays: 3, image: '', localPort: 18080, extraLlamaArgs: [], userModels: [], favoriteRepos: [],
       autoClockOut: { default: 'off', stallMinutes: 10, finishGraceMinutes: 2 },
     },
     search: { provider: 'duckduckgo' },

@@ -6,7 +6,11 @@ import { join, resolve, sep } from 'node:path';
 import type { GpuProfile, HookConfig, PermissionMode, Settings } from '../../shared/types';
 import type { SettingsStore } from '../contracts';
 import { isPlainObject, readJsonSync, writeFileAtomicSync } from './fsutil';
+import { CATALOG } from '../gpu/catalog';
 import { defaultProfiles } from '../gpu/profiles';
+import { sanitizeFavoriteRepos, sanitizeUserModels } from '../../shared/user-models';
+
+const BUILTIN_MODEL_IDS: ReadonlySet<string> = new Set(CATALOG.map((m) => m.id));
 
 type HookEvent = keyof Settings['hooks'];
 const HOOK_EVENTS: HookEvent[] = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SessionStart'];
@@ -39,6 +43,8 @@ export function defaultSettings(): Settings {
       image: 'ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561',
       localPort: 18080,
       extraLlamaArgs: [],
+      userModels: [],
+      favoriteRepos: [],
       autoClockOut: { default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 },
     },
     search: { provider: 'duckduckgo' },
@@ -132,6 +138,10 @@ export function validateSettings(input: unknown): Settings {
   m.vast.profiles = m.vast.profiles.filter((p) => isPlainObject(p) && typeof p.id === 'string');
   if (m.vast.profiles.length === 0) m.vast.profiles = defaultGpuProfiles();
   m.vast.extraLlamaArgs = m.vast.extraLlamaArgs.filter((a): a is string => typeof a === 'string');
+  // Models added from Hugging Face end up in config.sh on the rented server and in download URLs: only entries that pass
+  // the safe-name/size checks survive, and none may shadow a built-in id.
+  m.vast.userModels = sanitizeUserModels(m.vast.userModels, BUILTIN_MODEL_IDS);
+  m.vast.favoriteRepos = sanitizeFavoriteRepos(m.vast.favoriteRepos);
   m.autoCompactPercent = Math.min(98, Math.max(10, m.autoCompactPercent));
   m.maxToolOutputChars = Math.max(1000, Math.floor(m.maxToolOutputChars));
   if (!m.defaultCwd) m.defaultCwd = d.defaultCwd;

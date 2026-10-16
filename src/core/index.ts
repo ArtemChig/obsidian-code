@@ -19,7 +19,7 @@ import type { CoreContext, NativeBridge } from './contracts';
 import { createActivityRegistry } from './activity/index';
 import { createAgentRouter } from './engine/index';
 import { createExtensions } from './ext/index';
-import { createAutoClockOut, createGpuManager } from './gpu/index';
+import { bindUserCatalog, createAutoClockOut, createGpuManager, createModelBrowser } from './gpu/index';
 import { createLlmClient, createModelRegistry } from './llm/index';
 import { createScheduler } from './scheduler/index';
 import { createEventBus } from './server/bus';
@@ -93,8 +93,15 @@ export async function createCore(opts: CreateCoreOptions): Promise<CoreHandle> {
   ctx.shells = createShellRegistry(ctx);
   ctx.tools = createToolRegistry(ctx);
   ctx.models = createModelRegistry(ctx);
+  // The models the user added from Hugging Face join the built-in catalog (every lookup sees both); kept in sync below.
+  const offUserCatalog = bindUserCatalog(ctx.settings);
   const gpu = createGpuManager(ctx);
   ctx.gpu = gpu;
+  ctx.modelBrowser = createModelBrowser({
+    settings: ctx.settings,
+    gpuStatus: () => ctx.gpu.status(),
+    usedBy: (id) => ctx.scheduler.list().filter((t) => t.model?.provider === 'vast' && t.model.model === id).map((t) => t.name),
+  });
   ctx.agent = createAgentRouter(ctx);
   const autoClockOut = createAutoClockOut(ctx);
   ctx.autoClockOut = autoClockOut;
@@ -161,6 +168,7 @@ export async function createCore(opts: CreateCoreOptions): Promise<CoreHandle> {
       await bounded('gpu dispose', Promise.resolve().then(() => gpu.dispose()), CLOSE_STEP_TIMEOUT_MS);
       await bounded('session flush', Promise.resolve().then(() => ctx.sessions.flush()), CLOSE_STEP_TIMEOUT_MS);
       offSettings();
+      offUserCatalog();
       activity.flush();
       activity.dispose();
       await bounded('server close', server.close(), CLOSE_STEP_TIMEOUT_MS);

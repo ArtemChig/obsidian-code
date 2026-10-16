@@ -167,6 +167,8 @@ export const DEMO_SETTINGS: Settings = {
     image: 'ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561',
     localPort: 18080,
     extraLlamaArgs: [],
+    userModels: [],
+    favoriteRepos: ['unsloth/Qwen3.8-27B-GGUF', 'ornith-ai/Ornith-1.5-9B-GGUF'],
     autoClockOut: { default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 },
   },
   search: { provider: 'duckduckgo' },
