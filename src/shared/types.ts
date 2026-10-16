@@ -290,6 +290,34 @@ export interface GpuStatus {
   serverContextLength?: number;
   /** The newest failure log saved this run (<dataDir>/logs/gpu-<instanceId>-<YYYYMMDD-HHMMSS>.log). */
   failureLogPath?: string;
+  /** The auto clock-out watch to show: the global one ("any session on the GPU"), else the earliest per-session one. */
+  autoClockOut?: AutoClockOutWatch;
+  /** Every armed auto clock-out watch (the global one and the per-session ones). Absent when none is armed. */
+  autoClockOutWatches?: AutoClockOutWatch[];
+}
+
+/** What an auto clock-out watch waits for. */
+export type AutoClockOutMode = 'finished' | 'unresponsive' | 'both';
+/** A mode choice including "no watch" (settings default, RPC set). */
+export type AutoClockOutChoice = AutoClockOutMode | 'off';
+
+/**
+ * Clock the GPU out automatically: when the watched session(s) finished ('finished', after a grace period) and/or
+ * stopped responding ('unresponsive'). Only acts while the GPU is clocked in; gone after it fires or the GPU clocks out.
+ */
+export interface AutoClockOutWatch {
+  /** The watched session; absent = any session that uses the Vast.ai provider. */
+  sessionId?: string;
+  sessionTitle?: string;
+  mode: AutoClockOutMode;
+  armedAt: number;
+  /** 'default' = armed by Settings → Vast.ai at clock-in; 'user' = chosen from a menu. */
+  source: 'user' | 'default';
+  /** The limits in force (from Settings → Vast.ai → Auto clock-out). */
+  stallMinutes: number;
+  finishGraceMinutes: number;
+  /** The nearest clock-out this watch is heading for right now (absent while nothing is counting down). */
+  pending?: { kind: 'finished' | 'unresponsive'; at: number; reason: string };
 }
 
 export type GpuServerMode = 'full' | 'safe' | 'safe-minimal';
@@ -320,7 +348,10 @@ export interface GpuSessionRecord {
   startedAt: number;
   endedAt?: number;
   cost: number;
-  endReason?: 'clock_out' | 'idle' | 'app_quit' | 'budget' | 'max_hours' | 'error' | 'orphan_cleanup' | 'server_watchdog';
+  endReason?:
+    | 'clock_out' | 'idle' | 'app_quit' | 'budget' | 'max_hours' | 'error' | 'orphan_cleanup' | 'server_watchdog'
+    /** Auto clock-out: the agent stopped responding / the watched work finished. */
+    | 'auto_unresponsive' | 'auto_finished';
 }
 
 // ───────────────────────────── Scheduler ─────────────────────────────
@@ -399,6 +430,14 @@ export interface Settings {
     image: string;            // docker image for the server
     localPort: number;        // tunnel port on this PC
     extraLlamaArgs: string[];
+    /** Auto clock-out: `default` arms a global watch at every clock-in; the minutes are the limits of every watch. */
+    autoClockOut: {
+      default: AutoClockOutChoice;
+      /** 'unresponsive': a running session without progress (or waiting for input) this long → clock out. */
+      stallMinutes: number;
+      /** 'finished': no session running this long → clock out. */
+      finishGraceMinutes: number;
+    };
   };
   search: { provider: 'duckduckgo' | 'brave' | 'tavily' | 'searxng'; searxngUrl?: string };
   permissions: { allow: string[]; deny: string[] };

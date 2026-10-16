@@ -202,6 +202,21 @@ with JSON payload on stdin, timeout, exit code 2 = block with stderr as message;
   `max` (2× RTX PRO 6000 → GLM-5.3-Flash). Each family must have an **uncensored** and a **standard** variant (uncensored
   preferred: heretic-org / HauhauCS / huihui-ai; standard: unsloth / official GGUF).
 * `VastProvider` (id `vast`): endpoint = tunnel URL + API key when ready; models = the loaded catalog model.
+* **Auto clock-out** (`src/core/gpu/auto-clockout.ts`; `gpu.autoClockOut.get/set`; `GpuStatus.autoClockOut` +
+  `autoClockOutWatches`; `Settings.vast.autoClockOut`): so nobody pays for an idle or hung GPU overnight. A *watch*
+  targets one session or any session using the Vast provider (the global watch) with mode `finished` (no session
+  'running' — idle, error or waiting for the user — for `finishGraceMinutes`, default 2, counted only after something ran
+  since arming; a queued message or a new run cancels it), `unresponsive` (a running session without progress events for
+  `stallMinutes`, default 10; or 3 reasoning-only turns in a row — the agent loop's "You ended your turn with reasoning…"
+  hook messages without a tool call between them; or a session waiting for input that long — a global watch needs EVERY
+  active session stuck; a tool call that is running gets 10 more minutes; the stuck sessions are interrupted first) or `both`. Only acts while the GPU is `ready`
+  (loading/model switches restart the timers; a PC sleep is not counted). `default` (off | finished | unresponsive |
+  both; default `unresponsive`) arms a global watch at every clock-in. A watch is cleared when it fires, when the GPU
+  clocks out for any reason, or when cancelled. Firing = `gpu.clockOut('auto_unresponsive' | 'auto_finished', why)` (history
+  badge "Auto · …", status message "Clocked out automatically: <why>.", parks instead of destroying in park mode) + one
+  `notification` saying why. UI: right-click menu (Clock out now / when the current task finishes / if it stops responding /
+  Both / Cancel, active one checked) on the sidebar GPU widget, the rail button, the status-bar GPU segment (global) and the
+  chat header + composer toolbar (this session); the widget shows the armed watch and the finish countdown.
 * Also implement the **Local** provider detection is in llm/ (agent-core), not here.
 
 ### 4.5 Platform (platform)

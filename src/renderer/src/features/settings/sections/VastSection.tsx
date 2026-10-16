@@ -4,11 +4,13 @@ import { useState } from 'react';
 import type { RpcResult } from '@shared/protocol';
 import { Button } from '@renderer/components/ui/button';
 import { Spinner } from '@renderer/components/ui/feedback';
+import { Segmented } from '@renderer/components/ui/tabs';
 import { Switch } from '@renderer/components/ui/toggles';
 import { openExternal } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { formatMoney } from '@renderer/lib/format';
 import { errorMessage, rpc } from '@renderer/lib/rpc';
+import type { AutoClockOutChoice, Settings } from '@shared/types';
 import { gpuHoldsInstance, useGpu } from '@renderer/state/gpu';
 import { useSettings } from '@renderer/state/settings';
 import { Group, NumberField, Row, SecretField, Section, TextField, patchVast } from '../components';
@@ -25,6 +27,7 @@ export function VastSection() {
     <Section id="vast" title="Vast.ai" description="Rent a GPU by the hour for bigger models. Every limit below also runs on the rented machine itself, so it destroys itself even if this app crashes.">
       <ApiKey />
       <BudgetAndSafety />
+      <AutoClockOut />
       <Server />
       <ProfilesEditor />
     </Section>
@@ -173,6 +176,60 @@ function BudgetAndSafety() {
             <NumberField id="vast-parkdays" testId="vast-parkdays" value={v.parkMaxDays} min={1} max={30} integer unit="days" width="w-[64px]" disabled={v.clockOutMode !== 'park'} onCommit={(n) => patchVast({ parkMaxDays: n })} />
           </div>
         </div>
+      </Row>
+    </Group>
+  );
+}
+
+// ───────────────────────────── Auto clock-out ─────────────────────────────
+
+const AUTO_OPTIONS: { value: AutoClockOutChoice; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'finished', label: 'When it finishes' },
+  { value: 'unresponsive', label: 'If it stops responding' },
+  { value: 'both', label: 'Both' },
+];
+
+const AUTO_HELP: Record<AutoClockOutChoice, string> = {
+  off: 'Nothing clocks the GPU out except you, the budget, the session limit and the idle watchdog. You can still arm it per clock-in: right-click the Clock out button.',
+  finished: 'Every clock-in is clocked out once no session using the GPU has been running for the wait below (waiting for your input counts as not running).',
+  unresponsive: 'Every clock-in is clocked out when the agent stops responding: the stuck session is interrupted first. Right for leaving it running overnight.',
+  both: 'Every clock-in is clocked out when the work is done or when the agent stops responding, whichever happens first.',
+};
+
+function AutoClockOut() {
+  const a = useSettings((s) => s.settings?.vast.autoClockOut);
+  if (!a) return null;
+  // A patch with only the changed field: settings.update deep-merges it into vast.autoClockOut.
+  const patch = (p: Partial<Settings['vast']['autoClockOut']>, label?: string) => patchVast({ autoClockOut: p as Settings['vast']['autoClockOut'] }, label);
+  return (
+    <Group title="Auto clock-out" testId="settings-vast-autoclockout">
+      <Row
+        stacked
+        label="Clock out automatically"
+        description={AUTO_HELP[a.default]}
+        testId="vast-autoclockout-default"
+      >
+        <Segmented<AutoClockOutChoice>
+          aria-label="Auto clock-out"
+          value={a.default}
+          options={AUTO_OPTIONS}
+          onValueChange={(v) => v !== a.default && void patch({ default: v })}
+        />
+      </Row>
+      <Row
+        label="Stopped responding after"
+        htmlFor="vast-autoclockout-stall"
+        description="A running session with no output, or waiting for your input, this long; or a model that ends 3 turns in a row with reasoning only. The session is interrupted, then the GPU clocks out."
+      >
+        <NumberField id="vast-autoclockout-stall" testId="vast-autoclockout-stall" value={a.stallMinutes} min={1} max={1440} unit="min" onCommit={(n) => patch({ stallMinutes: n })} />
+      </Row>
+      <Row
+        label="Wait after the agent finishes"
+        htmlFor="vast-autoclockout-grace"
+        description="How long no session has been running before 'when it finishes' clocks out. A new run or a queued message cancels the countdown."
+      >
+        <NumberField id="vast-autoclockout-grace" testId="vast-autoclockout-grace" value={a.finishGraceMinutes} min={0.5} max={1440} unit="min" onCommit={(n) => patch({ finishGraceMinutes: n })} />
       </Row>
     </Group>
   );

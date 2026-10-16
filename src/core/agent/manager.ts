@@ -35,7 +35,8 @@ const MAX_STOP_HOOK_CONTINUES = 3;
 // When that happens we nudge it to continue instead of ending the turn silently — bounded so a genuinely stuck
 // model can't loop forever.
 const MAX_AUTO_CONTINUES = 4;
-const CONTINUE_AFTER_THINKING_NOTE =
+/** Also matched by src/core/gpu/auto-clockout.ts (3 of these in a row without a tool call = the model is stuck). */
+export const CONTINUE_AFTER_THINKING_NOTE =
   'You ended your turn with reasoning but produced no answer and called no tool. Continue now: either call a tool to make progress, or write your final answer to the user. Do not stop after thinking.';
 // Markup that signals the model wrote an actual tool call (not just mentioned a tool) inside its reasoning.
 const EMBEDDED_TOOL_CALL_RE = /<tool_call>|<function\s*=|<\|tool_call\|>|\barg_key\b/;

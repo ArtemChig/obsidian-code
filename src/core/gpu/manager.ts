@@ -139,6 +139,7 @@ export const DEFAULT_VAST_SETTINGS: Settings['vast'] = {
   image: 'ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561',
   localPort: 18080,
   extraLlamaArgs: [],
+  autoClockOut: { default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 },
 };
 
 export interface GpuManagerOptions {
@@ -177,6 +178,11 @@ export const WD_CHECK_CMD = 'p=$(cat /root/oc/watchdog.pid 2>/dev/null) && grep 
 /** (Re)start the watchdog (kills a running one first; it re-reads env + wd.env). */
 const WD_RESTART_CMD =
   'p=$(cat /root/oc/watchdog.pid 2>/dev/null) && grep -q watchdog.sh /proc/$p/cmdline 2>/dev/null && kill $p; cd /root/oc && setsid nohup bash /root/oc/watchdog.sh >/dev/null 2>&1 </dev/null &';
+
+/** The end reasons of an automatic clock-out (src/core/gpu/auto-clockout.ts). */
+export function isAutoReason(reason: EndReason): boolean {
+  return reason === 'auto_unresponsive' || reason === 'auto_finished';
+}
 
 function isStoppedState(inst: VastInstance): boolean {
   return inst.actual_status === 'stopped' || (inst.intended_status === 'stopped' && inst.actual_status !== 'running');
@@ -242,6 +248,8 @@ export class GpuManagerImpl implements GpuManager {
   private safeModeCaptured: number | undefined;
   /** Evidence captures started (a slower, older capture never replaces the newest one). */
   private evidenceSeq = 0;
+  /** Fields merged into status() by other modules (the auto clock-out watches). */
+  private statusExtras: ((status: GpuStatus) => Partial<GpuStatus>) | null = null;
 
   private active: ActiveInstance | null = null;
   private serverApiKey: string | null = null;
@@ -561,7 +569,18 @@ export class GpuManagerImpl implements GpuManager {
         parkedAt: parked.parkedAt,
       };
     }
+    if (this.statusExtras) {
+      try {
+        Object.assign(st, this.statusExtras(st));
+      } catch {
+        /* an extension must never break the status */
+      }
+    }
     return st;
+  }
+
+  setStatusExtras(fn: ((status: GpuStatus) => Partial<GpuStatus>) | null): void {
+    this.statusExtras = fn;
   }
 
   provider(): LlmProvider {
@@ -634,7 +653,7 @@ export class GpuManagerImpl implements GpuManager {
     return this.status();
   }
 
-  async clockOut(reason: EndReason = 'clock_out'): Promise<GpuStatus> {
+  async clockOut(reason: EndReason = 'clock_out', note?: string): Promise<GpuStatus> {
     await this.whenStarted();
     await this.retryReconcile();
     if (this.needsReconcile) {
@@ -653,7 +672,7 @@ export class GpuManagerImpl implements GpuManager {
       if (this.tearingDown) await (this.tearingDown as Promise<void>).catch(() => undefined);
     }
     if (this.active) {
-      await this.teardown(reason);
+      await this.teardown(reason, { note });
     } else if (job) {
       // Cancelled before anything was rented (or the job already cleaned up after itself).
       if (this.phase !== 'error' && this.phase !== 'off') {
@@ -2128,7 +2147,7 @@ export class GpuManagerImpl implements GpuManager {
 
   // ───────────────────────────── teardown / destroy / park ─────────────────────────────
 
-  private async teardown(reason: EndReason, opts: { error?: string } = {}): Promise<void> {
+  private async teardown(reason: EndReason, opts: { error?: string; note?: string } = {}): Promise<void> {
     if (this.tearingDown) return this.tearingDown;
     const p = this.teardownBody(reason, opts).catch((err: unknown) => {
       // Never stay stuck in 'stopping': whatever failed, report it (the destroy itself is retried via pendingDestroy).
@@ -2145,7 +2164,7 @@ export class GpuManagerImpl implements GpuManager {
     }
   }
 
-  private async teardownBody(reason: EndReason, opts: { error?: string }): Promise<void> {
+  private async teardownBody(reason: EndReason, opts: { error?: string; note?: string }): Promise<void> {
     const a = this.active;
     this.setPhase('stopping', a ? `Stopping GPU instance #${a.instanceId}…` : 'Stopping…');
     this.stopHeartbeat();
@@ -2161,7 +2180,7 @@ export class GpuManagerImpl implements GpuManager {
     let parked = false;
     if (a) {
       const vs = this.vastSettings();
-      const canPark = (reason === 'clock_out' || reason === 'app_quit') && vs.clockOutMode === 'park' && a.reachedReady && !opts.error;
+      const canPark = (reason === 'clock_out' || reason === 'app_quit' || isAutoReason(reason)) && vs.clockOutMode === 'park' && a.reachedReady && !opts.error;
       // Persist the intent first: if the process dies mid-teardown, start() completes it instead of adopting.
       this.ledger.updateActive({ stopping: reason, parkIntent: canPark, lastSeenAt: this.now() });
       if (canPark) parked = await this.parkActive(a);
@@ -2191,17 +2210,20 @@ export class GpuManagerImpl implements GpuManager {
       this.lastError = undefined;
       this.failedStep = undefined;
       const msg = parked
-        ? `Clocked out; instance parked (storage ~$${(this.ledger.parked?.storageCostPerHour ?? 0).toFixed(3)}/h).`
+        ? `Clocked out${isAutoReason(reason) ? ' automatically' : ''}${isAutoReason(reason) && opts.note ? ` (${opts.note})` : ''}; instance parked (storage ~$${(this.ledger.parked?.storageCostPerHour ?? 0).toFixed(3)}/h).`
         : reason === 'budget'
           ? 'Clocked out: monthly budget reached.'
           : reason === 'max_hours'
             ? 'Clocked out: maximum session length reached.'
             : reason === 'idle'
               ? `Clocked out: the GPU was idle (${this.lastWatchdogMsg ?? 'idle watchdog'}).`
-              : 'Clocked out.';
+              : isAutoReason(reason)
+                ? `Clocked out automatically${opts.note ? `: ${opts.note}` : ''}.`
+                : 'Clocked out.';
       this.lastWatchdogMsg = undefined;
       this.setPhase('off', msg);
-      if (a && reason !== 'app_quit') this.notify('GPU clocked out', msg, 'info');
+      // An auto clock-out says why in its own notification (src/core/gpu/auto-clockout.ts).
+      if (a && reason !== 'app_quit' && !isAutoReason(reason)) this.notify('GPU clocked out', msg, 'info');
     }
   }
 

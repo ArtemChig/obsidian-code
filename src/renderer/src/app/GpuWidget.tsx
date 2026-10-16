@@ -4,6 +4,7 @@ import { Cpu, Power } from 'lucide-react';
 import { useEffect } from 'react';
 import type { GpuPhase, GpuStatus } from '@shared/types';
 import { Button, IconButton } from '@renderer/components/ui/button';
+import { AutoClockOutLine, AutoClockOutMenu } from '@renderer/features/gpu/AutoClockOut';
 import { ProgressBar, StatusDot, type Tone } from '@renderer/components/ui/feedback';
 import { LiveDuration, useNow } from '@renderer/components/ui/time';
 import { Tooltip } from '@renderer/components/ui/tooltip';
@@ -95,80 +96,86 @@ export function GpuWidget() {
   const month = (status?.monthCost ?? 0) + (on ? Math.max(0, cost - (status?.sessionCost ?? 0)) : 0);
 
   return (
-    <div data-testid="gpu-widget" className="border-t border-rule2 px-4 pb-3.5 pt-3">
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => navigate('gpu')}
-          className="ob-transition -mx-1 flex min-w-0 items-center gap-2 rounded-[2px] px-1 py-0.5 text-left hover:bg-hov"
-          aria-label="Open GPU view"
-        >
-          <StatusDot tone={gpuTone(phase)} pulse={inProgress} glow={phase === 'ready'} />
-          <span className="min-w-0 truncate text-[12.5px] font-medium tracking-[-0.016em] text-t1">
-            {phase === 'off' ? 'GPU off' : phase === 'ready' ? (status?.gpuName ?? 'GPU ready') : GPU_PHASE_LABEL[phase]}
-          </span>
-        </button>
-        {on && status?.clockedInAt ? (
-          <LiveDuration since={status.clockedInAt} className="shrink-0 font-mono text-[11px] tracking-[-0.02em] text-t1" />
-        ) : (
-          <span className="ob-cap truncate">{profile?.label ?? 'GPU'}</span>
-        )}
-      </div>
-
-      <div className="mt-1 truncate pl-[14px] font-mono text-[9.5px] leading-[14px] tracking-[0.01em] text-t3" title={status?.message}>
-        {phase === 'off' && status?.orphanInstanceIds?.length
-          ? `${status.orphanInstanceIds.length} instance${status.orphanInstanceIds.length === 1 ? '' : 's'} may still be billing — open the GPU view`
-          : phase === 'off'
-          ? `${profile ? profile.description.split('—')[0].trim() : 'Rent a GPU by the hour'}`
-          : phase === 'error'
-            ? (status?.lastError ?? status?.message ?? 'Clock-in failed')
-            : (modelLabel ?? status?.message ?? '')}
-      </div>
-
-      {inProgress && phase !== 'stopping' ? (
-        <ProgressBar
-          className="mt-2.5"
-          size="xs"
-          tone="violet"
-          value={phase === 'downloading' || phase === 'loading' ? (status?.progress ?? null) : null}
-          label={GPU_PHASE_LABEL[phase]}
-        />
-      ) : null}
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] leading-4 tracking-[-0.01em] text-t2">
-          {on ? (
-            <>
-              <span aria-hidden className="size-[5px] shrink-0 rounded-full bg-rec" title="Billing" />
-              <span className="ob-tabular truncate">
-                <span className="text-t1">{formatPerHour(status?.pricePerHour)}</span> <span className="text-t3">·</span>{' '}
-                <span className="text-t1">{formatMoney(cost)}</span>
-              </span>
-            </>
-          ) : (
-            <span className="ob-tabular truncate" title="Spent this month / monthly budget">
-              {status ? (
-                <>
-                  <span className="text-t1">{formatMoney(month)}</span> <span className="text-t3">/ {formatMoney(budget)}</span>
-                </>
-              ) : (
-                <span className="text-t3">{gpuLoadFailed ? 'Status unavailable' : 'Not connected'}</span>
-              )}
+    <AutoClockOutMenu>
+      <div data-testid="gpu-widget" className="border-t border-rule2 px-4 pb-3.5 pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('gpu')}
+            className="ob-transition -mx-1 flex min-w-0 items-center gap-2 rounded-[2px] px-1 py-0.5 text-left hover:bg-hov"
+            aria-label="Open GPU view"
+          >
+            <StatusDot tone={gpuTone(phase)} pulse={inProgress} glow={phase === 'ready'} />
+            <span className="min-w-0 truncate text-[12.5px] font-medium tracking-[-0.016em] text-t1">
+              {phase === 'off' ? 'GPU off' : phase === 'ready' ? (status?.gpuName ?? 'GPU ready') : GPU_PHASE_LABEL[phase]}
             </span>
+          </button>
+          {on && status?.clockedInAt ? (
+            <LiveDuration since={status.clockedInAt} className="shrink-0 font-mono text-[11px] tracking-[-0.02em] text-t1" />
+          ) : (
+            <span className="ob-cap truncate">{profile?.label ?? 'GPU'}</span>
           )}
         </div>
-        <Button
-          size="sm"
-          variant={on || trackedInError ? 'danger' : 'primary'}
-          loading={busy || phase === 'stopping'}
-          icon={Power}
-          data-testid="gpu-clock-button"
-          onClick={() => void gpuPrimaryAction(status, hasApiKey)}
-        >
-          {on ? (inProgress ? 'Cancel' : 'Clock out') : trackedInError ? 'Clock out' : 'Clock in'}
-        </Button>
+
+        <div className="mt-1 truncate pl-[14px] font-mono text-[9.5px] leading-[14px] tracking-[0.01em] text-t3" title={status?.message}>
+          {phase === 'off' && status?.orphanInstanceIds?.length
+            ? `${status.orphanInstanceIds.length} instance${status.orphanInstanceIds.length === 1 ? '' : 's'} may still be billing — open the GPU view`
+            : phase === 'off' && status?.message?.startsWith('Clocked out automatically')
+            ? status.message
+            : phase === 'off'
+            ? `${profile ? profile.description.split('—')[0].trim() : 'Rent a GPU by the hour'}`
+            : phase === 'error'
+              ? (status?.lastError ?? status?.message ?? 'Clock-in failed')
+              : (modelLabel ?? status?.message ?? '')}
+        </div>
+
+        {on ? <AutoClockOutLine status={status} className="mt-1 pl-[14px]" /> : null}
+
+        {inProgress && phase !== 'stopping' ? (
+          <ProgressBar
+            className="mt-2.5"
+            size="xs"
+            tone="violet"
+            value={phase === 'downloading' || phase === 'loading' ? (status?.progress ?? null) : null}
+            label={GPU_PHASE_LABEL[phase]}
+          />
+        ) : null}
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] leading-4 tracking-[-0.01em] text-t2">
+            {on ? (
+              <>
+                <span aria-hidden className="size-[5px] shrink-0 rounded-full bg-rec" title="Billing" />
+                <span className="ob-tabular truncate">
+                  <span className="text-t1">{formatPerHour(status?.pricePerHour)}</span> <span className="text-t3">·</span>{' '}
+                  <span className="text-t1">{formatMoney(cost)}</span>
+                </span>
+              </>
+            ) : (
+              <span className="ob-tabular truncate" title="Spent this month / monthly budget">
+                {status ? (
+                  <>
+                    <span className="text-t1">{formatMoney(month)}</span> <span className="text-t3">/ {formatMoney(budget)}</span>
+                  </>
+                ) : (
+                  <span className="text-t3">{gpuLoadFailed ? 'Status unavailable' : 'Not connected'}</span>
+                )}
+              </span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant={on || trackedInError ? 'danger' : 'primary'}
+            loading={busy || phase === 'stopping'}
+            icon={Power}
+            data-testid="gpu-clock-button"
+            onClick={() => void gpuPrimaryAction(status, hasApiKey)}
+          >
+            {on ? (inProgress ? 'Cancel' : 'Clock out') : trackedInError ? 'Clock out' : 'Clock in'}
+          </Button>
+        </div>
       </div>
-    </div>
+    </AutoClockOutMenu>
   );
 }
 
@@ -177,11 +184,13 @@ export function GpuRailButton() {
   const status = useGpu((s) => s.status);
   const phase = status?.phase ?? 'off';
   return (
-    <Tooltip content={`GPU · ${GPU_PHASE_LABEL[phase]}${status?.pricePerHour && phase !== 'off' ? ` · ${formatPerHour(status.pricePerHour)}` : ''}`} side="right">
+    <AutoClockOutMenu
+      tooltip={{ content: `GPU · ${GPU_PHASE_LABEL[phase]}${status?.pricePerHour && phase !== 'off' ? ` · ${formatPerHour(status.pricePerHour)}` : ''}`, side: 'right' }}
+    >
       <span className="relative">
         <IconButton label="GPU" noTooltip icon={Cpu} size="lg" onClick={() => navigate('gpu')} />
         <StatusDot tone={gpuTone(phase)} pulse={GPU_BUSY_PHASES.has(phase)} size={6} className="pointer-events-none absolute right-1 top-1 ring-2 ring-s0" />
       </span>
-    </Tooltip>
+    </AutoClockOutMenu>
   );
 }

@@ -36,12 +36,13 @@ import { cn } from '@renderer/lib/cn';
 import { copySessionMarkdown, exportSessionMarkdown } from '@renderer/features/chat/session-actions';
 import { insertIntoComposer, stopTurn } from '@renderer/features/chat/state';
 import { createSession, navigate, openPalette, openSettings, sendMessage, setPermissionMode, toggleRightPanel, toggleSidebar } from '@renderer/state/actions';
-import { GPU_BUSY_PHASES, useGpu } from '@renderer/state/gpu';
+import { GPU_BUSY_PHASES, isGpuClockedIn, useGpu } from '@renderer/state/gpu';
 import { useActiveSession } from '@renderer/state/selectors';
 import { useSettings } from '@renderer/state/settings';
 import { toast } from '@renderer/state/toasts';
 import { useUi } from '@renderer/state/ui';
 import { checkForUpdates, useUpdates } from '@renderer/state/updates';
+import { AutoClockOutMenuItems } from '@renderer/features/gpu/AutoClockOut';
 import { gpuPrimaryAction } from './GpuWidget';
 import { SHORTCUTS } from './shortcuts';
 import { UpdateButton } from './UpdateButton';
@@ -213,6 +214,12 @@ export function MenuBar() {
         <DropdownMenuItem icon={Cpu} onSelect={() => navigate('gpu')}>
           Open GPU view
         </DropdownMenuItem>
+        {isGpuClockedIn(gpu) ? (
+          <>
+            <DropdownMenuSeparator />
+            <AutoClockOutMenuItems kind="dropdown" />
+          </>
+        ) : null}
       </Menu>
 
       <Menu id="help" open={open} setOpen={setOpen}>

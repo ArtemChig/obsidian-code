@@ -398,6 +398,24 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
     'gpu.destroyOrphans': async () => ({ destroyed: await ctx.gpu.destroyOrphans() }),
     'gpu.serverLog': async (params) => ({ text: await ctx.gpu.serverLog(optNum(obj(params), 'lines')) }),
     'gpu.testKey': () => ctx.gpu.testKey(),
+    'gpu.autoClockOut.get': () => ctx.autoClockOut?.list() ?? [],
+    'gpu.autoClockOut.set': (params) => {
+      const p = obj(params);
+      const m = p.mode;
+      if (m !== 'off' && m !== 'finished' && m !== 'unresponsive' && m !== 'both') {
+        throw new RpcError('Invalid params: "mode" must be one of off, finished, unresponsive, both', 'invalid_params');
+      }
+      const sid = p.sessionId;
+      if (sid !== undefined && sid !== null && (typeof sid !== 'string' || sid.length === 0)) {
+        throw new RpcError('Invalid params: "sessionId" must be a non-empty string or null', 'invalid_params');
+      }
+      if (!ctx.autoClockOut) throw new RpcError('Auto clock-out is not available.', 'unavailable');
+      try {
+        return ctx.autoClockOut.set({ sessionId: sid ?? null, mode: m });
+      } catch (err) {
+        throw new RpcError(err instanceof Error ? err.message : String(err), 'invalid_state');
+      }
+    },
 
     // ── scheduler
     'schedules.list': () => ctx.scheduler.list(),

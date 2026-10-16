@@ -1,9 +1,10 @@
 // Status bar (25 px) — reference .sbar: Chivo Mono 9 px uppercase, --t3 labels, --t1 values, status dots, segments
 // split by --rule2. Left: connection · model + provider · context · permission mode · running sessions.
 // Right: GPU phase + $/h + session cost · month spend / budget. Owner: ui-foundation.
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { PermissionMode } from '@shared/types';
 import { StatusDot, type Tone } from '@renderer/components/ui/feedback';
+import { AutoClockOutMarker, AutoClockOutMenu } from '@renderer/features/gpu/AutoClockOut';
 import { cn } from '@renderer/lib/cn';
 import { formatMoney, formatPerHour, providerLabel, shortModelName } from '@renderer/lib/format';
 import { navigate, openPalette, openSettings } from '@renderer/state/actions';
@@ -23,18 +24,21 @@ const MODE_LABEL: Record<PermissionMode, string> = {
   bypassPermissions: 'Bypass',
 };
 
-function Seg({ children, className, title, onClick, testId }: { children: ReactNode; className?: string; title?: string; onClick?: () => void; testId?: string }) {
+type SegProps = { children: ReactNode; className?: string; title?: string; onClick?: () => void; testId?: string } & Omit<ComponentProps<'button'>, 'children' | 'className' | 'title' | 'onClick'>;
+
+/** `rest` (ref, handlers) is forwarded so a Radix trigger (the GPU context menu) can wrap a segment. */
+function Seg({ children, className, title, onClick, testId, ...rest }: SegProps) {
   const cls = cn(
     'flex h-full shrink-0 items-center gap-[7px] whitespace-nowrap px-[13px] uppercase tracking-[0.1em] [&+&]:shadow-[inset_1px_0_0_var(--rule2)] first:pl-0',
     onClick && 'ob-transition hover:text-t2',
     className,
   );
   return onClick ? (
-    <button type="button" className={cls} title={title} onClick={onClick} data-testid={testId}>
+    <button type="button" className={cls} title={title} onClick={onClick} data-testid={testId} {...rest}>
       {children}
     </button>
   ) : (
-    <span className={cls} title={title} data-testid={testId}>
+    <span className={cls} title={title} data-testid={testId} {...(rest as ComponentProps<'span'>)}>
       {children}
     </span>
   );
@@ -133,19 +137,22 @@ export function StatusBar() {
 
       <span aria-hidden className="ml-auto" />
 
-      <Seg onClick={() => navigate('gpu')} title="Open the GPU view" testId="status-gpu">
-        <StatusDot tone={phase === 'error' ? 'danger' : gpuOn ? (phase === 'ready' ? 'success' : 'violet') : 'neutral'} size={5} pulse={gpuOn && phase !== 'ready'} />
-        GPU <V>{GPU_PHASE_LABEL[phase]}</V>
-        {gpuOn ? (
-          <>
-            <span className="text-t2">· {formatPerHour(gpu?.pricePerHour)}</span>
-            <span className="flex items-center gap-[7px]">
-              · <span aria-hidden className="size-[5px] rounded-full bg-rec" />
-              <V>{formatMoney(cost)}</V>
-            </span>
-          </>
-        ) : null}
-      </Seg>
+      <AutoClockOutMenu>
+        <Seg onClick={() => navigate('gpu')} title={gpuOn ? 'Open the GPU view · right-click: clock-out options' : 'Open the GPU view'} testId="status-gpu">
+          <StatusDot tone={phase === 'error' ? 'danger' : gpuOn ? (phase === 'ready' ? 'success' : 'violet') : 'neutral'} size={5} pulse={gpuOn && phase !== 'ready'} />
+          GPU <V>{GPU_PHASE_LABEL[phase]}</V>
+          {gpuOn ? (
+            <>
+              <span className="text-t2">· {formatPerHour(gpu?.pricePerHour)}</span>
+              <span className="flex items-center gap-[7px]">
+                · <span aria-hidden className="size-[5px] rounded-full bg-rec" />
+                <V>{formatMoney(cost)}</V>
+              </span>
+              <AutoClockOutMarker status={gpu} />
+            </>
+          ) : null}
+        </Seg>
+      </AutoClockOutMenu>
       <Seg title="Spent this month / monthly budget">
         Month <V className={cn(overBudget && 'text-warn')}>{gpu ? formatMoney(month) : '—'}</V>
         {gpu && budget > 0 ? <span>/ {formatMoney(budget)}</span> : null}

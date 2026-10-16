@@ -113,6 +113,7 @@ describe('SettingsStore', () => {
     expect(s.vast.profiles.find((p) => p.id === 'standard')?.defaultModelId).toBe('qwen38-flash-next-uncensored-huihui-v2-q4kxl');
     expect(s.vast.image).toBe('ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561');
     expect(s.vast.clockOutMode).toBe('destroy');
+    expect(s.vast.autoClockOut).toEqual({ default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 });
     expect(s.defaultPermissionMode).toBe('default');
     expect(s.maxToolOutputChars).toBe(30000);
     expect(existsSync(join(tmp.dir, 'settings.json'))).toBe(true);
@@ -130,6 +131,22 @@ describe('SettingsStore', () => {
     expect(s.shell).toBe('auto');
     expect(s.autoCompactPercent).toBe(80);
     expect((s as unknown as Record<string, unknown>).extraKey).toBe(1);
+  });
+
+  it('auto clock-out settings: older files get the defaults, a partial patch merges, bad values are repaired', () => {
+    writeFileSync(join(tmp.dir, 'settings.json'), JSON.stringify({ vast: { monthlyBudget: 300 } }));
+    const store = createSettingsStore(tmp.dir);
+    expect(store.get().vast.autoClockOut).toEqual({ default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 });
+    let s = store.update({ vast: { autoClockOut: { default: 'both' } } as never });
+    expect(s.vast.autoClockOut).toEqual({ default: 'both', stallMinutes: 10, finishGraceMinutes: 2 });
+    s = store.update({ vast: { autoClockOut: { stallMinutes: 25 } } as never });
+    expect(s.vast.autoClockOut).toEqual({ default: 'both', stallMinutes: 25, finishGraceMinutes: 2 });
+    s = store.update({ vast: { autoClockOut: { default: 'whenever', stallMinutes: 0, finishGraceMinutes: -3 } } as never });
+    expect(s.vast.autoClockOut).toEqual({ default: 'unresponsive', stallMinutes: 1, finishGraceMinutes: 0.5 });
+    s = store.update({ vast: { autoClockOut: { stallMinutes: 99999, finishGraceMinutes: 'soon' } } as never });
+    expect(s.vast.autoClockOut.stallMinutes).toBe(1440);
+    expect(s.vast.autoClockOut.finishGraceMinutes).toBe(2);
+    expect(createSettingsStore(tmp.dir).get().vast.autoClockOut.stallMinutes).toBe(1440);
   });
 
   it('update() deep-merges, replaces maps, persists and notifies', () => {

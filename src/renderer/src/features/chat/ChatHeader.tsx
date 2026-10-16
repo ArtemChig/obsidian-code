@@ -1,6 +1,6 @@
 // Chat header (M13): Chivo 600 title, cwd + branch as mono tags (cwd = folder picker → new session in that folder),
 // mono "CTX %" meter, right-panel toggle. Shares --ob-pane-head-h with the right panel's tab bar. Owner: ui-chat.
-import { Bot, ChevronRight, Folder, GitBranch, PanelRightClose, PanelRightOpen, Pencil, ShieldOff } from 'lucide-react';
+import { Bot, ChevronRight, Folder, GitBranch, PanelRightClose, PanelRightOpen, Pencil, ShieldOff, Timer } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { SessionSummary } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
@@ -9,6 +9,7 @@ import { Tooltip } from '@renderer/components/ui/tooltip';
 import { pickFolder } from '@renderer/lib/bridge';
 import { cn } from '@renderer/lib/cn';
 import { basename, formatTokens } from '@renderer/lib/format';
+import { AutoClockOutMenu, describeWatch, watchFor } from '@renderer/features/gpu/AutoClockOut';
 import { createSession, deleteSession, loadGpuCatalog, openSession, renameSession, toggleRightPanel } from '@renderer/state/actions';
 import { useGpu } from '@renderer/state/gpu';
 import { useModelInfo, useSessionSummary } from '@renderer/state/selectors';
@@ -139,87 +140,99 @@ export function ChatHeader({ session, disposable }: { session: SessionSummary; d
   const parent = useSessionSummary(session.parentSessionId);
   const homeDir = useSettings((s) => s.system?.homeDir ?? null);
   const isSub = session.kind === 'subagent';
+  const autoWatch = useGpu((s) => watchFor(s.status, session.id));
 
   return (
-    <div className="@container flex h-[var(--ob-pane-head-h)] shrink-0 items-center gap-3 border-b border-rule pl-8 pr-3" data-testid="chat-header">
-      {isSub && parent ? (
-        <>
+    <AutoClockOutMenu sessionId={session.id} disabled={isSub}>
+      <div className="@container flex h-[var(--ob-pane-head-h)] shrink-0 items-center gap-3 border-b border-rule pl-8 pr-3" data-testid="chat-header">
+        {isSub && parent ? (
+          <>
+            <button
+              type="button"
+              onClick={() => openSession(parent.id)}
+              className="ob-transition -ml-2 flex h-7 min-w-0 max-w-[220px] shrink items-center gap-1.5 rounded-[2px] px-2 text-[12.5px] tracking-[-0.012em] text-t3 hover:bg-hov hover:text-t1"
+              data-testid="parent-link"
+            >
+              <span className="truncate">{parent.title}</span>
+            </button>
+            <ChevronRight size={12} aria-hidden className="-mx-1.5 shrink-0 text-t3" />
+            <Bot size={13} aria-hidden className="shrink-0 text-t3" />
+          </>
+        ) : null}
+        <div className="flex min-w-0 shrink items-center">
+          <EditableTitle session={session} />
+        </div>
+        {session.kind === 'scheduled' ? (
+          <Badge tone="accent" variant="outline" className="shrink-0">
+            Scheduled
+          </Badge>
+        ) : null}
+        {session.engine === 'claude-code' ? (
+          <Tooltip content="Engine: the Claude Code harness runs this session on its model (switch in the composer toolbar)">
+            <span className="flex shrink-0" data-testid="engine-tag">
+              <Badge tone="neutral" variant="outline">
+                Claude Code
+              </Badge>
+            </span>
+          </Tooltip>
+        ) : null}
+        {session.permissionMode === 'bypassPermissions' ? (
+          <Tooltip content="Bypass permissions: every tool runs without asking. Shift+Tab or the mode menu to change.">
+            <span className="flex shrink-0" data-testid="bypass-badge">
+              <Badge tone="danger" variant="outline" icon={ShieldOff}>
+                Bypass
+              </Badge>
+            </span>
+          </Tooltip>
+        ) : null}
+        {autoWatch ? (
+          <Tooltip content={describeWatch(autoWatch)}>
+            <span className="flex shrink-0 @max-[640px]:hidden" data-testid="auto-clockout-tag">
+              <Badge tone="neutral" variant="outline" icon={Timer}>
+                Auto clock-out
+              </Badge>
+            </span>
+          </Tooltip>
+        ) : null}
+        <Tooltip content={`${session.cwd} — click to start a session in another folder`}>
           <button
             type="button"
-            onClick={() => openSession(parent.id)}
-            className="ob-transition -ml-2 flex h-7 min-w-0 max-w-[220px] shrink items-center gap-1.5 rounded-[2px] px-2 text-[12.5px] tracking-[-0.012em] text-t3 hover:bg-hov hover:text-t1"
-            data-testid="parent-link"
+            onClick={() => void changeFolder(session, disposable)}
+            disabled={isSub}
+            data-testid="cwd-chip"
+            className={cn(
+              'ob-transition flex h-[22px] min-w-0 max-w-[260px] shrink items-center gap-1.5 rounded-[1px] px-2 font-mono text-[10.5px] tracking-[-0.01em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] hover:bg-hov hover:text-t1',
+              'disabled:pointer-events-none',
+            )}
           >
-            <span className="truncate">{parent.title}</span>
+            <Folder size={11} aria-hidden className="shrink-0 text-t3" />
+            <span className="truncate @max-[600px]:hidden">{basename(session.cwd) || (homeDir && session.cwd) || session.cwd}</span>
           </button>
-          <ChevronRight size={12} aria-hidden className="-mx-1.5 shrink-0 text-t3" />
-          <Bot size={13} aria-hidden className="shrink-0 text-t3" />
-        </>
-      ) : null}
-      <div className="flex min-w-0 shrink items-center">
-        <EditableTitle session={session} />
+        </Tooltip>
+        {branch ? (
+          <Tooltip content={`Git branch: ${branch}`}>
+            <span
+              className="flex h-[22px] min-w-0 max-w-[200px] shrink items-center gap-1.5 rounded-[1px] px-2 font-mono text-[10.5px] tracking-[-0.01em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] @max-[680px]:hidden"
+              data-testid="git-branch"
+            >
+              <GitBranch size={11} aria-hidden className="shrink-0 text-t3" />
+              <span className="truncate">{branch}</span>
+            </span>
+          </Tooltip>
+        ) : null}
+        <span className="flex-1" />
+        <ContextMeter session={session} />
+        <IconButton
+          label={rightOpen ? 'Hide side panel' : 'Show side panel'}
+          shortcut="Ctrl+\"
+          icon={rightOpen ? PanelRightClose : PanelRightOpen}
+          active={rightOpen}
+          size="md"
+          tooltipSide="bottom"
+          onClick={() => toggleRightPanel()}
+          data-testid="chat-panel-toggle"
+        />
       </div>
-      {session.kind === 'scheduled' ? (
-        <Badge tone="accent" variant="outline" className="shrink-0">
-          Scheduled
-        </Badge>
-      ) : null}
-      {session.engine === 'claude-code' ? (
-        <Tooltip content="Engine: the Claude Code harness runs this session on its model (switch in the composer toolbar)">
-          <span className="flex shrink-0" data-testid="engine-tag">
-            <Badge tone="neutral" variant="outline">
-              Claude Code
-            </Badge>
-          </span>
-        </Tooltip>
-      ) : null}
-      {session.permissionMode === 'bypassPermissions' ? (
-        <Tooltip content="Bypass permissions: every tool runs without asking. Shift+Tab or the mode menu to change.">
-          <span className="flex shrink-0" data-testid="bypass-badge">
-            <Badge tone="danger" variant="outline" icon={ShieldOff}>
-              Bypass
-            </Badge>
-          </span>
-        </Tooltip>
-      ) : null}
-      <Tooltip content={`${session.cwd} — click to start a session in another folder`}>
-        <button
-          type="button"
-          onClick={() => void changeFolder(session, disposable)}
-          disabled={isSub}
-          data-testid="cwd-chip"
-          className={cn(
-            'ob-transition flex h-[22px] min-w-0 max-w-[260px] shrink items-center gap-1.5 rounded-[1px] px-2 font-mono text-[10.5px] tracking-[-0.01em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] hover:bg-hov hover:text-t1',
-            'disabled:pointer-events-none',
-          )}
-        >
-          <Folder size={11} aria-hidden className="shrink-0 text-t3" />
-          <span className="truncate @max-[600px]:hidden">{basename(session.cwd) || (homeDir && session.cwd) || session.cwd}</span>
-        </button>
-      </Tooltip>
-      {branch ? (
-        <Tooltip content={`Git branch: ${branch}`}>
-          <span
-            className="flex h-[22px] min-w-0 max-w-[200px] shrink items-center gap-1.5 rounded-[1px] px-2 font-mono text-[10.5px] tracking-[-0.01em] text-t2 shadow-[inset_0_0_0_1px_var(--line)] @max-[680px]:hidden"
-            data-testid="git-branch"
-          >
-            <GitBranch size={11} aria-hidden className="shrink-0 text-t3" />
-            <span className="truncate">{branch}</span>
-          </span>
-        </Tooltip>
-      ) : null}
-      <span className="flex-1" />
-      <ContextMeter session={session} />
-      <IconButton
-        label={rightOpen ? 'Hide side panel' : 'Show side panel'}
-        shortcut="Ctrl+\"
-        icon={rightOpen ? PanelRightClose : PanelRightOpen}
-        active={rightOpen}
-        size="md"
-        tooltipSide="bottom"
-        onClick={() => toggleRightPanel()}
-        data-testid="chat-panel-toggle"
-      />
-    </div>
+    </AutoClockOutMenu>
   );
 }

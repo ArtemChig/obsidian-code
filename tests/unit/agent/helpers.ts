@@ -42,6 +42,7 @@ export function defaultSettings(): Settings {
     vast: {
       profiles: [], monthlyBudget: 100, idleMinutes: 15, heartbeatMinutes: 10, maxSessionHours: 4, clockOutOnQuit: true,
       clockOutMode: 'destroy', parkMaxDays: 3, image: '', localPort: 18080, extraLlamaArgs: [],
+      autoClockOut: { default: 'off', stallMinutes: 10, finishGraceMinutes: 2 },
     },
     search: { provider: 'duckduckgo' }, permissions: { allow: [], deny: [] }, trustedFolders: [], projectAllow: {}, hooks: {}, mcpServers: {}, importClaudeConfig: false,
     shell: 'auto', maxToolOutputChars: 30000, autoCompactPercent: 80, notifications: false, launchAtLogin: false,
