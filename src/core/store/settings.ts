@@ -38,6 +38,7 @@ export function defaultSettings(): Settings {
       image: 'ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561',
       localPort: 18080,
       extraLlamaArgs: [],
+      autoClockOut: { default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 },
     },
     search: { provider: 'duckduckgo' },
     permissions: { allow: [], deny: [] },
@@ -109,6 +110,9 @@ export function validateSettings(input: unknown): Settings {
   if (!PERMISSION_MODES.includes(m.defaultPermissionMode)) m.defaultPermissionMode = d.defaultPermissionMode;
   if (!['auto', 'git-bash', 'powershell', 'cmd'].includes(m.shell)) m.shell = d.shell;
   if (!['destroy', 'park'].includes(m.vast.clockOutMode)) m.vast.clockOutMode = d.vast.clockOutMode;
+  if (!['off', 'finished', 'unresponsive', 'both'].includes(m.vast.autoClockOut.default)) m.vast.autoClockOut.default = d.vast.autoClockOut.default;
+  m.vast.autoClockOut.stallMinutes = Math.min(1440, Math.max(1, m.vast.autoClockOut.stallMinutes));
+  m.vast.autoClockOut.finishGraceMinutes = Math.min(1440, Math.max(0.5, m.vast.autoClockOut.finishGraceMinutes));
   if (!['duckduckgo', 'brave', 'tavily', 'searxng'].includes(m.search.provider)) m.search.provider = d.search.provider;
   if (!isPlainObject(m.hooks)) m.hooks = {};
   if (!isPlainObject(m.mcpServers)) m.mcpServers = {};

@@ -3,6 +3,7 @@
 // so components can call them from event handlers without try/catch.
 import type { RpcResult } from '@shared/protocol';
 import type {
+  AutoClockOutChoice,
   Block,
   EngineId,
   ImageBlock,
@@ -432,6 +433,37 @@ export async function requestClockOut(): Promise<boolean> {
     return false;
   }
   return clockOut();
+}
+
+/**
+ * Arm, replace or cancel an auto clock-out watch (sessionId null = any session using the Vast.ai provider; mode 'off'
+ * cancels). The core also pushes gpu.status; the store is patched here too so the menu reflects the choice at once.
+ */
+export async function setAutoClockOut(sessionId: string | null, mode: AutoClockOutChoice): Promise<boolean> {
+  try {
+    const watches = await rpc.request('gpu.autoClockOut.set', { sessionId, mode });
+    useGpu.setState((s) =>
+      s.status
+        ? { status: { ...s.status, autoClockOut: watches.find((w) => !w.sessionId) ?? watches[0], autoClockOutWatches: watches.length ? watches : undefined } }
+        : s,
+    );
+    const w = watches.find((x) => (x.sessionId ?? null) === sessionId);
+    const what =
+      mode === 'finished'
+        ? `${w?.finishGraceMinutes ?? 2} min after the task finishes`
+        : mode === 'unresponsive'
+          ? `if it stops responding for ${w?.stallMinutes ?? 10} min`
+          : `when the task finishes or if it stops responding`;
+    toast(
+      mode === 'off'
+        ? { id: 'auto-clockout', title: 'Auto clock-out cancelled', level: 'info', durationMs: 2500 }
+        : { id: 'auto-clockout', title: 'Auto clock-out on', body: `The GPU clocks out ${what}.`, level: 'success', durationMs: 3500 },
+    );
+    return true;
+  } catch (err) {
+    fail('Could not set auto clock-out', err);
+    return false;
+  }
 }
 
 export async function switchGpuModel(modelId: string): Promise<boolean> {

@@ -162,6 +162,8 @@ export const END_REASON_LABEL: Record<NonNullable<GpuSessionRecord['endReason']>
   error: 'Error',
   orphan_cleanup: 'Orphan cleanup',
   server_watchdog: 'Server watchdog',
+  auto_finished: 'Auto · finished',
+  auto_unresponsive: 'Auto · unresponsive',
 };
 
 export function endReasonTone(reason: GpuSessionRecord['endReason']): 'neutral' | 'warning' | 'danger' | 'success' {
@@ -176,7 +178,10 @@ export function endReasonTone(reason: GpuSessionRecord['endReason']): 'neutral' 
     case 'budget':
     case 'max_hours':
     case 'idle':
+    case 'auto_unresponsive':
       return 'warning';
+    case 'auto_finished':
+      return 'success';
     default:
       return 'neutral';
   }

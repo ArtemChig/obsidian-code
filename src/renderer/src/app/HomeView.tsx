@@ -32,6 +32,7 @@ import { findModel, useModelGroups, useRecentSessions, useWaitingSessionIds } fr
 import { useSessions } from '@renderer/state/sessions';
 import { useSettings } from '@renderer/state/settings';
 import { engineLabel, useEngines } from '@renderer/state/engines';
+import { AutoClockOutMenu } from '@renderer/features/gpu/AutoClockOut';
 import { GPU_PHASE_LABEL, gpuPrimaryAction, gpuTone, useLiveGpuCost, useModelLabel } from './GpuWidget';
 
 function greeting(d = new Date()): string {
@@ -345,9 +346,11 @@ function GpuCard() {
         label="Monthly budget used"
       />
       <div className="mt-3.5 flex items-center gap-2">
-        <Button size="sm" variant={on ? 'danger' : 'primary'} icon={Power} loading={busy || phase === 'stopping'} onClick={() => void gpuPrimaryAction(status, hasKey)}>
-          {on ? 'Clock out' : 'Clock in'}
-        </Button>
+        <AutoClockOutMenu>
+          <Button size="sm" variant={on ? 'danger' : 'primary'} icon={Power} loading={busy || phase === 'stopping'} onClick={() => void gpuPrimaryAction(status, hasKey)}>
+            {on ? 'Clock out' : 'Clock in'}
+          </Button>
+        </AutoClockOutMenu>
         <Button size="sm" variant="ghost" icon={Cpu} onClick={() => navigate('gpu')}>
           GPU view
         </Button>

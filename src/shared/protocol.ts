@@ -7,7 +7,7 @@
 // Connect to ws://127.0.0.1:<port>/ws?token=<token>. The token is generated per core start.
 
 import type {
-  ActivityItem, AgentTypeInfo, Block, EngineId, EngineInfo, CatalogModel, ChangedFile, GpuOffer, GpuSessionRecord, GpuStatus,
+  ActivityItem, AgentTypeInfo, AutoClockOutChoice, AutoClockOutWatch, Block, EngineId, EngineInfo, CatalogModel, ChangedFile, GpuOffer, GpuSessionRecord, GpuStatus,
   ImageBlock, Message, ModelInfo, ModelRef, PermissionDecision, PermissionMode, PermissionRequest, PlanRequest,
   ProviderInfo, QuestionRequest, ScheduledTask, Session, SessionSummary, Settings, SkillInfo, SlashCommandInfo,
   Todo, ToolUseBlock,
@@ -71,6 +71,13 @@ export interface RpcMethods {
   'gpu.destroyOrphans': { params: {}; result: { destroyed: number[] } };
   'gpu.serverLog': { params: { lines?: number }; result: { text: string } };
   'gpu.testKey': { params: {}; result: { ok: boolean; message: string; creditBalance?: number } };
+  /** The armed auto clock-out watches (also in GpuStatus.autoClockOut / autoClockOutWatches). */
+  'gpu.autoClockOut.get': { params: {}; result: AutoClockOutWatch[] };
+  /**
+   * Arm, replace or cancel an auto clock-out watch. sessionId omitted/null = the global watch (any session using the
+   * Vast.ai provider); mode 'off' cancels it. Arming needs a clocked-in GPU. Returns every armed watch.
+   */
+  'gpu.autoClockOut.set': { params: { sessionId?: string | null; mode: AutoClockOutChoice }; result: AutoClockOutWatch[] };
 
   // ── scheduler
   'schedules.list': { params: {}; result: ScheduledTask[] };

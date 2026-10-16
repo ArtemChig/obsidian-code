@@ -6,6 +6,7 @@ import type { SessionSummary, SlashCommandInfo } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { IconButton } from '@renderer/components/ui/button';
 import { Textarea } from '@renderer/components/ui/input';
+import { AutoClockOutMenu } from '@renderer/features/gpu/AutoClockOut';
 import { Tooltip } from '@renderer/components/ui/tooltip';
 import { cn } from '@renderer/lib/cn';
 import { basename, dirname, truncate } from '@renderer/lib/format';
@@ -472,72 +473,74 @@ export function Composer({ session, lastUserText, onSent, waitingOnUser }: Compo
           />
           <ArgHint text={text} commands={commands} />
         </div>
-        <div className="flex h-10 items-center gap-1 border-t border-rule2 pl-1.5 pr-1.5">
-          <IconButton label="Attach images" icon={Paperclip} size="sm" onClick={() => fileInput.current?.click()} />
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            multiple
-            hidden
-            onChange={(e) => {
-              const list = Array.from(e.target.files ?? []);
-              e.target.value = '';
-              void addImageFiles(sessionId, list);
-            }}
-          />
-          <span className="mx-1 h-3.5 w-px shrink-0 bg-rule" aria-hidden />
-          <ModeSelector mode={session.permissionMode} confirmBypass={!bypassOptIn} onChange={(m) => void setPermissionMode(sessionId, m)} />
-          <Tooltip content={session.thinking ? 'Thinking on — click to turn off' : 'Thinking off — click to turn on'}>
-            <button
-              type="button"
-              data-testid="thinking-toggle"
-              aria-pressed={session.thinking}
-              onClick={() => void setThinking(sessionId, !session.thinking)}
-              className="ob-transition flex h-6 items-center gap-2 rounded-[2px] px-2 hover:bg-hov"
-            >
-              <span
-                aria-hidden
-                className={cn('size-[7px] shrink-0 rounded-[1px]', session.thinking ? 'bg-acc' : 'shadow-[inset_0_0_0_1px_var(--line)]')}
-              />
-              <ToolbarValue label="Thinking" className={session.thinking ? 'text-t1' : 'text-t3'}>
-                {session.thinking ? 'On' : 'Off'}
-              </ToolbarValue>
-            </button>
-          </Tooltip>
-          {session.kind !== 'subagent' ? (
-            <EngineSelector value={session.engine ?? 'builtin'} disabled={running} onChange={(e) => void setEngine(sessionId, e)} />
-          ) : null}
-          <span className="flex-1" />
-          <ModelPicker value={session.model} onChange={(m) => void setSessionModel(sessionId, m)} />
-          {running ? (
-            <Tooltip content="Stop" shortcut="Esc">
+        <AutoClockOutMenu sessionId={sessionId} disabled={session.kind === 'subagent'}>
+          <div className="flex h-10 items-center gap-1 border-t border-rule2 pl-1.5 pr-1.5">
+            <IconButton label="Attach images" icon={Paperclip} size="sm" onClick={() => fileInput.current?.click()} />
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              hidden
+              onChange={(e) => {
+                const list = Array.from(e.target.files ?? []);
+                e.target.value = '';
+                void addImageFiles(sessionId, list);
+              }}
+            />
+            <span className="mx-1 h-3.5 w-px shrink-0 bg-rule" aria-hidden />
+            <ModeSelector mode={session.permissionMode} confirmBypass={!bypassOptIn} onChange={(m) => void setPermissionMode(sessionId, m)} />
+            <Tooltip content={session.thinking ? 'Thinking on — click to turn off' : 'Thinking off — click to turn on'}>
               <button
                 type="button"
-                aria-label="Stop"
-                data-testid="stop-button"
-                onClick={() => void stopTurn(sessionId)}
-                className="ob-transition ml-1 flex size-7 items-center justify-center rounded-[2px] text-err shadow-[inset_0_0_0_1px_var(--err)] hover:bg-err-wash"
+                data-testid="thinking-toggle"
+                aria-pressed={session.thinking}
+                onClick={() => void setThinking(sessionId, !session.thinking)}
+                className="ob-transition flex h-6 items-center gap-2 rounded-[2px] px-2 hover:bg-hov"
               >
-                <Square size={10} fill="currentColor" aria-hidden />
+                <span
+                  aria-hidden
+                  className={cn('size-[7px] shrink-0 rounded-[1px]', session.thinking ? 'bg-acc' : 'shadow-[inset_0_0_0_1px_var(--line)]')}
+                />
+                <ToolbarValue label="Thinking" className={session.thinking ? 'text-t1' : 'text-t3'}>
+                  {session.thinking ? 'On' : 'Off'}
+                </ToolbarValue>
               </button>
             </Tooltip>
-          ) : null}
-          {!running || canSend ? (
-            <Tooltip content={running ? 'Queue message' : 'Send'} shortcut="Enter">
-              <button
-                type="button"
-                aria-label={running ? 'Queue message' : 'Send'}
-                data-testid="send-button"
-                disabled={!canSend}
-                onClick={() => void send()}
-                className="ob-transition ml-1 flex size-7 items-center justify-center rounded-[2px] bg-acc text-acc-ink hover:bg-white active:bg-[var(--acc)] disabled:bg-s3 disabled:text-t3"
-              >
-                <ArrowUp size={14} strokeWidth={2.25} aria-hidden />
-              </button>
-            </Tooltip>
-          ) : null}
-        </div>
+            {session.kind !== 'subagent' ? (
+              <EngineSelector value={session.engine ?? 'builtin'} disabled={running} onChange={(e) => void setEngine(sessionId, e)} />
+            ) : null}
+            <span className="flex-1" />
+            <ModelPicker value={session.model} onChange={(m) => void setSessionModel(sessionId, m)} />
+            {running ? (
+              <Tooltip content="Stop" shortcut="Esc">
+                <button
+                  type="button"
+                  aria-label="Stop"
+                  data-testid="stop-button"
+                  onClick={() => void stopTurn(sessionId)}
+                  className="ob-transition ml-1 flex size-7 items-center justify-center rounded-[2px] text-err shadow-[inset_0_0_0_1px_var(--err)] hover:bg-err-wash"
+                >
+                  <Square size={10} fill="currentColor" aria-hidden />
+                </button>
+              </Tooltip>
+            ) : null}
+            {!running || canSend ? (
+              <Tooltip content={running ? 'Queue message' : 'Send'} shortcut="Enter">
+                <button
+                  type="button"
+                  aria-label={running ? 'Queue message' : 'Send'}
+                  data-testid="send-button"
+                  disabled={!canSend}
+                  onClick={() => void send()}
+                  className="ob-transition ml-1 flex size-7 items-center justify-center rounded-[2px] bg-acc text-acc-ink hover:bg-white active:bg-[var(--acc)] disabled:bg-s3 disabled:text-t3"
+                >
+                  <ArrowUp size={14} strokeWidth={2.25} aria-hidden />
+                </button>
+              </Tooltip>
+            ) : null}
+          </div>
+        </AutoClockOutMenu>
       </div>
       <div
         className="mt-2 flex h-4 items-center gap-4 overflow-hidden px-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-t3 @max-[480px]:hidden"

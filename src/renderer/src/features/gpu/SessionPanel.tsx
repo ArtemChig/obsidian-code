@@ -14,6 +14,7 @@ import { formatMoney, formatPerHour } from '@renderer/lib/format';
 import { toast } from '@renderer/state/toasts';
 import { GPU_BUSY_PHASES } from '@renderer/state/gpu';
 import { MetaLine, Notice } from '../settings/view-kit';
+import { AutoClockOutLine, AutoClockOutMenu, watchesOf } from './AutoClockOut';
 import { formatWarmup, gpuSpec, profileVramGb, safeModeSummary, splitModelLabel, warmupCost, warmupSeconds, type PriceStats } from './model';
 
 export interface SessionPanelProps {
@@ -237,7 +238,14 @@ function ActiveHero({ status, profile, hasApiKey, busy, onClockIn, onClockOut }:
   return (
     <Hero
       meta={meta}
-      notes={hint ? <span className="text-[11px] text-t3">{hint}</span> : undefined}
+      notes={
+        hint || watchesOf(status).length ? (
+          <>
+            {hint ? <span className="text-[11px] text-t3">{hint}</span> : null}
+            <AutoClockOutLine status={status} className="text-[10px]" />
+          </>
+        ) : undefined
+      }
       since={rental ? status.clockedInAt : undefined}
       label={
         rental ? (
@@ -260,9 +268,12 @@ function ActiveHero({ status, profile, hasApiKey, busy, onClockIn, onClockOut }:
           </Button>
         ) : (
           // The confirmation (running sessions / a rented clock-in) is app-wide: see requestClockOut + GpuClockOutConfirm.
-          <Button size="lg" variant="danger" icon={Power} loading={busy || phase === 'stopping'} data-testid="gpu-main-button" className={MAIN_BTN} onClick={() => void onClockOut()}>
-            {phase === 'stopping' ? 'Clocking out…' : inProgress ? 'Cancel clock-in' : 'Clock out'}
-          </Button>
+          // Right-click: the auto clock-out menu (same as the sidebar widget).
+          <AutoClockOutMenu>
+            <Button size="lg" variant="danger" icon={Power} loading={busy || phase === 'stopping'} data-testid="gpu-main-button" className={MAIN_BTN} onClick={() => void onClockOut()}>
+              {phase === 'stopping' ? 'Clocking out…' : inProgress ? 'Cancel clock-in' : 'Clock out'}
+            </Button>
+          </AutoClockOutMenu>
         )
       }
     />

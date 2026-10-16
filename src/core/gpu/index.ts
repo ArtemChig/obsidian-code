@@ -10,6 +10,8 @@ export function createGpuManager(ctx: CoreContext, opts?: GpuManagerOptions): Gp
   return new GpuManagerImpl(ctx, opts);
 }
 
+export { AutoClockOut, createAutoClockOut, REASONING_ONLY_LIMIT } from './auto-clockout';
+export type { AutoClockOutOptions } from './auto-clockout';
 export { GpuManagerImpl, DEFAULT_TIMINGS, DEFAULT_VAST_SETTINGS, SERVER_KEY_SECRET, VAST_KEY_SECRET } from './manager';
 export type { GpuManagerOptions, GpuTimings } from './manager';
 export {

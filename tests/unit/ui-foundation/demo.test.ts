@@ -71,6 +71,8 @@ const CALLS = {
   'gpu.destroyOrphans': {},
   'gpu.serverLog': {},
   'gpu.testKey': {},
+  'gpu.autoClockOut.get': {},
+  'gpu.autoClockOut.set': { mode: 'both' },
   'schedules.list': {},
   'schedules.create': { name: 'n', prompt: 'p', cwd: 'C:\\x', schedule: '0 * * * *', oneShot: false, enabled: true, model: null, permissionMode: 'default', allowAutoClockIn: false },
   'schedules.update': { id: 'sch-audit', patch: { enabled: false } },

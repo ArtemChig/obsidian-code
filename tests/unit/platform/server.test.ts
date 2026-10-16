@@ -266,8 +266,38 @@ describe('rpc table, bus and activity', () => {
     const methods = Object.keys(handlers);
     expect(methods).toContain('system.info');
     expect(methods).toContain('secrets.has');
-    expect(methods.length).toBe(52);
+    expect(methods.length).toBe(54);
     for (const m of methods) expect(typeof handlers[m as keyof typeof handlers]).toBe('function');
+  });
+
+  it('gpu.autoClockOut.get/set validate params and pass through to the module (errors become RpcErrors)', async () => {
+    const ctx = makeCtx(tmp.dir);
+    const handlers = createRpcHandlers(ctx);
+    // no module in a minimal context
+    expect(await handlers['gpu.autoClockOut.get']({})).toEqual([]);
+    await expect(async () => handlers['gpu.autoClockOut.set']({ mode: 'both' })).rejects.toThrow(/not available/);
+    const watch = { mode: 'both' as const, armedAt: 1, source: 'user' as const, stallMinutes: 10, finishGraceMinutes: 2 };
+    const set = vi.fn((o: { sessionId?: string | null; mode: string }) => {
+      if (o.sessionId === 'gone') throw new Error('Session not found: gone');
+      return o.mode === 'off' ? [] : [watch];
+    });
+    ctx.autoClockOut = { list: () => [watch], set: set as never, dispose: () => undefined };
+    expect(await handlers['gpu.autoClockOut.get']({})).toEqual([watch]);
+    expect(await handlers['gpu.autoClockOut.set']({ mode: 'both' })).toEqual([watch]);
+    expect(set).toHaveBeenLastCalledWith({ sessionId: null, mode: 'both' });
+    await handlers['gpu.autoClockOut.set']({ sessionId: 's1', mode: 'finished' });
+    expect(set).toHaveBeenLastCalledWith({ sessionId: 's1', mode: 'finished' });
+    expect(await handlers['gpu.autoClockOut.set']({ sessionId: null, mode: 'off' })).toEqual([]);
+    await expect(async () => handlers['gpu.autoClockOut.set']({ mode: 'sometimes' as never })).rejects.toThrow(/"mode" must be one of/);
+    await expect(async () => handlers['gpu.autoClockOut.set']({ sessionId: 5 as never, mode: 'both' })).rejects.toThrow(/sessionId/);
+    await expect(async () => handlers['gpu.autoClockOut.set']({ sessionId: 'gone', mode: 'both' })).rejects.toMatchObject({ code: 'invalid_state', message: 'Session not found: gone' });
+  });
+
+  it('gpu.clockOut cannot be used to spoof an automatic clock-out reason', async () => {
+    const gpu = stubGpu({ phase: 'ready' });
+    const handlers = createRpcHandlers(makeCtx(tmp.dir, { gpu }));
+    await handlers['gpu.clockOut']({ reason: 'auto_unresponsive' as never });
+    expect(gpu.clockOut).toHaveBeenLastCalledWith('clock_out');
   });
 
   it('refuses to remove the Vast.ai key while an instance is rented or parked (the app could not stop billing)', async () => {

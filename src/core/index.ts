@@ -10,8 +10,8 @@
 //   * use only Node 24 APIs (@types/node is pinned to 24 to match Electron's runtime).
 //
 // Construction order (factories only store ctx; they must not call other modules while constructing):
-//   stores → bus → activity → llm → ext → shells → tools → models → gpu → agent (engine router) → scheduler
-// Startup: models.register(gpu.provider()) → ext.start() → gpu.start() → scheduler.start() → models.refresh() (bg)
+//   stores → bus → activity → llm → ext → shells → tools → models → gpu → agent (engine router) → auto clock-out → scheduler
+// Startup: models.register(gpu.provider()) → ext.start() → autoClockOut.start() → gpu.start() → scheduler.start() → models.refresh() (bg)
 //          → HTTP/WS server.
 
 import { mkdirSync } from 'node:fs';
@@ -19,7 +19,7 @@ import type { CoreContext, NativeBridge } from './contracts';
 import { createActivityRegistry } from './activity/index';
 import { createAgentRouter } from './engine/index';
 import { createExtensions } from './ext/index';
-import { createGpuManager } from './gpu/index';
+import { createAutoClockOut, createGpuManager } from './gpu/index';
 import { createLlmClient, createModelRegistry } from './llm/index';
 import { createScheduler } from './scheduler/index';
 import { createEventBus } from './server/bus';
@@ -96,6 +96,8 @@ export async function createCore(opts: CreateCoreOptions): Promise<CoreHandle> {
   const gpu = createGpuManager(ctx);
   ctx.gpu = gpu;
   ctx.agent = createAgentRouter(ctx);
+  const autoClockOut = createAutoClockOut(ctx);
+  ctx.autoClockOut = autoClockOut;
   const scheduler = createScheduler(ctx);
   ctx.scheduler = scheduler;
 
@@ -117,6 +119,12 @@ export async function createCore(opts: CreateCoreOptions): Promise<CoreHandle> {
     logErr('registering the Vast provider failed', err);
   }
   await bounded('extensions start', Promise.resolve().then(() => ext.start()), START_STEP_TIMEOUT_MS);
+  // Before gpu.start(): the watcher must see the first gpu.status events (an adopted instance arms the default watch).
+  try {
+    autoClockOut.start();
+  } catch (err) {
+    logErr('auto clock-out start failed', err);
+  }
   await bounded('gpu start', Promise.resolve().then(() => gpu.start()), START_STEP_TIMEOUT_MS);
   try {
     scheduler.start();
@@ -138,6 +146,11 @@ export async function createCore(opts: CreateCoreOptions): Promise<CoreHandle> {
         scheduler.stop();
       } catch (err) {
         logErr('scheduler stop failed', err);
+      }
+      try {
+        autoClockOut.dispose();
+      } catch (err) {
+        logErr('auto clock-out dispose failed', err);
       }
       try {
         ctx.agent.dispose?.();

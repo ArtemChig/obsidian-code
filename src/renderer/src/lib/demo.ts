@@ -11,6 +11,8 @@
 import type { CoreEventName, CoreEvents, RpcMethod, RpcParams, RpcResult } from '@shared/protocol';
 import type {
   ActivityItem,
+  AutoClockOutChoice,
+  AutoClockOutWatch,
   Block,
   GpuStatus,
   Message,
@@ -23,7 +25,7 @@ import type {
   Todo,
   ToolUseBlock,
 } from '@shared/types';
-import { createDemoData, DEMO_ENGINES, demoGpuSteps, type DemoData } from './demo-data';
+import { createDemoData, DEMO_ENGINES, demoDefaultWatch, demoGpuSteps, type DemoData } from './demo-data';
 import {
   EventHub,
   RpcError,
@@ -553,6 +555,8 @@ export class DemoTransport implements RpcTransport {
       return { ...g, phase: 'switching' as const, message: 'Switching model…' };
     },
     'gpu.history': (p) => this.data.history.slice(0, p.limit ?? 50),
+    'gpu.autoClockOut.get': () => this.liveGpu().autoClockOutWatches ?? [],
+    'gpu.autoClockOut.set': (p) => this.setAutoClockOut(p.sessionId ?? null, p.mode),
     'gpu.destroyOrphans': () => {
       const destroyed = this.data.gpuStatus.orphanInstanceIds ?? [];
       this.data.gpuStatus = { ...this.data.gpuStatus, orphanInstanceIds: [] };
@@ -631,7 +635,10 @@ export class DemoTransport implements RpcTransport {
     'settings.update': (p) => {
       const cur = this.data.settings;
       const next = { ...cur, ...p.patch } as typeof cur;
-      if (p.patch.vast) next.vast = { ...cur.vast, ...p.patch.vast };
+      if (p.patch.vast) {
+        next.vast = { ...cur.vast, ...p.patch.vast };
+        if (p.patch.vast.autoClockOut) next.vast.autoClockOut = { ...cur.vast.autoClockOut, ...p.patch.vast.autoClockOut };
+      }
       if (p.patch.local) next.local = { ...cur.local, ...p.patch.local };
       if (p.patch.search) next.search = { ...cur.search, ...p.patch.search };
       if (p.patch.permissions) next.permissions = { ...cur.permissions, ...p.patch.permissions };
@@ -649,7 +656,14 @@ export class DemoTransport implements RpcTransport {
   // ───────────────────────────── GPU simulation ─────────────────────────────
 
   private liveGpu(): GpuStatus {
-    const g = this.data.gpuStatus;
+    let g = this.data.gpuStatus;
+    if (g.autoClockOutWatches?.length) {
+      // like the core: the limits shown are the ones in Settings right now
+      const lim = this.data.settings.vast.autoClockOut;
+      const live = (w: AutoClockOutWatch): AutoClockOutWatch => ({ ...w, stallMinutes: lim.stallMinutes, finishGraceMinutes: lim.finishGraceMinutes });
+      const list = g.autoClockOutWatches.map(live);
+      g = { ...g, autoClockOutWatches: list, autoClockOut: list.find((w) => !w.sessionId) ?? list[0] };
+    }
     if (g.clockedInAt && g.pricePerHour && g.phase !== 'off') {
       const cost = ((Date.now() - g.clockedInAt) / 3_600_000) * g.pricePerHour;
       return { ...g, sessionCost: Math.round(cost * 1000) / 1000 };
@@ -673,7 +687,19 @@ export class DemoTransport implements RpcTransport {
     this.gpuAbort?.abort();
     const ac = new AbortController();
     this.gpuAbort = ac;
-    this.data.gpuStatus = { ...g, phase: 'searching', message: 'Searching offers…', profileId: profile?.id, modelId: model, lastError: undefined, progress: undefined, steps: demoGpuSteps('searching') };
+    const watch = this.data.settings.vast.autoClockOut.default === 'off' ? undefined : { ...demoDefaultWatch(Date.now()), mode: this.data.settings.vast.autoClockOut.default };
+    this.data.gpuStatus = {
+      ...g,
+      phase: 'searching',
+      message: 'Searching offers…',
+      profileId: profile?.id,
+      modelId: model,
+      lastError: undefined,
+      progress: undefined,
+      steps: demoGpuSteps('searching'),
+      autoClockOut: watch,
+      autoClockOutWatches: watch ? [watch] : undefined,
+    };
     void this.runClockIn(ac.signal);
     return this.data.gpuStatus;
   }
@@ -745,6 +771,8 @@ export class DemoTransport implements RpcTransport {
       this.setGpu({
         phase: 'off',
         message: 'Clocked out — instance destroyed',
+        autoClockOut: undefined,
+        autoClockOutWatches: undefined,
         monthCost: Math.round((g.monthCost + g.sessionCost) * 100) / 100,
         sessionCost: 0,
         clockedInAt: undefined,
@@ -758,6 +786,31 @@ export class DemoTransport implements RpcTransport {
       this.emit('notification', { title: 'Clocked out', body: `Instance destroyed · session cost $${g.sessionCost.toFixed(2)}`, level: 'info' });
     })();
     return this.data.gpuStatus;
+  }
+
+  /** gpu.autoClockOut.set: the demo only keeps the watches (it never fires them). */
+  private setAutoClockOut(sessionId: string | null, mode: AutoClockOutChoice): AutoClockOutWatch[] {
+    const g = this.data.gpuStatus;
+    const active = ['searching', 'renting', 'connecting', 'downloading', 'loading', 'ready', 'switching'].includes(g.phase);
+    const others = (g.autoClockOutWatches ?? []).filter((w) => (w.sessionId ?? null) !== sessionId);
+    const list = [...others];
+    if (mode !== 'off') {
+      if (!active) throw new RpcError('Auto clock-out needs a clocked-in GPU. Clock in first.', 'invalid_state');
+      const limits = this.data.settings.vast.autoClockOut;
+      const title = sessionId ? this.data.sessions.find((s) => s.id === sessionId)?.title : undefined;
+      list.push({
+        ...(sessionId ? { sessionId, sessionTitle: title ?? 'Untitled session' } : {}),
+        mode,
+        armedAt: Date.now(),
+        source: 'user',
+        stallMinutes: limits.stallMinutes,
+        finishGraceMinutes: limits.finishGraceMinutes,
+      });
+    }
+    list.sort((a, b) => (a.sessionId ? 1 : 0) - (b.sessionId ? 1 : 0) || a.armedAt - b.armedAt);
+    this.data.gpuStatus = { ...g, autoClockOut: list[0], autoClockOutWatches: list.length ? list : undefined };
+    this.emit('gpu.status', this.liveGpu());
+    return list;
   }
 
   private async runGpuSwitch(modelId: string): Promise<void> {

@@ -4,7 +4,7 @@
 
 import type { CoreEventName, CoreEvents } from '../shared/protocol';
 import type {
-  ActivityItem, AgentTypeInfo, ChangedFile, GpuStatus, ImageBlock, Message, ModelInfo, ModelRef, PermissionDecision,
+  ActivityItem, AgentTypeInfo, AutoClockOutChoice, AutoClockOutWatch, ChangedFile, GpuStatus, ImageBlock, Message, ModelInfo, ModelRef, PermissionDecision,
   PermissionMode, ProviderInfo, Question, ScheduledTask, Session, SessionSummary, Settings, SkillInfo,
   SlashCommandInfo, Todo, ToolDisplay, ToolResultPayload,
 } from '../shared/types';
@@ -237,7 +237,8 @@ export interface GpuManager {
   catalog(): import('../shared/types').CatalogModel[];
   offers(profileId: string, limit?: number): Promise<import('../shared/types').GpuOffer[]>;
   clockIn(opts: { profileId: string; modelId?: string; offerId?: number }): Promise<GpuStatus>;
-  clockOut(reason?: import('../shared/types').GpuSessionRecord['endReason']): Promise<GpuStatus>;
+  /** `note` (auto clock-outs: why) is written into the status message that follows the clock-out. */
+  clockOut(reason?: import('../shared/types').GpuSessionRecord['endReason'], note?: string): Promise<GpuStatus>;
   switchModel(modelId: string): Promise<GpuStatus>;
   history(limit?: number): import('../shared/types').GpuSessionRecord[];
   destroyOrphans(): Promise<number[]>;
@@ -247,7 +248,18 @@ export interface GpuManager {
   waitUntilReady(timeoutMs: number): Promise<boolean>;
   /** Resolves once the startup check of an instance tracked from the last run has finished (never rejects). */
   whenStarted?(): Promise<void>;
+  /** Extra fields merged into every status() (the auto clock-out watches); `fn` gets the status built so far. Pass null to remove. */
+  setStatusExtras?(fn: ((status: GpuStatus) => Partial<GpuStatus>) | null): void;
   dispose(): Promise<void>;
+}
+
+/** Auto clock-out (src/core/gpu/auto-clockout.ts): clocks the GPU out when the agent finished or stopped responding. */
+export interface AutoClockOutApi {
+  /** The armed watches, with their live countdown. */
+  list(): AutoClockOutWatch[];
+  /** Arm/replace/cancel a watch (sessionId omitted/null = any session using the Vast.ai provider). Throws when the GPU is not clocked in. */
+  set(opts: { sessionId?: string | null; mode: AutoClockOutChoice }): AutoClockOutWatch[];
+  dispose(): void;
 }
 
 // ───────────────────────────── Scheduler (src/core/scheduler) ─────────────────────────────
@@ -286,6 +298,8 @@ export interface CoreContext {
   shells: ShellRegistry;
   agent: AgentManager;
   gpu: GpuManager;
+  /** Absent in minimal test contexts. */
+  autoClockOut?: AutoClockOutApi;
   scheduler: SchedulerApi;
   activity: ActivityRegistry;
   /** Native integrations injected by Electron main (no-ops in standalone/browser mode). */

@@ -5,6 +5,7 @@ import type {
   EngineInfo,
   ActivityItem,
   AgentTypeInfo,
+  AutoClockOutWatch,
   CatalogModel,
   GpuOffer,
   GpuProfile,
@@ -140,6 +141,11 @@ export const DEMO_CATALOG: CatalogModel[] = [
   cat('glm53-flash-standard-unsloth-iq4xs', 'GLM-5.3 Flash 320B-A18B · Unsloth UD-IQ4_XS', 'glm-5.3-flash', 'standard', 'unsloth/GLM-5.3-Flash-GGUF', 'UD-IQ4_XS/GLM-5.3-Flash-00001-of-00004.gguf', 157.99, 192, 131072, ['max'], true),
 ];
 
+/** The global watch Settings → Vast.ai (default "unresponsive") arms at clock-in. */
+export function demoDefaultWatch(armedAt: number): AutoClockOutWatch {
+  return { mode: 'unresponsive', armedAt, source: 'default', stallMinutes: 10, finishGraceMinutes: 2 };
+}
+
 export const DEMO_SETTINGS: Settings = {
   defaultModel: LOCAL_MODEL,
   defaultPermissionMode: 'default',
@@ -160,6 +166,7 @@ export const DEMO_SETTINGS: Settings = {
     image: 'ghcr.io/ggml-org/llama.cpp:full-cuda12-b11561',
     localPort: 18080,
     extraLlamaArgs: [],
+    autoClockOut: { default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 },
   },
   search: { provider: 'duckduckgo' },
   permissions: { allow: ['Bash(npm test:*)', 'Bash(git status:*)', 'WebFetch(domain:docs.vast.ai)'], deny: ['Bash(rm -rf:*)'] },
@@ -476,6 +483,9 @@ export function createDemoData(now: number = Date.now()): DemoData {
     monthlyBudget: 150,
     creditBalance: 84.17,
     steps: steps('ready'),
+    // The default watch Settings → Vast.ai arms at every clock-in.
+    autoClockOut: demoDefaultWatch(now - 47 * MIN),
+    autoClockOutWatches: [demoDefaultWatch(now - 47 * MIN)],
   };
 
   const offers: Record<string, GpuOffer[]> = {
