@@ -70,6 +70,8 @@ test.describe('auto clock-out (demo mode)', () => {
     await page.getByTestId('gpu-clock-button').click({ button: 'right' });
     await expect(menu(page).getByRole('menuitem', { name: 'Cancel auto clock-out' })).toBeDisabled();
     await page.keyboard.press('Escape');
+    // wait out the close animation, or the closing menu's items still match below
+    await expect(menu(page)).toHaveCount(0);
 
     // the menu strip's GPU menu offers the same choices (without a second "Clock out now")
     await page.getByTestId('menu-gpu').click();
