@@ -4,6 +4,10 @@ Every change to Obsidian Code ships as a release (`npm run release`), and the in
 UPDATE button. Version rule: patch (last number) = small fix · minor (second) = feature or bigger change ·
 major (first) = redesign or giant change.
 
+## v1.5.0 — 2026-10-16
+
+New: resize the panels by dragging their edges.
+
 ## v1.4.0 — 2026-10-16
 
 Finishing touches across the app.
