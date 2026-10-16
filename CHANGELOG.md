@@ -4,6 +4,10 @@ Every change to Obsidian Code ships as a release (`npm run release`), and the in
 UPDATE button. Version rule: patch (last number) = small fix · minor (second) = feature or bigger change ·
 major (first) = redesign or giant change.
 
+## v1.3.0 — 2026-10-16
+
+New: a model browser — you are no longer limited to the built-in models.
+
 ## v1.2.0 — 2026-10-16
 
 New: the GPU can clock itself out, and the app is ready to share.
