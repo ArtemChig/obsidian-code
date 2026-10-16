@@ -108,6 +108,11 @@ function createNsisAdapter(opts: { logger: Logger; recordFile: string | null; fo
   return {
     setFeed(feed: FeedConfig) {
       if (feed.provider === 'github') {
+        if (!feed.token) {
+          // Public repository: the anonymous GitHub client (release feed + public download URLs).
+          u.setFeedURL({ provider: 'github', owner: feed.owner, repo: feed.repo, private: false, releaseType: 'release' });
+          return;
+        }
         knownTokens.add(feed.token);
         // electron-updater picks the private-repo client whenever a token is present. `private: false` here only stops
         // it from preferring a GH_TOKEN/GITHUB_TOKEN environment variable over the token we resolved.

@@ -37,7 +37,7 @@ export interface Harness {
 
 export function defaultSettings(): Settings {
   return {
-    defaultModel: null, defaultPermissionMode: 'default', defaultCwd: '', thinkingByDefault: true, preferUncensored: true,
+    setupDone: true, defaultModel: null, defaultPermissionMode: 'default', defaultCwd: '', thinkingByDefault: true, preferUncensored: true,
     local: { enabled: true, baseUrl: 'http://127.0.0.1:9' }, custom: [],
     vast: {
       profiles: [], monthlyBudget: 100, idleMinutes: 15, heartbeatMinutes: 10, maxSessionHours: 4, clockOutOnQuit: true,

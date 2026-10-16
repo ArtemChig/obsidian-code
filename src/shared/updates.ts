@@ -1,5 +1,5 @@
 // Auto-update state shared by the main process (src/main/updater.ts) and the renderer (window.obsidian.updates).
-// The token used to read the private GitHub repo never crosses this boundary: only where it came from.
+// An optional GitHub token (raises GitHub's rate limit) never crosses this boundary: only where it came from.
 
 /** Where the GitHub token for update checks came from (never the token itself). */
 export type UpdateTokenSource =
@@ -7,8 +7,10 @@ export type UpdateTokenSource =
   | 'secret'
   /** `gh auth token` (the GitHub CLI login on this PC). */
   | 'gh'
-  /** Neither: checks against the private repo cannot work. */
+  /** No token found (kept for older snapshots; checks now fall back to 'public'). */
   | 'none'
+  /** No token: the public repository's releases are read anonymously. */
+  | 'public'
   /** Test feed (OBSIDIAN_UPDATE_TEST_FEED): no token needed. */
   | 'not-needed';
 

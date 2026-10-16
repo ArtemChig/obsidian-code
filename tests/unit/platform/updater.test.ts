@@ -11,7 +11,6 @@ import {
   createUpdateController,
   detectUpdateSupport,
   friendlyUpdateError,
-  NO_TOKEN_MESSAGE,
   normalizeReleaseNotes,
   nsisUpdaterFlags,
   redact,
@@ -261,13 +260,14 @@ describe('update controller', () => {
     expect(s.releaseUrl).toBeNull();
   });
 
-  it('check without any token → actionable error, no request is made', async () => {
+  it('check without any token → the public repository is read anonymously', async () => {
     const h = harness({ resolveToken: async () => ({ token: null, source: 'none', note: 'GitHub CLI not found' }) });
+    h.adapter.outcome = { available: true, version: '9.9.9', releaseNotes: null, releaseDate: null };
     const s = await createUpdateController(h.deps).check();
-    expect(s.state).toEqual({ status: 'error', message: NO_TOKEN_MESSAGE, during: 'check' });
-    expect(s).toMatchObject({ tokenSource: 'none', tokenNote: 'GitHub CLI not found' });
-    expect(h.calls).toEqual([]);
-    expect(h.feeds).toEqual([]);
+    expect(s.state).toMatchObject({ status: 'available', version: '9.9.9' });
+    expect(s).toMatchObject({ tokenSource: 'public', tokenNote: 'GitHub CLI not found' });
+    expect(h.calls).toEqual(['check']);
+    expect(h.feeds).toEqual([{ provider: 'github', owner: 'ArtemChig', repo: 'obsidian-code' }]);
   });
 
   it('check errors are worded and redacted', async () => {

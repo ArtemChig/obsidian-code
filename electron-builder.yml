@@ -35,13 +35,13 @@ extraResources:
       - "**/*"
 
 # Auto-update feed (src/main/updater.ts). `npm run release` uploads the NSIS installer, its .blockmap and latest.yml to a
-# GitHub release in this PRIVATE repo; the installed app reads them with a token (saved secret or `gh auth token`).
+# GitHub release in this PUBLIC repo; the installed app reads them anonymously (or with an optional token).
 # Builds also write resources/app-update.yml from this block. See RELEASING.md.
 publish:
   provider: github
   owner: ArtemChig
   repo: obsidian-code
-  private: true
+  private: false
   releaseType: release
 
 win:

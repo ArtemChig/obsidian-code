@@ -27,7 +27,8 @@ What that means for you:
 - Do not edit `version` in package.json by hand; the release script bumps package.json, package-lock.json and
   CHANGELOG.md, commits "Release vX.Y.Z", tags it and publishes the GitHub release (installer, .blockmap, latest.yml).
 - Releases need a clean tree on `main` in sync with `origin/main`, and the GitHub CLI signed in (`gh auth status`).
-  The repo (ArtemChig/obsidian-code) is private. Never print, log or commit a token.
+  The repo (ArtemChig/obsidian-code) is PUBLIC (friends install from its releases): never commit a token, key,
+  personal data or anything from %APPDATA%\obsidian-code; never print or log a token.
 
 ## Checks before you hand work back
 

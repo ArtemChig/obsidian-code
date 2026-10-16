@@ -147,6 +147,7 @@ export function demoDefaultWatch(armedAt: number): AutoClockOutWatch {
 }
 
 export const DEMO_SETTINGS: Settings = {
+  setupDone: true,
   defaultModel: LOCAL_MODEL,
   defaultPermissionMode: 'default',
   defaultCwd: DEMO_PROJECT,

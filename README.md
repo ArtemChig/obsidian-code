@@ -15,6 +15,16 @@ panel with live cost and budget tracking.
 
 ## Install / run
 
+**Getting it (also for friends):**
+
+1. Open the [latest release](https://github.com/ArtemChig/obsidian-code/releases/latest) and download
+   `Obsidian-Code-Setup-<version>.exe`.
+2. Run it. The installer is not code-signed, so Windows SmartScreen may say "Windows protected your PC": click
+   **More info → Run anyway**. It installs for your user only (no admin rights) and adds Start-menu and desktop shortcuts.
+3. The first start opens a short **setup**: paste your own [Vast.ai](https://cloud.vast.ai/) API key (each person uses
+   their own account and credit), set a monthly budget, pick the default GPU, and optionally point it at a model server
+   on your PC. Everything can be changed later in **Settings**.
+
 | What | Where |
 |---|---|
 | Installer | `Obsidian-Code-Setup-<version>.exe` from the latest [GitHub release](https://github.com/ArtemChig/obsidian-code/releases/latest) (or `release\` after `npm run dist`) — installs, adds Start-menu + desktop shortcuts |
@@ -23,16 +33,21 @@ panel with live cost and budget tracking.
 
 The app keeps its data (sessions, settings, encrypted keys, cost ledger) in `%APPDATA%\obsidian-code`.
 
-**Updates:** the installed app checks for new releases on its own. When one is out, an **UPDATE** button appears at the
-right of the menu bar: click it and the app installs the new version and restarts (a clocked-in GPU is clocked out
-first, if *Clock out on quit* is on). The repository is private, so the app reads releases with your GitHub CLI login
-(`gh auth login`) or a read-only token saved in **Settings → About & updates**. See `RELEASING.md`.
+**Updates:** the installed app checks for new releases on its own (20 s after start, then every 30 min). When one is
+out, an **UPDATE** button appears at the right of the menu bar: click it and the app installs the new version and
+restarts (a clocked-in GPU is clocked out first, if *Clock out on quit* is on). The repository is public, so no sign-in
+is needed; a GitHub token in **Settings → About & updates** is optional. See `RELEASING.md`.
 
 ## First run
 
-1. **Local model (works immediately):** if your `llama-server` is running on `http://127.0.0.1:8080`, the
-   model shows up as *Local* with a green dot. Change the address in **Settings → Models & providers**.
-2. **New session** (`Ctrl+N`), pick the project folder in the header, and type.
+1. **Setup:** on a new install the setup asks for the Vast.ai key, budget and default GPU (skip it to do this later
+   in **Settings → Vast.ai**).
+2. **Rent a GPU:** press **Clock in** in the GPU panel (bottom left). The first start downloads the model (about
+   5–15 minutes). Clock out when you are done, or right-click **Clock out** to let the app do it when the task finishes
+   or stops responding.
+3. **Local model (optional):** if a `llama-server` runs on `http://127.0.0.1:8080`, the model shows up as *Local* with a
+   green dot. Change the address in **Settings → Models & providers**.
+4. **New session** (`Ctrl+N`), pick the project folder in the header, and type.
 
 ## Rent a GPU (Vast.ai)
 

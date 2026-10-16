@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Toaster } from '@renderer/components/ui/toast';
 import { TooltipProvider } from '@renderer/components/ui/tooltip';
 import { GpuClockOutConfirm } from '@renderer/features/gpu/ClockOutConfirm';
+import { SetupWizard } from '@renderer/features/setup/SetupWizard';
 import { markRead } from '@renderer/state/actions';
 import { useSessions } from '@renderer/state/sessions';
 import { useUi } from '@renderer/state/ui';
@@ -33,6 +34,7 @@ export function App() {
       <CommandPalette />
       <GpuClockOutConfirm />
       <ShortcutsDialog />
+      <SetupWizard />
       <Toaster />
     </TooltipProvider>
   );

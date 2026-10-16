@@ -116,7 +116,16 @@ describe('SettingsStore', () => {
     expect(s.vast.autoClockOut).toEqual({ default: 'unresponsive', stallMinutes: 10, finishGraceMinutes: 2 });
     expect(s.defaultPermissionMode).toBe('default');
     expect(s.maxToolOutputChars).toBe(30000);
+    // A fresh install starts with the first-run setup (the UI shows it only while no Vast.ai key is saved).
+    expect(s.setupDone).toBe(false);
     expect(existsSync(join(tmp.dir, 'settings.json'))).toBe(true);
+  });
+
+  it('keeps setupDone once saved and resets a non-boolean value', () => {
+    writeFileSync(join(tmp.dir, 'settings.json'), JSON.stringify({ setupDone: true }));
+    expect(createSettingsStore(tmp.dir).get().setupDone).toBe(true);
+    writeFileSync(join(tmp.dir, 'settings.json'), JSON.stringify({ setupDone: 'yes' }));
+    expect(createSettingsStore(tmp.dir).get().setupDone).toBe(false);
   });
 
   it('deep-merges a partial file with defaults and resets invalid values', () => {

@@ -44,7 +44,7 @@ fail).
 
 `src/main/updater.ts` (Electron wiring, IPC) + `src/main/updater-core.ts` (state machine, token lookup, unit-tested) +
 `src/main/quit-gate.ts` (quit sequence) use electron-updater's `NsisUpdater` with the GitHub provider
-(`ArtemChig/obsidian-code`, private).
+(`ArtemChig/obsidian-code`, public).
 
 - **When**: 20 s after startup, every 30 min, on Help → Check for updates, and Settings → About & updates → Check now.
   It only downloads when the user clicks (autoDownload off).
@@ -69,14 +69,15 @@ fail).
   attempt always failed ("Cannot parse blockmap") before falling back to the full installer (~117 MB).
 - **Logs**: `[updater] …` lines on the main-process console (tokens redacted).
 
-### Token sources (the repo is private)
+### Token sources (optional: the repo is public)
 
-Resolved at every check, in this order — the first that works is used:
+The repository is public, so every installed copy (a friend's included) reads releases anonymously. A token is optional
+and only lifts GitHub's rate limit. Resolved at every check, in this order:
 
-1. **Saved token** — Settings → About & updates → *Update token*: a fine-grained personal access token with read-only
-   *Contents* access to `ArtemChig/obsidian-code`. Stored encrypted (secret `github.updateToken`).
+1. **Saved token** — Settings → About & updates → *Update token* (any GitHub token). Stored encrypted (secret
+   `github.updateToken`).
 2. **GitHub CLI** — `gh auth token` (gh on PATH or `C:\Program Files\GitHub CLI\gh.exe`; 5 s timeout).
-3. **None** — the check fails with "No GitHub access for update checks…" and Settings explains what to do.
+3. **None** — anonymous: electron-updater's public GitHub client (`releases.atom` + public download URLs).
 
 The token stays in the main process: the renderer only sees *where* it came from, and the updater's logger redacts it.
 

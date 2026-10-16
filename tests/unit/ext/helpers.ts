@@ -8,6 +8,7 @@ import type { Settings } from '@shared/types';
 
 export function defaultSettings(patch: Partial<Settings> = {}): Settings {
   return {
+    setupDone: true,
     defaultModel: null,
     defaultPermissionMode: 'default',
     defaultCwd: os.homedir(),

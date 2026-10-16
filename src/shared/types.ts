@@ -407,6 +407,8 @@ export interface McpServerConfig {
 }
 
 export interface Settings {
+  /** The first-run setup (Vast.ai key, budget, default GPU, local server) was finished or skipped. */
+  setupDone: boolean;
   defaultModel: ModelRef | null;
   defaultPermissionMode: PermissionMode;
   defaultCwd: string;

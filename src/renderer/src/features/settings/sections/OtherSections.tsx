@@ -295,6 +295,7 @@ const TOKEN_SOURCE_LABEL: Record<UpdateTokenSource, string> = {
   gh: 'Using GitHub CLI login',
   secret: 'Using saved token',
   none: 'No token',
+  public: 'Public (no token needed)',
   'not-needed': 'Test feed (no token needed)',
 };
 
@@ -432,14 +433,14 @@ function UpdatesGroup() {
             label="GitHub access"
             testId="updates-token-source"
             description={
-              snap.tokenSource === 'none'
-                ? `${snap.tokenNote ? `${snap.tokenNote}. ` : ''}Sign in with the GitHub CLI (gh auth login) or paste a token below.`
-                : snap.tokenSource === null
-                  ? 'Checked at the next update check.'
-                  : 'Releases live in a private GitHub repository, so update checks need read access to it.'
+              snap.tokenSource === null
+                ? 'Checked at the next update check.'
+                : snap.tokenSource === 'public' || snap.tokenSource === 'none'
+                  ? 'Releases are published in a public GitHub repository, so no sign-in is needed.'
+                  : 'Releases are published in a public GitHub repository; the token only raises GitHub’s rate limit.'
             }
           >
-            <Badge tone={snap.tokenSource === 'none' ? 'danger' : snap.tokenSource ? 'success' : 'neutral'} data-testid="updates-token-badge">
+            <Badge tone={snap.tokenSource ? 'success' : 'neutral'} data-testid="updates-token-badge">
               {snap.tokenSource ? TOKEN_SOURCE_LABEL[snap.tokenSource] : 'Unknown'}
             </Badge>
           </Row>
@@ -447,7 +448,7 @@ function UpdatesGroup() {
             <Row
               stacked
               label="Update token (optional)"
-              description="A fine-grained GitHub token with read-only Contents access to ArtemChig/obsidian-code. Only needed when the GitHub CLI is not signed in on this PC; a saved token is used first."
+              description="Not needed. A GitHub token (no scopes required) only raises GitHub’s rate limit for update checks; a saved token is used first, then the GitHub CLI login."
             >
               <SecretField name={UPDATE_TOKEN_SECRET} testId="secret-update-token" placeholder="github_pat_…" onChanged={() => void checkForUpdates()} />
             </Row>

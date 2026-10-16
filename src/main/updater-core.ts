@@ -45,7 +45,7 @@ const GH_NOTES: Record<Exclude<GhResult, { ok: true }>['reason'], string> = {
   error: 'GitHub CLI failed',
 };
 
-/** Token for the private repo, in order: the saved secret, then `gh auth token`, else none (with why). */
+/** Optional token for update checks, in order: the saved secret, then `gh auth token`, else none (with why). */
 export async function resolveUpdateToken(deps: { getSecret: () => string | null; runGh: () => Promise<GhResult> }): Promise<TokenResolution> {
   let secret: string | null = null;
   try {
@@ -172,9 +172,6 @@ export function detectUpdateSupport(env: {
 
 // ───────────────────────────── error wording ─────────────────────────────
 
-export const NO_TOKEN_MESSAGE =
-  'No GitHub access for update checks. Sign in with the GitHub CLI (gh auth login) or save a read-only token in Settings → About & updates.';
-
 /** A short, actionable message for an updater error. Tokens are redacted. */
 export function friendlyUpdateError(err: unknown, secrets: readonly (string | null | undefined)[] = []): string {
   const e = err as { code?: string; message?: string; statusCode?: number } | null;
@@ -183,6 +180,9 @@ export function friendlyUpdateError(err: unknown, secrets: readonly (string | nu
   const status = e?.statusCode ?? Number(/\b(?:HttpError:\s*|status(?:Code)?[ :=]+)(\d{3})\b/i.exec(raw)?.[1] ?? NaN);
   if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|ERR_INTERNET_DISCONNECTED|net::ERR_/i.test(`${code} ${raw}`)) {
     return 'Could not reach the update server (offline?). It will try again later.';
+  }
+  if (status === 403 || status === 429 || /rate limit/i.test(raw)) {
+    return 'GitHub is limiting update checks from this network right now. It will try again later.';
   }
   if (status === 401 || /\b401\b|Bad credentials/i.test(raw)) {
     return 'GitHub rejected the token (401). Sign in again with gh auth login, or save a new token in Settings → About & updates.';
@@ -243,7 +243,7 @@ export function nsisUpdaterFlags(): {
 }
 
 export type FeedConfig =
-  | { provider: 'github'; owner: string; repo: string; token: string }
+  | { provider: 'github'; owner: string; repo: string; /** Absent = anonymous (public repository). */ token?: string }
   | { provider: 'generic'; url: string };
 
 export interface CheckOutcome {
@@ -348,12 +348,14 @@ export function createUpdateController(deps: UpdateControllerDeps): UpdateContro
         tokenSource = t.source;
         tokenNote = t.note;
         token = t.token;
+        // The repository is public: without a token the releases are read anonymously (a token only lifts GitHub's
+        // rate limit). Every installed copy, with or without the GitHub CLI, gets updates.
         if (!t.token) {
-          lastCheckedAt = now();
-          set({ status: 'error', message: NO_TOKEN_MESSAGE, during: 'check' });
-          return snapshot();
+          tokenSource = 'public';
+          deps.updater.setFeed({ provider: 'github', owner: UPDATE_REPO.owner, repo: UPDATE_REPO.repo });
+        } else {
+          deps.updater.setFeed({ provider: 'github', owner: UPDATE_REPO.owner, repo: UPDATE_REPO.repo, token: t.token });
         }
-        deps.updater.setFeed({ provider: 'github', owner: UPDATE_REPO.owner, repo: UPDATE_REPO.repo, token: t.token });
       } else {
         deps.updater.setFeed({ provider: 'generic', url: deps.support.feed.url });
       }

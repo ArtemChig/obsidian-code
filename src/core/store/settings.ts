@@ -19,6 +19,7 @@ export function defaultGpuProfiles(): GpuProfile[] {
 
 export function defaultSettings(): Settings {
   return {
+    setupDone: false,
     defaultModel: null,
     defaultPermissionMode: 'default',
     defaultCwd: homedir(),
