@@ -6,6 +6,7 @@
 //
 // Connect to ws://127.0.0.1:<port>/ws?token=<token>. The token is generated per core start.
 
+import type { HubModelDetail, HubSearchParams, HubSearchResult } from './hub';
 import type {
   ActivityItem, AgentTypeInfo, AutoClockOutChoice, AutoClockOutWatch, Block, EngineId, EngineInfo, CatalogModel, ChangedFile, GpuOffer, GpuSessionRecord, GpuStatus,
   ImageBlock, Message, ModelInfo, ModelRef, PermissionDecision, PermissionMode, PermissionRequest, PlanRequest,
@@ -78,6 +79,18 @@ export interface RpcMethods {
    * Vast.ai provider); mode 'off' cancels it. Arming needs a clocked-in GPU. Returns every armed watch.
    */
   'gpu.autoClockOut.set': { params: { sessionId?: string | null; mode: AutoClockOutChoice }; result: AutoClockOutWatch[] };
+
+  // ── model browser (Hugging Face)
+  /** Search public GGUF repos. Cached for ~10 min; refresh: true bypasses the cache. */
+  'hub.search': { params: HubSearchParams & { refresh?: boolean }; result: HubSearchResult };
+  /** One repo: quant variants with sizes, vision projectors, licence, GGUF header facts. */
+  'hub.details': { params: { repo: string; refresh?: boolean }; result: HubModelDetail };
+  /** Add a quant as a model for GPU clock-ins (quant = variant id or label). Re-adding replaces. Refuses gated repos. */
+  'hub.addModel': { params: { repo: string; quant: string; withVision?: boolean }; result: CatalogModel };
+  /** Remove a model the user added. Built-in models and models in use by the GPU cannot be removed. */
+  'hub.removeModel': { params: { id: string }; result: { ok: true } };
+  /** Star / unstar a repo. Returns the favorites, newest first. */
+  'hub.setFavorite': { params: { repo: string; favorite: boolean }; result: { favorites: string[] } };
 
   // ── scheduler
   'schedules.list': { params: {}; result: ScheduledTask[] };

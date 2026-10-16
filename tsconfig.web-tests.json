@@ -6,5 +6,5 @@
     "outDir": "./node_modules/.cache/tsc-web-tests",
     "types": ["vite/client"]
   },
-  "include": ["tests/unit/ui-*/**/*.ts", "src/renderer/src/**/*", "src/shared/**/*"]
+  "include": ["tests/unit/ui-*/**/*.ts", "src/renderer/src/**/*", "src/renderer/src/**/*.json", "src/shared/**/*"]
 }

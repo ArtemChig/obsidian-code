@@ -3,6 +3,7 @@
 import { ActivityView } from '@renderer/features/activity/ActivityView';
 import { ChatView } from '@renderer/features/chat/ChatView';
 import { GpuView } from '@renderer/features/gpu/GpuView';
+import { ModelsView } from '@renderer/features/models/ModelsView';
 import { SchedulesView } from '@renderer/features/schedules/SchedulesView';
 import { SettingsView } from '@renderer/features/settings/SettingsView';
 import { useSessions } from '@renderer/state/sessions';
@@ -24,6 +25,12 @@ function MainView() {
       return (
         <ErrorBoundary area="GPU view" resetKey={route}>
           <GpuView />
+        </ErrorBoundary>
+      );
+    case 'models':
+      return (
+        <ErrorBoundary area="Models view" resetKey={route}>
+          <ModelsView />
         </ErrorBoundary>
       );
     case 'activity':

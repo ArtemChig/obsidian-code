@@ -1,6 +1,7 @@
 // Global command palette (Ctrl+K): actions, navigation, sessions, model switcher. Owner: ui-foundation.
 import {
   Activity,
+  Boxes,
   ArrowLeft,
   Box,
   CalendarClock,
@@ -196,6 +197,9 @@ function RootPage({ go }: { go: (p: Page) => void }) {
         </CommandItem>
         <CommandItem icon={Cpu} onSelect={run(() => navigate('gpu'))} keywords={['vast', 'gpu']}>
           GPU
+        </CommandItem>
+        <CommandItem icon={Boxes} onSelect={run(() => navigate('models'))} keywords={['models', 'browse', 'huggingface', 'hugging face', 'gguf', 'add model', 'favorite', 'download']}>
+          Browse models
         </CommandItem>
         <CommandItem icon={Settings} shortcut={SHORTCUTS.settings} onSelect={run(() => navigate('settings'))} keywords={['preferences']}>
           Settings

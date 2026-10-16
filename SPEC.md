@@ -202,6 +202,20 @@ with JSON payload on stdin, timeout, exit code 2 = block with stderr as message;
   `max` (2× RTX PRO 6000 → GLM-5.3-Flash). Each family must have an **uncensored** and a **standard** variant (uncensored
   preferred: heretic-org / HauhauCS / huihui-ai; standard: unsloth / official GGUF).
 * `VastProvider` (id `vast`): endpoint = tunnel URL + API key when ready; models = the loaded catalog model.
+* **Model browser** (`src/core/gpu/hub.ts`, `model-browser.ts`; shared pure logic in `src/shared/{hub-parse,model-fit,user-models}.ts`;
+  RPC `hub.search/details/addModel/removeModel/setFavorite`; the Models view): the built-in catalog above stays the default
+  ("Recommended"); the user can also browse the public Hugging Face API anonymously (`filter=gguf`, sort by downloads / likes /
+  updated / trending, cached ~10 min, 15 s timeout, friendly 429/5xx/network errors), star repos (`Settings.vast.favoriteRepos`)
+  and add a quant variant (`Settings.vast.userModels`, a `CatalogModel` with `source: 'user'`): split files are grouped
+  (`*-00001-of-0000N.gguf`, also in sub-folders), mmproj / MTP / imatrix / LoRA files are never variants, gated repos are
+  refused (the rented server has no Hugging Face login), VRAM and context are *estimated* (`model-fit.ts`: weights + overhead +
+  q8_0 KV cache, at least a 32k context on the smallest profile offered, capped by the GGUF context length) and `profiles` =
+  the GPU profiles whose nominal VRAM fits. `llamaArgs` stay empty. Every lookup (`getCatalogModel`, `modelsForProfile`,
+  `gpu.catalog`, the scheduler, the Vast provider) sees built-in + user models; the experimental fallback only ever picks
+  built-ins. Whatever is read from settings is re-validated (`sanitizeUserModels`: safe repo and file names, positive sizes, no
+  built-in id shadowed) because it lands in `config.sh` (every value shell-quoted) and in download URLs. A clock-in ships the
+  built-ins plus the chosen model in the instance env; a live switch to a user model uploads the full `config.sh` over SSH
+  first. A model the GPU or a scheduled task is using cannot be removed.
 * **Auto clock-out** (`src/core/gpu/auto-clockout.ts`; `gpu.autoClockOut.get/set`; `GpuStatus.autoClockOut` +
   `autoClockOutWatches`; `Settings.vast.autoClockOut`): so nobody pays for an idle or hung GPU overnight. A *watch*
   targets one session or any session using the Vast provider (the global watch) with mode `finished` (no session

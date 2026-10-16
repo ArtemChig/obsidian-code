@@ -6,7 +6,7 @@ import { Skeleton } from '@renderer/components/ui/feedback';
 import { SectionLabel } from '@renderer/components/ui/layout';
 import { useLiveGpuCost, useModelLabel } from '@renderer/app/GpuWidget';
 import { errorMessage, rpc } from '@renderer/lib/rpc';
-import { clockIn, defaultGpuProfileId, loadGpuCatalog, requestClockOut, switchGpuModel } from '@renderer/state/actions';
+import { clockIn, defaultGpuProfileId, loadGpuCatalog, navigate, requestClockOut, switchGpuModel } from '@renderer/state/actions';
 import { isGpuClockedIn, useGpu } from '@renderer/state/gpu';
 import { useSessions } from '@renderer/state/sessions';
 import { useSettings } from '@renderer/state/settings';
@@ -234,6 +234,7 @@ export function GpuView() {
                 onShowTest={setShowTest}
                 onSelect={(id) => setPicked((p) => ({ ...p, [profile.id]: id }))}
                 onSwitch={(id) => void onSwitch(id)}
+                onBrowse={() => navigate('models')}
                 onRetryCatalog={() => {
                   setCatalogFailed(false);
                   void loadGpuCatalog(true, false).then(() => {

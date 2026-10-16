@@ -1,0 +1,943 @@
+[
+ {
+  "id": "unsloth/Qwen3.8-27B-GGUF",
+  "author": "unsloth",
+  "gated": false,
+  "lastModified": "2026-08-20T12:04:25.000Z",
+  "likes": 5128,
+  "downloads": 6663225,
+  "tags": [
+   "gguf",
+   "qwen3_5",
+   "unsloth",
+   "base_model:Qwen/Qwen3.8-27B",
+   "base_model:quantized:Qwen/Qwen3.8-27B",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "imatrix",
+   "conversational"
+  ],
+  "createdAt": "2026-08-13T08:28:40.000Z",
+  "siblings": [
+   {
+    "rfilename": "BF16/Qwen3.8-27B-BF16-00001-of-00002.gguf"
+   },
+   {
+    "rfilename": "BF16/Qwen3.8-27B-BF16-00002-of-00002.gguf"
+   },
+   {
+    "rfilename": "MTP/mtp-Qwen3.8-27B-Q4_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q4_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q4_1.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q8_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ1_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ1_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ2_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ2_XXS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ3_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ3_XXS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q2_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q3_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q4_K_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q5_K_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q5_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K_L.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q8_K_L.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q8_K_XL.gguf"
+   },
+   {
+    "rfilename": "imatrix_unsloth.gguf"
+   },
+   {
+    "rfilename": "mmproj-BF16.gguf"
+   },
+   {
+    "rfilename": "mmproj-F16.gguf"
+   }
+  ]
+ },
+ {
+  "id": "ornith-ai/Ornith-1.5-9B-GGUF",
+  "author": "ornith-ai",
+  "gated": false,
+  "lastModified": "2026-08-24T02:45:24.000Z",
+  "likes": 542,
+  "downloads": 4960083,
+  "tags": [
+   "transformers",
+   "gguf",
+   "text-generation",
+   "license:mit",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "text-generation",
+  "library_name": "transformers",
+  "createdAt": "2026-08-19T00:02:44.000Z",
+  "siblings": [
+   {
+    "rfilename": "Ornith-1.5-9B-BF16.gguf"
+   },
+   {
+    "rfilename": "Ornith-1.5-9B-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "Ornith-1.5-9B-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "Ornith-1.5-9B-Q6_K.gguf"
+   },
+   {
+    "rfilename": "Ornith-1.5-9B-Q8_0.gguf"
+   },
+   {
+    "rfilename": "mmproj-Ornith-1.5-9B-BF16.gguf"
+   }
+  ]
+ },
+ {
+  "id": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+  "author": "unsloth",
+  "gated": false,
+  "lastModified": "2026-01-30T06:29:38.000Z",
+  "likes": 1153,
+  "downloads": 2658438,
+  "tags": [
+   "transformers",
+   "gguf",
+   "unsloth",
+   "qwen3",
+   "qwen",
+   "text-generation",
+   "arxiv:2505.09388",
+   "base_model:Qwen/Qwen3-Coder-30B-A3B-Instruct",
+   "base_model:quantized:Qwen/Qwen3-Coder-30B-A3B-Instruct",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "imatrix",
+   "conversational"
+  ],
+  "pipeline_tag": "text-generation",
+  "library_name": "transformers",
+  "createdAt": "2025-07-31T10:27:38.000Z",
+  "siblings": [
+   {
+    "rfilename": "BF16/Qwen3-Coder-30B-A3B-Instruct-BF16-00001-of-00002.gguf"
+   },
+   {
+    "rfilename": "BF16/Qwen3-Coder-30B-A3B-Instruct-BF16-00002-of-00002.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-IQ4_NL.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q2_K.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q2_K_L.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q4_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q4_1.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q5_K_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q6_K.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-IQ2_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-IQ2_XXS.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-IQ3_XXS.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-Q2_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-Q3_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-Q4_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-Q5_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-Q6_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-Q8_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3-Coder-30B-A3B-Instruct-UD-TQ1_0.gguf"
+   }
+  ]
+ },
+ {
+  "id": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF",
+  "author": "JonathanColetti",
+  "gated": false,
+  "lastModified": "2026-08-29T04:18:18.000Z",
+  "likes": 1608,
+  "downloads": 2568641,
+  "tags": [
+   "llama.cpp",
+   "gguf",
+   "uncensored",
+   "qwen3.8",
+   "mtp",
+   "speculative-decoding",
+   "imatrix",
+   "quantized",
+   "text-generation",
+   "en",
+   "zh",
+   "base_model:Qwen/Qwen3.8-27B",
+   "base_model:quantized:Qwen/Qwen3.8-27B",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "text-generation",
+  "library_name": "llama.cpp",
+  "createdAt": "2026-08-14T03:43:36.000Z",
+  "siblings": [
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-IQ2_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-Q6_K.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-Q8_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-draft-Q4_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-draft-Q8_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-noMTP-IQ2_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-noMTP-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-noMTP-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-noMTP-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-noMTP-Q6_K.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-noMTP-Q8_0.gguf"
+   },
+   {
+    "rfilename": "mmproj-Qwen3.8-27B-Uncensored-F16.gguf"
+   }
+  ]
+ },
+ {
+  "id": "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
+  "author": "HauhauCS",
+  "gated": false,
+  "lastModified": "2026-08-17T22:02:10.000Z",
+  "likes": 1856,
+  "downloads": 2320921,
+  "tags": [
+   "gguf",
+   "uncensored",
+   "qwen3.8",
+   "multimodal",
+   "vision",
+   "mtp",
+   "speculative-decoding",
+   "fastmtp",
+   "image-text-to-text",
+   "en",
+   "zh",
+   "multilingual",
+   "base_model:Qwen/Qwen3.8-27B",
+   "base_model:quantized:Qwen/Qwen3.8-27B",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "image-text-to-text",
+  "createdAt": "2026-08-17T15:15:19.000Z",
+  "siblings": [
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-FastMTP-32K.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ2_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_XS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q2_K_P.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q3_K_P.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q5_K_P.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q6_K_P.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf"
+   },
+   {
+    "rfilename": "mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+   }
+  ]
+ },
+ {
+  "id": "ggml-org/Qwen3.8-27B-GGUF",
+  "author": "ggml-org",
+  "gated": false,
+  "lastModified": "2026-09-27T02:58:32.000Z",
+  "likes": 129,
+  "downloads": 2221434,
+  "tags": [
+   "gguf",
+   "quantized",
+   "image-text-to-text",
+   "base_model:Qwen/Qwen3.8-27B",
+   "base_model:quantized:Qwen/Qwen3.8-27B",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "image-text-to-text",
+  "createdAt": "2026-08-14T15:18:00.000Z",
+  "siblings": [
+   {
+    "rfilename": "Qwen3.8-27B-BF16.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q8_0.gguf"
+   },
+   {
+    "rfilename": "dflash-Qwen3.8-27B-BF16.gguf"
+   },
+   {
+    "rfilename": "dflash-Qwen3.8-27B-Q4_0.gguf"
+   },
+   {
+    "rfilename": "dflash-Qwen3.8-27B-Q8_0.gguf"
+   },
+   {
+    "rfilename": "mmproj-Qwen3.8-27B-BF16.gguf"
+   },
+   {
+    "rfilename": "mmproj-Qwen3.8-27B-Q8_0.gguf"
+   },
+   {
+    "rfilename": "mtp-Qwen3.8-27B-BF16.gguf"
+   },
+   {
+    "rfilename": "mtp-Qwen3.8-27B-Q4_0.gguf"
+   },
+   {
+    "rfilename": "mtp-Qwen3.8-27B-Q8_0.gguf"
+   }
+  ]
+ },
+ {
+  "id": "unsloth/gemma-4-12b-it-GGUF",
+  "author": "unsloth",
+  "gated": false,
+  "lastModified": "2026-07-17T12:52:56.000Z",
+  "likes": 910,
+  "downloads": 1615593,
+  "tags": [
+   "gguf",
+   "gemma4",
+   "unsloth",
+   "gemma",
+   "google",
+   "gemma4_unified",
+   "image-text-to-text",
+   "base_model:google/gemma-4-12B-it",
+   "base_model:quantized:google/gemma-4-12B-it",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "image-text-to-text",
+  "createdAt": "2026-05-29T11:25:59.000Z",
+  "siblings": [
+   {
+    "rfilename": "MTP/mtp-gemma-4-12b-it-BF16.gguf"
+   },
+   {
+    "rfilename": "MTP/mtp-gemma-4-12b-it-F16.gguf"
+   },
+   {
+    "rfilename": "MTP/mtp-gemma-4-12b-it-Q8_0.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-BF16.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-IQ4_NL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q3_K_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q3_K_S.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q4_0.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q4_1.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q4_K_S.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q5_K_S.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q6_K.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-Q8_0.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-IQ2_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-IQ3_XXS.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-Q2_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-Q3_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-Q4_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-Q5_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-Q6_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-12b-it-UD-Q8_K_XL.gguf"
+   },
+   {
+    "rfilename": "mmproj-BF16.gguf"
+   },
+   {
+    "rfilename": "mmproj-F16.gguf"
+   },
+   {
+    "rfilename": "mmproj-F32.gguf"
+   },
+   {
+    "rfilename": "mtp-gemma-4-12b-it.gguf"
+   }
+  ]
+ },
+ {
+  "id": "unsloth/gemma-4-E4B-it-GGUF",
+  "author": "unsloth",
+  "gated": false,
+  "lastModified": "2026-07-17T12:49:21.000Z",
+  "likes": 654,
+  "downloads": 593886,
+  "tags": [
+   "gguf",
+   "gemma4",
+   "unsloth",
+   "gemma",
+   "google",
+   "image-text-to-text",
+   "base_model:google/gemma-4-E4B-it",
+   "base_model:quantized:google/gemma-4-E4B-it",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "image-text-to-text",
+  "createdAt": "2026-04-01T14:42:04.000Z",
+  "siblings": [
+   {
+    "rfilename": "MTP/mtp-gemma-4-E4B-it-BF16.gguf"
+   },
+   {
+    "rfilename": "MTP/mtp-gemma-4-E4B-it-F16.gguf"
+   },
+   {
+    "rfilename": "MTP/mtp-gemma-4-E4B-it-Q8_0.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-BF16.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-IQ4_NL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q3_K_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q3_K_S.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q4_0.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q4_1.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q4_K_S.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q5_K_S.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q6_K.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-Q8_0.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-IQ2_M.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-IQ3_XXS.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-Q2_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-Q3_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-Q4_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-Q5_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-Q6_K_XL.gguf"
+   },
+   {
+    "rfilename": "gemma-4-E4B-it-UD-Q8_K_XL.gguf"
+   },
+   {
+    "rfilename": "mmproj-BF16.gguf"
+   },
+   {
+    "rfilename": "mmproj-F16.gguf"
+   },
+   {
+    "rfilename": "mmproj-F32.gguf"
+   },
+   {
+    "rfilename": "mtp-gemma-4-E4B-it.gguf"
+   }
+  ]
+ },
+ {
+  "id": "unsloth/GLM-5.3-Flash-GGUF",
+  "private": false,
+  "pipeline_tag": "text-generation",
+  "tags": [
+   "gguf",
+   "unsloth",
+   "glm5_next",
+   "text-generation",
+   "en",
+   "zh",
+   "arxiv:2602.15763",
+   "base_model:zai-org/GLM-5.3-Flash",
+   "base_model:quantized:zai-org/GLM-5.3-Flash",
+   "license:mit",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "downloads": 958322,
+  "likes": 483,
+  "modelId": "unsloth/GLM-5.3-Flash-GGUF",
+  "author": "unsloth",
+  "lastModified": "2026-10-05T22:23:39.000Z",
+  "gated": false,
+  "widgetData": [
+   {
+    "text": "Hi, what can you help me with?"
+   },
+   {
+    "text": "What is 84 * 3 / 2?"
+   },
+   {
+    "text": "Tell me an interesting fact about the universe!"
+   },
+   {
+    "text": "Explain quantum computing in simple terms."
+   }
+  ],
+  "siblings": [
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00001-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00002-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00003-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00004-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00005-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00006-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00007-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00008-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00009-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00010-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00011-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00012-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00013-of-00014.gguf"
+   },
+   {
+    "rfilename": "BF16/GLM-5.3-Flash-BF16-00014-of-00014.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00001-of-00008.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00002-of-00008.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00003-of-00008.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00004-of-00008.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00005-of-00008.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00006-of-00008.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00007-of-00008.gguf"
+   },
+   {
+    "rfilename": "Q8_0/GLM-5.3-Flash-Q8_0-00008-of-00008.gguf"
+   },
+   {
+    "rfilename": "UD-IQ1_M/GLM-5.3-Flash-UD-IQ1_M-00001-of-00003.gguf"
+   },
+   {
+    "rfilename": "UD-IQ1_M/GLM-5.3-Flash-UD-IQ1_M-00002-of-00003.gguf"
+   },
+   {
+    "rfilename": "UD-IQ1_M/GLM-5.3-Flash-UD-IQ1_M-00003-of-00003.gguf"
+   },
+   {
+    "rfilename": "UD-IQ1_S/GLM-5.3-Flash-UD-IQ1_S-00001-of-00003.gguf"
+   },
+   {
+    "rfilename": "UD-IQ1_S/GLM-5.3-Flash-UD-IQ1_S-00002-of-00003.gguf"
+   },
+   {
+    "rfilename": "UD-IQ1_S/GLM-5.3-Flash-UD-IQ1_S-00003-of-00003.gguf"
+   },
+   {
+    "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00002-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00003-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00004-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00001-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00002-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00003-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ3_XXS/GLM-5.3-Flash-UD-IQ3_XXS-00004-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00001-of-00005.gguf"
+   },
+   {
+    "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00002-of-00005.gguf"
+   },
+   {
+    "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00003-of-00005.gguf"
+   },
+   {
+    "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00004-of-00005.gguf"
+   },
+   {
+    "rfilename": "UD-IQ4_XS/GLM-5.3-Flash-UD-IQ4_XS-00005-of-00005.gguf"
+   },
+   {
+    "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00001-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00002-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00003-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q2_K_XL/GLM-5.3-Flash-UD-Q2_K_XL-00004-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00001-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00002-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00003-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q3_K_XL/GLM-5.3-Flash-UD-Q3_K_XL-00004-of-00004.gguf"
+   },
+   {
+    "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00001-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00002-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00003-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00004-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00005-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00006-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00001-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00002-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00003-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00004-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00005-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q5_K_XL/GLM-5.3-Flash-UD-Q5_K_XL-00006-of-00006.gguf"
+   },
+   {
+    "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00001-of-00007.gguf"
+   },
+   {
+    "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00002-of-00007.gguf"
+   },
+   {
+    "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00003-of-00007.gguf"
+   },
+   {
+    "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00004-of-00007.gguf"
+   },
+   {
+    "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00005-of-00007.gguf"
+   },
+   {
+    "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00006-of-00007.gguf"
+   },
+   {
+    "rfilename": "UD-Q6_K_XL/GLM-5.3-Flash-UD-Q6_K_XL-00007-of-00007.gguf"
+   },
+   {
+    "rfilename": "mmproj-BF16.gguf"
+   },
+   {
+    "rfilename": "mmproj-F16.gguf"
+   }
+  ],
+  "createdAt": "2026-08-26T14:21:15.000Z"
+ }
+]

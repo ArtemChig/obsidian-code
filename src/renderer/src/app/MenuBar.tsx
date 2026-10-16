@@ -2,6 +2,7 @@
 // existing actions, plus right-aligned mono hints that double as buttons. Hovering across the strip while a menu is
 // open switches menus, and ←/→ inside an open menu moves to the neighbour (menubar behaviour). Owner: ui-foundation.
 import {
+  Boxes,
   ClipboardCopy,
   Cpu,
   Download,
@@ -213,6 +214,9 @@ export function MenuBar() {
         </DropdownMenuItem>
         <DropdownMenuItem icon={Cpu} onSelect={() => navigate('gpu')}>
           Open GPU view
+        </DropdownMenuItem>
+        <DropdownMenuItem icon={Boxes} onSelect={() => navigate('models')} hint="Hugging Face">
+          Browse models…
         </DropdownMenuItem>
         {isGpuClockedIn(gpu) ? (
           <>
