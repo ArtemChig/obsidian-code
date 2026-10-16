@@ -3,10 +3,11 @@ import { Braces, Brain, Cpu, Globe, Info, Plug, Search, ShieldCheck, SlidersHori
 import { useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@renderer/components/ui/feedback';
 import { Input } from '@renderer/components/ui/input';
+import { ResizeHandle } from '@renderer/components/ui/resize-handle';
 import { cn } from '@renderer/lib/cn';
 import { useConnection } from '@renderer/state/connection';
 import { useSettings } from '@renderer/state/settings';
-import { useUi } from '@renderer/state/ui';
+import { PANEL_LIMITS, usePanelSize, useUi } from '@renderer/state/ui';
 import { SettingsHeaderSlot } from './components';
 import { CoreMissing, SyncFailed, useCoreMissing, useSyncError } from './core-missing';
 import { EngineSection } from './sections/EngineSection';
@@ -112,6 +113,7 @@ export function SettingsView() {
   const active = resolveSection(requested);
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const [query, setQuery] = useState('');
+  const [navWidth, setNavWidth] = usePanelSize('settingsNav');
 
   // Keep the store pointing at a real section id so a later openSettings() round-trips.
   useEffect(() => {
@@ -124,52 +126,64 @@ export function SettingsView() {
 
   return (
     <div className="flex h-full min-h-0" data-testid="settings-view" data-section={active}>
-      <nav aria-label="Settings sections" className="flex w-[216px] shrink-0 flex-col overflow-y-auto shadow-[inset_-1px_0_0_var(--rule)]" data-testid="settings-nav">
-        <h1 className="sr-only">Settings</h1>
-        <div className="flex flex-col pb-2 pt-4">
-          {NAV_GROUPS.map((g, gi) => {
-            const items = matches.filter((s) => s.group === g);
-            if (!items.length) return null;
-            return (
-              <div key={g} className="flex flex-col">
-                {gi > 0 && matches.some((s) => NAV_GROUPS.indexOf(s.group) < gi) ? <div aria-hidden className="mx-4 my-3 h-px bg-rule2" /> : null}
-                <div className="ob-cap px-4 pb-[11px]">{g}</div>
-                {items.map((s) => {
-                  const Icon = s.icon;
-                  const on = s.id === active;
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      data-testid={`settings-nav-${s.id}`}
-                      aria-current={on ? 'page' : undefined}
-                      onClick={() => open(s.id)}
-                      className={cn(
-                        'ob-transition flex h-[29px] shrink-0 items-center gap-[9px] px-4 text-left text-[12px] tracking-[-0.012em] outline-offset-[-2px]',
-                        on ? 'ob-nav-on' : 'text-t2 hover:bg-hov hover:text-t1',
-                      )}
-                    >
-                      <Icon size={13} aria-hidden className={cn('shrink-0', on ? 'text-acc' : 'text-t3')} />
-                      <span className="truncate">{s.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-          {matches.length === 0 ? <div className="px-4 py-2 text-[11.5px] text-t3">No section matches “{query.trim()}”.</div> : null}
-        </div>
-        <dl className="mt-auto border-t border-rule2 px-4 py-3.5">
-          <div className="flex items-baseline justify-between gap-2 py-[3px]">
-            <dt className="text-[11px] text-t3">Version</dt>
-            <dd className="ob-tabular font-mono text-[11px] tracking-[-0.02em] text-t1">{version ?? '—'}</dd>
+      <div className="relative flex shrink-0" style={{ width: navWidth }}>
+        <ResizeHandle
+          edge="right"
+          value={navWidth}
+          min={PANEL_LIMITS.settingsNav.min}
+          max={PANEL_LIMITS.settingsNav.max}
+          defaultValue={PANEL_LIMITS.settingsNav.default}
+          onChange={setNavWidth}
+          label="Resize settings navigation"
+          testId="settings-nav-resize"
+        />
+        <nav aria-label="Settings sections" className="flex w-full flex-col overflow-y-auto shadow-[inset_-1px_0_0_var(--rule)]" data-testid="settings-nav">
+          <h1 className="sr-only">Settings</h1>
+          <div className="flex flex-col pb-2 pt-4">
+            {NAV_GROUPS.map((g, gi) => {
+              const items = matches.filter((s) => s.group === g);
+              if (!items.length) return null;
+              return (
+                <div key={g} className="flex flex-col">
+                  {gi > 0 && matches.some((s) => NAV_GROUPS.indexOf(s.group) < gi) ? <div aria-hidden className="mx-4 my-3 h-px bg-rule2" /> : null}
+                  <div className="ob-cap px-4 pb-[11px]">{g}</div>
+                  {items.map((s) => {
+                    const Icon = s.icon;
+                    const on = s.id === active;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        data-testid={`settings-nav-${s.id}`}
+                        aria-current={on ? 'page' : undefined}
+                        onClick={() => open(s.id)}
+                        className={cn(
+                          'ob-transition flex h-[29px] shrink-0 items-center gap-[9px] px-4 text-left text-[12px] tracking-[-0.012em] outline-offset-[-2px]',
+                          on ? 'ob-nav-on' : 'text-t2 hover:bg-hov hover:text-t1',
+                        )}
+                      >
+                        <Icon size={13} aria-hidden className={cn('shrink-0', on ? 'text-acc' : 'text-t3')} />
+                        <span className="truncate">{s.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {matches.length === 0 ? <div className="px-4 py-2 text-[11.5px] text-t3">No section matches “{query.trim()}”.</div> : null}
           </div>
-          <div className="flex items-baseline justify-between gap-2 py-[3px]">
-            <dt className="text-[11px] text-t3">Core</dt>
-            <dd className="font-mono text-[11px] tracking-[-0.02em] text-t1">{mode === 'demo' ? 'demo' : mode === 'core' ? 'connected' : 'offline'}</dd>
-          </div>
-        </dl>
-      </nav>
+          <dl className="mt-auto border-t border-rule2 px-4 py-3.5">
+            <div className="flex items-baseline justify-between gap-2 py-[3px]">
+              <dt className="text-[11px] text-t3">Version</dt>
+              <dd className="ob-tabular font-mono text-[11px] tracking-[-0.02em] text-t1">{version ?? '—'}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2 py-[3px]">
+              <dt className="text-[11px] text-t3">Core</dt>
+              <dd className="font-mono text-[11px] tracking-[-0.02em] text-t1">{mode === 'demo' ? 'demo' : mode === 'core' ? 'connected' : 'offline'}</dd>
+            </div>
+          </dl>
+        </nav>
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* reference .s6-hd: the section title + description (portalled in by <Section>), then the search field */}

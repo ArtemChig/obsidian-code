@@ -1,17 +1,19 @@
 // Browse + Favorites: a searchable list of Hugging Face GGUF repos on the left, the selected repo's details on the right.
 // Below ~1000 px of width the two panes take turns (a repo opens full width with a way back). Owner: ui-views.
 import { ArrowLeft, ArrowUpRight, Boxes, RefreshCw, Search, Star, X } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import type { HubModelSummary } from '@shared/hub';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
 import { EmptyState, Skeleton } from '@renderer/components/ui/feedback';
 import { Input } from '@renderer/components/ui/input';
+import { ResizeHandle } from '@renderer/components/ui/resize-handle';
 import { Select } from '@renderer/components/ui/select';
 import { RelativeTime } from '@renderer/components/ui/time';
 import { cn } from '@renderer/lib/cn';
 import { pluralize } from '@renderer/lib/format';
 import { useSettings } from '@renderer/state/settings';
+import { PANEL_LIMITS, usePanelSize } from '@renderer/state/ui';
 import { RepoDetail } from './RepoDetail';
 import { compactCount, directRepo, parseIso, SORT_OPTIONS, splitRepo, TYPE_OPTIONS, addedCountFor, type TypeFilter } from './model';
 import { FavoriteButton, Notice } from './parts';
@@ -29,14 +31,29 @@ export function RepoBrowser({ mode }: { mode: Mode }) {
 
   // First visit: load the default list (most downloaded GGUF repos).
   const status = useModels((s) => s.status);
+  const [listWidth, setListWidth] = usePanelSize('modelsList');
   useEffect(() => {
     if (mode === 'browse' && status === 'idle') void runSearch();
   }, [mode, status]);
 
   return (
     <div className="@container h-full min-h-0" data-testid={`models-${mode}`}>
-      <div className="grid h-full min-h-0 grid-cols-1 @min-[1000px]:grid-cols-[minmax(380px,460px)_minmax(0,1fr)]">
-        <section aria-label={mode === 'browse' ? 'Search results' : 'Favorites'} className={cn('flex min-h-0 min-w-0 flex-col @min-[1000px]:border-r @min-[1000px]:border-rule', selected && '@max-[999px]:hidden')}>
+      <div
+        className="grid h-full min-h-0 grid-cols-1 @min-[1000px]:grid-cols-[var(--ob-models-list-w)_minmax(0,1fr)]"
+        style={{ '--ob-models-list-w': `${listWidth}px` } as CSSProperties}
+      >
+        <section aria-label={mode === 'browse' ? 'Search results' : 'Favorites'} className={cn('relative flex min-h-0 min-w-0 flex-col @min-[1000px]:border-r @min-[1000px]:border-rule', selected && '@max-[999px]:hidden')}>
+          <ResizeHandle
+            edge="right"
+            value={listWidth}
+            min={PANEL_LIMITS.modelsList.min}
+            max={PANEL_LIMITS.modelsList.max}
+            defaultValue={PANEL_LIMITS.modelsList.default}
+            onChange={setListWidth}
+            label="Resize model list"
+            testId="models-list-resize"
+            className="hidden @min-[1000px]:block"
+          />
           {mode === 'browse' ? <Toolbar /> : null}
           {mode === 'browse' ? <ResultList /> : <FavoriteList repos={favorites} />}
         </section>

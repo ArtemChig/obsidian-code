@@ -1,4 +1,4 @@
-// Left sidebar (240 px) + collapsed icon rail. Owner: ui-foundation.
+// Left sidebar (240 px by default; drag its right edge to resize) + collapsed icon rail. Owner: ui-foundation.
 // M13 (reference .s2-rail): same #000 ground, a single --rule hairline on the right, no fills. Mono cap section labels,
 // 28 px rows, selected row = acc-wash + 2 px cold-white left edge, counts/times in mono --t3.
 // New session, search, Pinned + categories + project groups (collapse, rename, reorder by drag and drop, context menus),
@@ -38,6 +38,7 @@ import { IconButton } from '@renderer/components/ui/button';
 import { ConfirmDialog } from '@renderer/components/ui/dialog';
 import { StatusDot } from '@renderer/components/ui/feedback';
 import { Input } from '@renderer/components/ui/input';
+import { ResizeHandle, useViewportWidth } from '@renderer/components/ui/resize-handle';
 import { Shortcut } from '@renderer/components/ui/kbd';
 import { ScrollArea, SectionLabel } from '@renderer/components/ui/layout';
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@renderer/components/ui/menu';
@@ -69,7 +70,7 @@ import { useSchedules } from '@renderer/state/activity';
 import { useSessions } from '@renderer/state/sessions';
 import { useSidebarPrefs } from '@renderer/state/sidebar';
 import { groupSessions, pinnedGroup, stepAvailability, type SessionGroup } from '@renderer/state/sidebar-model';
-import { useUi, type Route } from '@renderer/state/ui';
+import { effectiveSidebarWidth, PANEL_LIMITS, usePanelSize, useUi, type Route } from '@renderer/state/ui';
 import { GpuRailButton, GpuWidget } from './GpuWidget';
 import { SHORTCUTS } from './shortcuts';
 import { endDrag, startDrag, useSidebarDrag } from './sidebar-dnd';
@@ -339,6 +340,9 @@ export function Sidebar() {
 }
 
 function SidebarFull() {
+  const [savedWidth, setWidth] = usePanelSize('sidebar');
+  const viewport = useViewportWidth();
+  const width = effectiveSidebarWidth(savedWidth, viewport);
   const query = useUi((s) => s.sidebarQuery);
   const searching = query.trim().length > 0;
   const model = useSidebarModel(query);
@@ -427,8 +431,19 @@ function SidebarFull() {
     <aside
       data-testid="sidebar"
       aria-label="Sidebar"
-      className="flex h-full w-[var(--ob-sidebar-w)] shrink-0 flex-col border-r border-rule bg-s0"
+      className="relative flex h-full shrink-0 flex-col border-r border-rule bg-s0"
+      style={{ width }}
     >
+      <ResizeHandle
+        edge="right"
+        value={width}
+        min={PANEL_LIMITS.sidebar.min}
+        max={effectiveSidebarWidth(PANEL_LIMITS.sidebar.max, viewport)}
+        defaultValue={PANEL_LIMITS.sidebar.default}
+        onChange={setWidth}
+        label="Resize sidebar"
+        testId="sidebar-resize"
+      />
       <div className="flex flex-col gap-2 px-4 pb-2 pt-3">
         <div className="flex items-center gap-1.5">
           <button

@@ -77,6 +77,8 @@ test.describe('ui-chat (demo mode)', () => {
   });
 
   test('transcript renders every card type', async ({ page }) => {
+    // Expands and screenshots every card: about 70 s on an idle PC, so the default 120 s is too tight under load.
+    test.setTimeout(240_000);
     const errors = await openDemo(page);
     await openSessionByTitle(page, 'Scheduler: auto clock-in');
     const view = page.getByTestId('chat-view');

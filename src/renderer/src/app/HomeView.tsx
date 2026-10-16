@@ -2,7 +2,7 @@
 // M13: no cards, no gradients. A hero (mono kicker + 23 px title), the quick-start input well, then a list of recent
 // sessions separated by sub-hairlines and a status column of hairline-separated blocks (reference .sblk / .kv).
 import { ArrowRight, ArrowUp, Box, CalendarClock, Check, ChevronDown, Cpu, Folder, MessageSquare, Power, RefreshCw } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { EngineId, ModelRef, SessionSummary } from '@shared/types';
 import { Badge } from '@renderer/components/ui/badge';
 import { Button, IconButton } from '@renderer/components/ui/button';
@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@renderer/components/ui/dialog';
 import { EmptyState, ProgressBar, StatusDot } from '@renderer/components/ui/feedback';
 import { Textarea } from '@renderer/components/ui/input';
 import { SectionLabel } from '@renderer/components/ui/layout';
+import { ResizeHandle } from '@renderer/components/ui/resize-handle';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -36,6 +37,7 @@ import { findModel, useModelGroups, useRecentSessions, useWaitingSessionIds } fr
 import { useSessions } from '@renderer/state/sessions';
 import { useSettings } from '@renderer/state/settings';
 import { engineLabel, useEngines } from '@renderer/state/engines';
+import { PANEL_LIMITS, usePanelSize } from '@renderer/state/ui';
 import { AutoClockOutMenu } from '@renderer/features/gpu/AutoClockOut';
 import { GPU_PHASE_LABEL, gpuPrimaryAction, gpuTone, useLiveGpuCost, useModelLabel } from './GpuWidget';
 import { SessionMenuItems, type RowActions } from './Sidebar';
@@ -419,6 +421,7 @@ function ModelsCard() {
 
 export function HomeView() {
   const [hello, setHello] = useState(() => greeting());
+  const [asideWidth, setAsideWidth] = usePanelSize('homeAside');
   useEffect(() => {
     const t = setInterval(() => setHello(greeting()), 60_000);
     return () => clearInterval(t);
@@ -438,9 +441,23 @@ export function HomeView() {
           <QuickStart />
         </div>
 
-        <div className="mt-10 grid grid-cols-1 gap-10 @min-[760px]:grid-cols-[minmax(0,1fr)_288px]">
+        <div
+          className="mt-10 grid grid-cols-1 gap-10 @min-[760px]:grid-cols-[minmax(0,1fr)_var(--ob-home-aside-w)]"
+          style={{ '--ob-home-aside-w': `${asideWidth}px` } as CSSProperties}
+        >
           <RecentSessions />
-          <aside className="flex min-w-0 flex-col gap-6 @min-[760px]:border-l @min-[760px]:border-rule @min-[760px]:pl-6" aria-label="Status">
+          <aside className="relative flex min-w-0 flex-col gap-6 @min-[760px]:border-l @min-[760px]:border-rule @min-[760px]:pl-6" aria-label="Status">
+            <ResizeHandle
+              edge="left"
+              value={asideWidth}
+              min={PANEL_LIMITS.homeAside.min}
+              max={PANEL_LIMITS.homeAside.max}
+              defaultValue={PANEL_LIMITS.homeAside.default}
+              onChange={setAsideWidth}
+              label="Resize status column"
+              testId="home-aside-resize"
+              className="hidden @min-[760px]:block"
+            />
             <GpuCard />
             <ModelsCard />
           </aside>

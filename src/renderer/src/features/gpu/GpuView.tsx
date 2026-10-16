@@ -1,15 +1,17 @@
 // GPU view: rent an open-weight model on Vast.ai by the hour (profiles, model picker, clock in/out, spend, history, log). Owner: ui-views.
 import { RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Button } from '@renderer/components/ui/button';
 import { Skeleton } from '@renderer/components/ui/feedback';
 import { SectionLabel } from '@renderer/components/ui/layout';
+import { ResizeHandle } from '@renderer/components/ui/resize-handle';
 import { useLiveGpuCost, useModelLabel } from '@renderer/app/GpuWidget';
 import { errorMessage, rpc } from '@renderer/lib/rpc';
 import { clockIn, defaultGpuProfileId, loadGpuCatalog, navigate, requestClockOut, switchGpuModel } from '@renderer/state/actions';
 import { isGpuClockedIn, useGpu } from '@renderer/state/gpu';
 import { useSessions } from '@renderer/state/sessions';
 import { useSettings } from '@renderer/state/settings';
+import { PANEL_LIMITS, usePanelSize } from '@renderer/state/ui';
 import { toast } from '@renderer/state/toasts';
 import { CoreMissing, useCoreMissing, SyncFailed, useSyncError } from '../settings/core-missing';
 import { KeyRejectedBanner, NoKeyCard, OrphanBanner, ParkedCard, SafetyCard, SpendCard } from './Cards';
@@ -43,6 +45,7 @@ export function GpuView() {
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [asideWidth, setAsideWidth] = usePanelSize('gpuAside');
   const [logReload, setLogReload] = useState(0);
 
   // "View server log" (error card) / "View" (safe-mode notice): open the log viewer and reload it (it scrolls itself
@@ -259,8 +262,20 @@ export function GpuView() {
 
         <aside
           aria-label="Budget and safety"
-          className="flex shrink-0 flex-col border-t border-rule @min-[1000px]:w-[298px] @min-[1000px]:border-t-0 @min-[1000px]:shadow-[inset_1px_0_0_var(--rule)]"
+          className="relative flex shrink-0 flex-col border-t border-rule @min-[1000px]:w-[var(--ob-gpu-aside-w)] @min-[1000px]:border-t-0 @min-[1000px]:shadow-[inset_1px_0_0_var(--rule)]"
+          style={{ '--ob-gpu-aside-w': `${asideWidth}px` } as CSSProperties}
         >
+          <ResizeHandle
+            edge="left"
+            value={asideWidth}
+            min={PANEL_LIMITS.gpuAside.min}
+            max={PANEL_LIMITS.gpuAside.max}
+            defaultValue={PANEL_LIMITS.gpuAside.default}
+            onChange={setAsideWidth}
+            label="Resize budget and safety column"
+            testId="gpu-aside-resize"
+            className="hidden @min-[1000px]:block"
+          />
           <SpendCard status={status} liveCost={liveCost} account={account.result} checking={account.checking} hasApiKey={hasApiKey} typicalPrice={status.pricePerHour ?? stats?.median} onRecheck={() => void account.check()} />
           {status.parked ? (
             <ParkedCard parked={status.parked} catalog={catalog} disabled={active || busy} busy={busy} parkMaxDays={settings.vast.parkMaxDays} onResume={resumeParked} onDestroy={destroyParked} />

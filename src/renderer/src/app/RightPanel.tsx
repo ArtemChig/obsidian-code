@@ -1,70 +1,23 @@
 // Right panel container: tabs Changes / Todos / Agents / Files (contents from features/chat/panels.tsx). Owner: ui-foundation.
 // M13: no fill — the #000 ground with a --rule hairline on the left; underline tabs (reference .phd).
 import { X } from 'lucide-react';
-import { useCallback, useRef, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
 import { AgentsPanel, ChangesPanel, FilesPanel, TodosPanel } from '@renderer/features/chat/panels';
 import { IconButton } from '@renderer/components/ui/button';
+import { ResizeHandle, useViewportWidth } from '@renderer/components/ui/resize-handle';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs';
 import { toggleRightPanel } from '@renderer/state/actions';
 import { useSubagents, useTranscript } from '@renderer/state/selectors';
-import { clampPanelWidth, effectivePanelWidth, RAIL_W, RIGHT_PANEL_DEFAULT_W, RIGHT_PANEL_MAX_W, SIDEBAR_W, useUi, type RightPanelTab } from '@renderer/state/ui';
+import { effectivePanelWidth, effectiveSidebarWidth, RAIL_W, RIGHT_PANEL_DEFAULT_W, RIGHT_PANEL_MAX_W, RIGHT_PANEL_MIN_W, usePanelSize, useUi, type RightPanelTab } from '@renderer/state/ui';
 import { ErrorBoundary } from './ErrorBoundary';
 import { SHORTCUTS } from './shortcuts';
-
-/** Window width, live. */
-function useViewportWidth(): number {
-  return useSyncExternalStore(
-    (cb) => {
-      window.addEventListener('resize', cb);
-      return () => window.removeEventListener('resize', cb);
-    },
-    () => window.innerWidth,
-  );
-}
-
-function ResizeHandle({ width, max }: { width: number; max: number }) {
-  const start = useRef<{ x: number; w: number } | null>(null);
-  const onPointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      start.current = { x: e.clientX, w: width };
-      e.currentTarget.setPointerCapture(e.pointerId);
-    },
-    [width],
-  );
-  const onPointerMove = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      if (!start.current) return;
-      // Never wider than the window allows (the chat column keeps MAIN_MIN_W).
-      const w = Math.min(max, clampPanelWidth(start.current.w + (start.current.x - e.clientX)));
-      useUi.setState({ rightPanelWidth: Math.round(w) });
-    },
-    [max],
-  );
-  const onPointerUp = useCallback(() => {
-    start.current = null;
-  }, []);
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize side panel"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onDoubleClick={() => useUi.setState({ rightPanelWidth: RIGHT_PANEL_DEFAULT_W })}
-      className="group absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize"
-    >
-      <div className="mx-auto h-full w-px bg-transparent transition-colors group-hover:bg-line group-active:bg-acc" />
-    </div>
-  );
-}
 
 export function RightPanel({ sessionId }: { sessionId: string }) {
   const tab = useUi((s) => s.rightPanelTab);
   const saved = useUi((s) => s.rightPanelWidth);
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed);
   const viewport = useViewportWidth();
-  const sidebarW = sidebarCollapsed ? RAIL_W : SIDEBAR_W;
+  const [sidebarSaved] = usePanelSize('sidebar');
+  const sidebarW = sidebarCollapsed ? RAIL_W : effectiveSidebarWidth(sidebarSaved, viewport);
   const width = effectivePanelWidth(saved, viewport, sidebarW);
   const maxW = effectivePanelWidth(RIGHT_PANEL_MAX_W, viewport, sidebarW);
   const entry = useTranscript(sessionId);
@@ -80,7 +33,16 @@ export function RightPanel({ sessionId }: { sessionId: string }) {
       className="relative flex h-full shrink-0 flex-col border-l border-rule bg-s0 animate-ob-fade-in"
       style={{ width }}
     >
-      <ResizeHandle width={width} max={maxW} />
+      <ResizeHandle
+        edge="left"
+        value={width}
+        min={Math.min(RIGHT_PANEL_MIN_W, maxW)}
+        max={maxW}
+        defaultValue={RIGHT_PANEL_DEFAULT_W}
+        onChange={(w) => useUi.setState({ rightPanelWidth: w })}
+        label="Resize side panel"
+        testId="right-panel-resize"
+      />
       <Tabs value={tab} onValueChange={(v) => useUi.setState({ rightPanelTab: v as RightPanelTab })} className="h-full">
         <div className="flex h-[var(--ob-pane-head-h)] shrink-0 items-stretch border-b border-rule pr-1.5">
           <TabsList className="h-full flex-1 border-b-0">

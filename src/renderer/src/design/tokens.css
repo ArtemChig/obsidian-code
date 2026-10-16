@@ -262,6 +262,14 @@
     color: var(--t1);
   }
 
+  /* While a panel edge is dragged (components/ui/resize-handle.tsx): one cursor everywhere, no text selection. */
+  html.ob-resizing,
+  html.ob-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+
   button,
   input,
   textarea,

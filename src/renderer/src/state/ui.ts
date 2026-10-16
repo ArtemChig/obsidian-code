@@ -11,6 +11,8 @@ export interface UiStore {
   rightPanelOpen: boolean;
   rightPanelTab: RightPanelTab;
   rightPanelWidth: number;
+  /** Widths the user dragged (sidebar, view splits); absent = the panel's default. */
+  panelSizes: Partial<Record<PanelId, number>>;
   paletteOpen: boolean;
   /** Optional initial page for the palette ('models' opens the model switcher directly). */
   palettePage: 'root' | 'models' | 'sessions';
@@ -28,7 +30,7 @@ export interface UiStore {
 
 const STORAGE_KEY = 'obsidian-code.ui.v1';
 
-type Persisted = Pick<UiStore, 'sidebarCollapsed' | 'rightPanelOpen' | 'rightPanelTab' | 'rightPanelWidth'>;
+type Persisted = Pick<UiStore, 'sidebarCollapsed' | 'rightPanelOpen' | 'rightPanelTab' | 'rightPanelWidth' | 'panelSizes'>;
 
 interface KeyValueStorage {
   getItem(key: string): string | null;
@@ -52,6 +54,7 @@ function loadPersisted(): Partial<Persisted> {
     const raw = ls.getItem(STORAGE_KEY);
     const p = raw ? (JSON.parse(raw) as Partial<Persisted>) : {};
     if (p.rightPanelWidth !== undefined) p.rightPanelWidth = clampPanelWidth(p.rightPanelWidth);
+    p.panelSizes = sanitizePanelSizes(p.panelSizes);
     return p;
   } catch {
     return {};
@@ -65,9 +68,59 @@ export const RIGHT_PANEL_MAX_W = 640;
 export const RIGHT_PANEL_DEFAULT_W = 340;
 /** The chat column never gets narrower than this because of the side panel. */
 export const MAIN_MIN_W = 420;
-/** Width of the left sidebar (full / collapsed rail), matching --ob-sidebar-w / --ob-rail-w. */
+/** Default width of the left sidebar (it is resizable: PANEL_LIMITS.sidebar) and of the collapsed rail (--ob-rail-w). */
 export const SIDEBAR_W = 240;
 export const RAIL_W = 52;
+
+// ───────────────────────────── Resizable panels ─────────────────────────────
+
+/** Every other panel with a draggable edge (the right panel keeps its own rightPanelWidth). */
+export type PanelId = 'sidebar' | 'settingsNav' | 'gpuAside' | 'modelsList' | 'homeAside';
+
+export const PANEL_LIMITS: Record<PanelId, { min: number; max: number; default: number }> = {
+  sidebar: { min: 200, max: 420, default: SIDEBAR_W },
+  settingsNav: { min: 160, max: 360, default: 216 },
+  gpuAside: { min: 240, max: 480, default: 298 },
+  modelsList: { min: 320, max: 640, default: 420 },
+  homeAside: { min: 220, max: 440, default: 288 },
+};
+
+/** A saved/dragged size within the panel's limits (junk → default). */
+export function clampPanelSize(id: PanelId, v: unknown): number {
+  const l = PANEL_LIMITS[id];
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : l.default;
+  return Math.round(Math.max(l.min, Math.min(l.max, n)));
+}
+
+/** Saved sizes from storage: known ids only, each clamped. */
+export function sanitizePanelSizes(raw: unknown): Partial<Record<PanelId, number>> {
+  const out: Partial<Record<PanelId, number>> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const id of Object.keys(PANEL_LIMITS) as PanelId[]) {
+    const v = (raw as Record<string, unknown>)[id];
+    if (typeof v === 'number' && Number.isFinite(v)) out[id] = clampPanelSize(id, v);
+  }
+  return out;
+}
+
+/** The sidebar width actually used: the saved one, but never more than a third of a small window. */
+export function effectiveSidebarWidth(saved: number, viewportWidth: number): number {
+  const l = PANEL_LIMITS.sidebar;
+  return Math.max(l.min, Math.min(clampPanelSize('sidebar', saved), Math.floor(viewportWidth / 3)));
+}
+
+/** A panel's current size (default until dragged) and its setter (undefined = back to the default). */
+export function usePanelSize(id: PanelId): [number, (v: number | undefined) => void] {
+  const size = useUi((s) => s.panelSizes[id]);
+  const set = (v: number | undefined) =>
+    useUi.setState((s) => {
+      const next = { ...s.panelSizes };
+      if (v === undefined) delete next[id];
+      else next[id] = clampPanelSize(id, v);
+      return { panelSizes: next };
+    });
+  return [size ?? PANEL_LIMITS[id].default, set];
+}
 
 /** A saved/dragged width within the panel's own limits (junk → default). */
 export function clampPanelWidth(w: unknown): number {
@@ -90,6 +143,7 @@ export const useUi = create<UiStore>(() => ({
   rightPanelOpen: false,
   rightPanelTab: 'changes',
   rightPanelWidth: 340,
+  panelSizes: {},
   paletteOpen: false,
   palettePage: 'root',
   sidebarQuery: '',
@@ -105,7 +159,8 @@ useUi.subscribe((s, prev) => {
     s.sidebarCollapsed === prev.sidebarCollapsed &&
     s.rightPanelOpen === prev.rightPanelOpen &&
     s.rightPanelTab === prev.rightPanelTab &&
-    s.rightPanelWidth === prev.rightPanelWidth
+    s.rightPanelWidth === prev.rightPanelWidth &&
+    s.panelSizes === prev.panelSizes
   )
     return;
   try {
@@ -116,6 +171,7 @@ useUi.subscribe((s, prev) => {
       rightPanelOpen: s.rightPanelOpen,
       rightPanelTab: s.rightPanelTab,
       rightPanelWidth: s.rightPanelWidth,
+      panelSizes: s.panelSizes,
     };
     ls.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
