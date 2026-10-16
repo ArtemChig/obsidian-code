@@ -14,7 +14,7 @@ import { useGpu } from '@renderer/state/gpu';
 import { useSessions } from '@renderer/state/sessions';
 import { useSettings } from '@renderer/state/settings';
 import { bindEvents } from '@renderer/state/sync';
-import { createSchedule, deleteSchedule, runScheduleNow, setScheduleEnabled, updateSchedule } from '@renderer/features/schedules/actions';
+import { createSchedule, deleteSchedule, duplicateSchedule, runScheduleNow, setScheduleEnabled, updateSchedule } from '@renderer/features/schedules/actions';
 import { nextRunAfter } from '@renderer/features/schedules/cron';
 import { patchSearch, patchVast, saveSettings } from '@renderer/features/settings/save';
 
@@ -93,6 +93,19 @@ describe('ui-views with the demo core', () => {
 
     expect(await deleteSchedule(id)).toBe(true);
     expect(inStore()).toBeUndefined();
+  });
+
+  it('duplicates a schedule as a paused copy without its run history', async () => {
+    const source = useSchedules.getState().tasks.find((t: ScheduledTask) => t.id === 'sch-audit') as ScheduledTask;
+    expect(source.lastRunAt).toBeDefined();
+    const copy = (await duplicateSchedule(source)) as ScheduledTask;
+    expect(copy.id).not.toBe(source.id);
+    expect(copy).toMatchObject({ name: 'Nightly dependency audit (copy)', enabled: false, prompt: source.prompt, cwd: source.cwd, schedule: source.schedule, permissionMode: source.permissionMode });
+    expect(copy.lastRunAt).toBeUndefined();
+    expect(copy.lastRunSessionId).toBeUndefined();
+    expect(useSchedules.getState().tasks.some((t: ScheduledTask) => t.id === copy.id)).toBe(true);
+    expect(useSchedules.getState().tasks.find((t: ScheduledTask) => t.id === source.id)?.enabled).toBe(source.enabled); // the original is untouched
+    await deleteSchedule(copy.id);
   });
 
   it('run now starts a scheduled session', async () => {

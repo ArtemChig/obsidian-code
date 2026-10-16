@@ -116,3 +116,103 @@ test.describe('ui-foundation (demo mode)', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });
+
+test.describe('ui-foundation: session commands and status bar (demo mode)', () => {
+  test.beforeAll(async () => {
+    test.skip(!(await serverUp()), `Vite dev server not reachable at ${BASE}`);
+  });
+
+  test('Session menu and palette: rename, pin, fork, delete; status bar opens Activity and GPU', async ({ page }) => {
+    test.setTimeout(90_000);
+    const errors = await openDemo(page, 1440, 900);
+    await page.getByTestId('session-row').filter({ hasText: 'Nightly dependency audit' }).click();
+    await expect(page.getByTestId('chat-title')).toContainText('Nightly dependency audit');
+
+    // Session > Rename puts the title in edit mode
+    await page.getByTestId('menu-session').click();
+    await page.getByRole('menuitem', { name: /^Rename/ }).click();
+    const input = page.getByTestId('chat-title-input');
+    await expect(input).toBeFocused();
+    await input.fill('Audit deps');
+    await input.press('Enter');
+    await expect(page.getByTestId('chat-title')).toContainText('Audit deps');
+    await expect(page.getByTestId('session-row').filter({ hasText: 'Audit deps' })).toHaveCount(1);
+
+    // Session > Pin / Unpin
+    await page.getByTestId('menu-session').click();
+    await page.getByRole('menuitem', { name: /^Pin$/ }).click();
+    await expect(page.getByTestId('sidebar-group').first()).toContainText('Audit deps');
+    await page.getByTestId('menu-session').click();
+    await expect(page.getByRole('menuitem', { name: /^Unpin/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Session > Fork session
+    const before = await page.getByTestId('session-row').count();
+    await page.getByTestId('menu-session').click();
+    await page.getByRole('menuitem', { name: /^Fork session/ }).click();
+    await expect(page.getByTestId('session-row')).toHaveCount(before + 1);
+    await expect(page.getByTestId('chat-title')).toContainText('(fork)');
+
+    // Session > Delete session… asks first
+    await page.getByTestId('menu-session').click();
+    await page.getByRole('menuitem', { name: /^Delete session/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Delete session?' });
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByTestId('session-row')).toHaveCount(before + 1);
+    await page.getByTestId('menu-session').click();
+    await page.getByRole('menuitem', { name: /^Delete session/ }).click();
+    await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page.getByTestId('session-row')).toHaveCount(before);
+    await expect(page.getByTestId('home')).toBeVisible(); // the deleted session was open: back to Home
+
+    // palette: New category…, Rename session / Pin session for the open session
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('new cat');
+    await page.getByRole('option', { name: /New category/ }).click();
+    await expect(page.getByRole('dialog', { name: 'New category' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('session-row').filter({ hasText: 'Audit deps' }).click();
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('rename');
+    await page.getByRole('option', { name: /Rename session/ }).click();
+    await expect(page.getByTestId('chat-title-input')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('unpin');
+    await page.getByRole('option', { name: /Unpin session/ }).click();
+    await expect(page.getByTestId('sidebar-group').first()).not.toContainText('Audit deps');
+
+    // status bar: Running → Activity, Month → GPU
+    await page.getByTestId('status-running').click();
+    await expect(page.getByTestId('view-title')).toContainText('Activity');
+    await page.getByTestId('status-month').click();
+    await expect(page.getByTestId('view-title')).toContainText('GPU');
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('Home: right-click a recent session', async ({ page }) => {
+    const errors = await openDemo(page, 1440, 900);
+    const line = page.getByTestId('home-session').filter({ hasText: 'Hearth: stream TTS in chunks' });
+    await line.click({ button: 'right' });
+    const menu = page.getByTestId('home-session-menu');
+    await expect(menu).toBeVisible();
+    for (const name of [/^Rename/, /^Pin/, /^Fork session/, /^Move to category/, /^Copy folder path/, /^Delete/]) await expect(page.getByRole('menuitem', { name })).toBeVisible();
+    await page.getByRole('menuitem', { name: /^Pin$/ }).click();
+    await expect(page.getByTestId('sidebar-group').first()).toContainText('Hearth: stream TTS in chunks');
+    // Rename opens the session with its title ready to edit
+    await line.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Rename/ }).click();
+    await expect(page.getByTestId('chat-title-input')).toBeFocused();
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('the shortcuts dialog lists the sidebar keys', async ({ page }) => {
+    const errors = await openDemo(page, 1440, 900);
+    await page.keyboard.press('Control+/');
+    const dlg = page.getByTestId('shortcuts-dialog');
+    await expect(dlg).toContainText('Sidebar');
+    await expect(dlg).toContainText('Rename');
+    await expect(dlg).toContainText('Move up');
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+});

@@ -144,3 +144,22 @@ export function ContextMenuSeparator({ className }: { className?: string }) {
 export function ContextMenuLabel({ className, ...rest }: ComponentProps<typeof RCM.Label>) {
   return <RCM.Label className={cn(LABEL, className)} {...rest} />;
 }
+
+export const ContextMenuSub = RCM.Sub;
+
+export function ContextMenuSubTrigger({ icon, className, children, ...rest }: ComponentProps<typeof RCM.SubTrigger> & { icon?: LucideIcon }) {
+  return (
+    <RCM.SubTrigger className={cn(MENU_ITEM, 'data-[state=open]:bg-s3 data-[state=open]:text-t1', className)} {...rest}>
+      <ItemInner icon={icon}>{children}</ItemInner>
+      <ChevronRight size={12} aria-hidden className="text-t3" />
+    </RCM.SubTrigger>
+  );
+}
+
+export function ContextMenuSubContent({ className, ...rest }: ComponentProps<typeof RCM.SubContent>) {
+  return (
+    <RCM.Portal>
+      <RCM.SubContent sideOffset={6} collisionPadding={8} className={cn(MENU_CONTENT, className)} {...rest} />
+    </RCM.Portal>
+  );
+}

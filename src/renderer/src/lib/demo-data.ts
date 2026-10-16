@@ -183,6 +183,7 @@ export const DEMO_SETTINGS: Settings = {
   autoCompactPercent: 80,
   notifications: true,
   launchAtLogin: false,
+  ui: { sidebar: { groupOrder: [], groupNames: {}, categories: [], collapsed: [] } },
   engine: {
     default: 'builtin',
     claudeCode: { executable: 'auto', systemPrompt: 'lean', importUserClaudeConfig: true, extraEnv: {} },

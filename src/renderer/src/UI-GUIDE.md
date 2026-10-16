@@ -157,7 +157,7 @@ Live gallery: `http://localhost:5173/?demo=1&gallery=1`.
 | `Tabs`, `TabsList` (`variant` underline/pill), `TabsTrigger` (`count`, `icon`), `TabsContent` | underline: 30 px bar on a hairline, `--t3` → active `--t1` + 1 px `--acc` underline, mono counts. pill = segmented look |
 | `Segmented` | single-choice segmented control (reference `.seg`): `value` · `onValueChange` · `options {value,label,icon?,disabled?,ariaLabel?}` · `size` · arrow keys |
 | `Dialog`, `DialogTrigger`, `DialogContent` (`title`, `description`, `footer`, `size` sm/md/lg/xl), `DialogClose`, `ConfirmDialog` (`danger`, `onConfirm` async) | `--s0` + `--line` + deep shadow, hairline footer |
-| `DropdownMenu*`, `ContextMenu*` | 28 px rows, highlighted on `--s3`; items take `icon`, `shortcut` (quiet mono), `hint`, `danger`, `leading`, `trailing`; plus `…Label` (mono cap), `…Separator`, `…CheckboxItem`, `…RadioItem`, `…Sub*` |
+| `DropdownMenu*`, `ContextMenu*` | 28 px rows, highlighted on `--s3`; items take `icon`, `shortcut` (quiet mono), `hint`, `danger`, `leading`, `trailing`; plus `…Label` (mono cap), `…Separator`, `…CheckboxItem`, `…RadioItem`, `…Sub`/`…SubTrigger`/`…SubContent` (both families) |
 | `Tooltip` | `content` · `shortcut` · `side`; the child must accept a ref |
 | `Popover`, `PopoverTrigger`, `PopoverContent` | `ob-popover` surface |
 | `Badge` | **the tag**: 1 px border, mono 8.5 px uppercase · `tone` neutral/accent/success/warning/danger/violet (status tones use status colours) · `variant` soft (adds a faint wash) / outline · `size` sm/md · `icon` (`mono`/`pill` are accepted and ignored) |
@@ -204,7 +204,8 @@ ready-made selectors.
 Selectors (`state/selectors`): `useTranscript(id)` (loads or refetches automatically), `useTranscriptLoading(id)`,
 `useSessionSummary(id)`, `useActiveSession()`, `useSubagents(id)`, `useQueued(id)`, `usePendingFor(id)` →
 `{permissions, questions, plans, count}`, `useWaitingSessionIds()`, `useModelGroups()`, `useModelInfo(ref)`,
-`findModel(models, ref)`, `useRecentSessions(n)`, `useRunningCount()`, `useGpuStatus()`, `useRunningActivityCount()`.
+`findModel(models, ref)`, `useRecentSessions(n)`, `useRunningCount()`, `useGpuStatus()`, `useRunningActivityCount()`, `useSidebarModel(query)` (Pinned +
+categories + project folders, see §8), `useSidebarPrefs()` (`state/sidebar`).
 
 Actions (`state/actions`). They catch their own errors, toast them, and resolve to `null`/`false` on failure:
 `createSession({cwd?,title?,model?,permissionMode?,open?})`, `openSession(id)`, `goHome()`, `renameSession`, `setPinned`,
@@ -214,7 +215,8 @@ messages), `interrupt(id)`, `respondPermission(reqId, decision, message?)`, `ans
 `rewind(id, atMessageId, restoreFiles)`, `switchModel(ref)` (active session, else the default model), `refreshModels()`,
 `clockIn(profileId?, modelId?, offerId?)`, `clockOut()`, `switchGpuModel`, `loadGpuCatalog()`, `defaultGpuProfileId()`,
 `updateSettings(patch)`, `setSecret(name, value)`, `stopActivity(id)`, `navigate(route)`, `openSettings(section?)`,
-`toggleSidebar()`, `toggleRightPanel(force?)`, `setRightPanelTab(tab)`, `openPalette(page?)`, `markRead(id)`.
+`toggleSidebar()`, `toggleRightPanel(force?)`, `setRightPanelTab(tab)`, `openPalette(page?)`, `markRead(id)`, `requestRename(id)` (opens the
+session with its title in edit mode), `deleteSessions(ids)`, and the sidebar layout actions of §8.
 Pending responses are removed optimistically and restored if the call fails.
 
 ## 5. RPC
@@ -268,9 +270,33 @@ running subagent `s-sse-explore`), `s-perm` (waiting on a Bash permission `perm-
   Useful test ids: `app-title`, `titlebar`, `menubar`, `menu-<file|view|session|gpu|help>`, `view-title`, `status-bar`,
   `status-connection`, `status-gpu`, `sidebar` (`data-collapsed`), `session-row`, `new-session`, `nav-<route>`, `gpu-widget`,
   `gpu-clock-button`, `right-panel`, `home`, `quick-start`, `palette-trigger`, `update-button` (`data-status`),
-  `update-version`, `status-version`, `settings-updates`. Models view: `models-view`, `models-tab-<browse|favorites|mine|recommended>`, `models-search`,
+  `update-version`, `status-version`, `settings-updates`, `sidebar-group` (`data-group-key`), `group-header`, `group-toggle`, `group-menu`,
+  `inline-rename`, `new-category-name`, `message-menu`, `schedule-menu`, `activity-menu`, `file-menu`, `home-session-menu`. Models view: `models-view`, `models-tab-<browse|favorites|mine|recommended>`, `models-search`,
   `models-row` (`data-repo`), `models-detail` (`data-repo`), `models-variant` (`data-quant`, `data-fits`, `data-recommended`), `models-add`,
   `models-add-recommended`, `models-favorite` (`data-on`), `models-mine-row`, `models-remove`, `models-restore-default`; the GPU view's picker has
   `gpu-browse-models`. In demo mode `?hub=error` / `?hub=slow` show the Hugging Face error and loading states (see `features/models/demo.ts`).
   Put your screenshots next to the reference shots in `docs/design/m-13-obsidian/shots/` and iterate on spacing, alignment
   and contrast until they read as the same design language before you hand off.
+
+## 8. Sidebar groups
+
+The sidebar lists top-level sessions in **groups**: Pinned (first, fixed), the user's **categories** and one group per project
+folder (derived from the sessions' `cwd`). Everything is pure logic in `state/sidebar-model.ts` (`groupSessions`, `planDrop`,
+`planStep`, …; unit-tested) and persists in the core:
+
+* `Settings.ui.sidebar` = `{ groupOrder, groupNames, categories, collapsed }` (shape and validation: `src/shared/sidebar.ts`).
+  A group key is `pinned`, `f:<folder, lower-case>` or `c:<category id>`. Groups missing from `groupOrder` come first (newest
+  activity first); renaming a folder group only sets a display name (`groupNames`), the folder is unchanged.
+* `SessionSummary.category` (a category id; absent = the folder group) and `.order` (manual position in its group; sessions
+  without one sit above the placed ones, newest first, so new sessions land on top). Moving a session (category / pinned)
+  drops its `order`.
+* RPCs: `sessions.update { id, patch: { category?, order?, pinned? } }`, `sessions.reorder { ids }`,
+  `sessions.deleteCategory { id, deleteSessions }`, and `category` on `sessions.create`; the layout itself goes through
+  `settings.update { patch: { ui: { sidebar } } }`. Sidebar-only settings changes do not re-probe the model providers.
+* Actions (`state/actions`): `updateSidebarPrefs(patch)` (optimistic, rolled back with a toast), `toggleGroupCollapsed`,
+  `setAllGroupsCollapsed`, `moveGroup`, `dropGroup`, `renameGroup`, `createCategory`, `openNewCategory` (the dialog),
+  `deleteCategory`, `placeSession`, `moveSessionToCategory`, `stepSession`, `dropSession`.
+* UI: `app/Sidebar.tsx` (rows), `app/SidebarGroups.tsx` (group header + menus, inline rename, delete / new-category dialogs),
+  `app/sidebar-dnd.ts` (HTML5 drag state). Every drag has a menu or key alternative (group menu: Move up / down, Alt+↑ / ↓ on
+  a focused header or row; session menu: Move to category ▸, Move up / down). A session never changes folder, so it only
+  drops into Pinned, a category or its own folder group. Moving and dragging are off while the search box has text.

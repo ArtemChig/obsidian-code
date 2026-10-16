@@ -9,6 +9,7 @@
 //   registerDemoHandler('gpu.offers', (params, ctx) => …)    // override one method; ctx.fallback() calls the default
 //
 import type { CoreEventName, CoreEvents, RpcMethod, RpcParams, RpcResult } from '@shared/protocol';
+import { normalizeSidebarPrefs } from '@shared/sidebar';
 import type {
   ActivityItem,
   AutoClockOutChoice,
@@ -336,6 +337,20 @@ export class DemoTransport implements RpcTransport {
     return summary;
   }
 
+  /** Change a session in place (fields can be deleted) and emit session.updated, like the core's mutate(). */
+  private mutateSession(id: string, fn: (s: Session) => void): SessionSummary {
+    const s = this.session(id);
+    fn(s);
+    const summary = summaryOf(s);
+    this.emit('session.updated', summary);
+    return summary;
+  }
+
+  private requireCategory(id: unknown): string {
+    if (typeof id !== 'string' || !this.data.settings.ui?.sidebar.categories.some((c) => c.id === id)) throw new RpcError('Invalid params: "category" must be the id of an existing sidebar category', 'invalid_params');
+    return id;
+  }
+
   private setActivity(item: ActivityItem): void {
     const idx = this.data.activity.findIndex((a) => a.id === item.id);
     if (idx >= 0) this.data.activity[idx] = item;
@@ -371,6 +386,7 @@ export class DemoTransport implements RpcTransport {
         permissionMode: p.permissionMode ?? this.data.settings.defaultPermissionMode,
         thinking: this.data.settings.thinkingByDefault,
         engine: p.engine ?? this.data.settings.engine?.default ?? 'builtin',
+        ...(p.category ? { category: this.requireCategory(p.category) } : {}),
         usage: { inputTokens: 0, outputTokens: 0, lastPromptTokens: 0, requests: 0 },
         messages: [],
         todos: [],
@@ -397,12 +413,60 @@ export class DemoTransport implements RpcTransport {
         if (idx >= 0) messages = messages.slice(0, idx + 1);
       }
       const s: Session = { ...clone(src), id: this.newId('s'), title: `${src.title} (fork)`, createdAt: now, updatedAt: now, status: 'idle', pinned: false, messages };
+      delete s.order;
       this.data.sessions.unshift(s);
       const summary = summaryOf(s);
       this.emit('session.created', summary);
       return summary;
     },
-    'sessions.setPinned': (p) => this.updateSession(p.id, { pinned: p.pinned }),
+    'sessions.setPinned': (p) =>
+      this.mutateSession(p.id, (s) => {
+        if (!!s.pinned !== p.pinned) delete s.order;
+        s.pinned = p.pinned;
+      }),
+    'sessions.update': (p) => {
+      const category = 'category' in p.patch ? (p.patch.category === null ? null : this.requireCategory(p.patch.category)) : undefined;
+      return this.mutateSession(p.id, (s) => {
+        const moved = (category !== undefined && (category ?? undefined) !== s.category) || (p.patch.pinned !== undefined && p.patch.pinned !== !!s.pinned);
+        if (category === null) delete s.category;
+        else if (category !== undefined) s.category = category;
+        if (p.patch.pinned !== undefined) s.pinned = p.patch.pinned;
+        if (p.patch.order === null) delete s.order;
+        else if (p.patch.order !== undefined) s.order = p.patch.order;
+        else if (moved) delete s.order;
+      });
+    },
+    'sessions.reorder': (p) => {
+      p.ids.forEach((id, i) => {
+        const s = this.data.sessions.find((x) => x.id === id);
+        if (s && s.order !== i + 1) this.mutateSession(id, (x) => (x.order = i + 1));
+      });
+      return { ok: true as const };
+    },
+    'sessions.deleteCategory': (p) => {
+      const sidebar = this.data.settings.ui.sidebar;
+      if (!sidebar.categories.some((c) => c.id === p.id)) throw new RpcError(`Category not found: ${p.id}`, 'not_found');
+      let released = 0;
+      let deleted = 0;
+      for (const m of this.data.sessions.filter((s) => s.category === p.id && s.kind !== 'subagent')) {
+        if (p.deleteSessions) {
+          this.aborts.get(m.id)?.abort();
+          this.data.sessions = this.data.sessions.filter((s) => s.id !== m.id && s.parentSessionId !== m.id);
+          this.emit('session.deleted', { sessionId: m.id });
+          deleted++;
+        } else {
+          this.mutateSession(m.id, (s) => {
+            delete s.category;
+            delete s.order;
+          });
+          released++;
+        }
+      }
+      const next = { ...this.data.settings, ui: { sidebar: normalizeSidebarPrefs({ ...sidebar, categories: sidebar.categories.filter((c) => c.id !== p.id) }) } };
+      this.data.settings = next;
+      this.emit('settings.updated', next);
+      return { ok: true as const, released, deleted };
+    },
     'sessions.search': (p) => {
       const q = p.query.toLowerCase();
       const out: RpcResult<'sessions.search'> = [];
@@ -653,6 +717,7 @@ export class DemoTransport implements RpcTransport {
       if (p.patch.local) next.local = { ...cur.local, ...p.patch.local };
       if (p.patch.search) next.search = { ...cur.search, ...p.patch.search };
       if (p.patch.permissions) next.permissions = { ...cur.permissions, ...p.patch.permissions };
+      if (p.patch.ui) next.ui = { ...cur.ui, sidebar: normalizeSidebarPrefs({ ...cur.ui?.sidebar, ...p.patch.ui.sidebar }) };
       this.data.settings = next;
       this.emit('settings.updated', next);
       return next;

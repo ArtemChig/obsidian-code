@@ -56,6 +56,9 @@ async function waitIdle(page: Page, timeout = 30_000): Promise<void> {
   await expect(page.getByTestId('running-status')).toHaveCount(0, { timeout });
 }
 
+/** The clipboard text (the test context is granted clipboard-read). */
+const readClipboard = (page: Page): Promise<string> => page.evaluate('navigator.clipboard.readText()') as Promise<string>;
+
 async function shot(page: Page, name: string): Promise<void> {
   await page.mouse.move(0, 0);
   await page.waitForTimeout(250);
@@ -90,6 +93,9 @@ test.describe('ui-chat (demo mode)', () => {
     await expect(view.getByTestId('compact-divider')).toBeVisible();
     await expect(view.getByTestId('thinking-block').first()).toContainText('Thought for 8');
     await expect(view.getByTestId('image-thumb').first()).toBeVisible();
+    // Finished tool results are collapsed by default: open them all to see their bodies.
+    const closed = view.locator('[data-testid="tool-card"] button[aria-expanded="false"]:not([disabled])');
+    for (let i = 0; i < 40 && (await closed.count()) > 0; i++) await closed.first().click();
     await expect(view.getByTestId('diff-view').first()).toBeVisible();
     await expect(view.getByTestId('terminal').first()).toBeVisible();
     await expect(view.getByTestId('search-results')).toBeVisible();
@@ -328,6 +334,89 @@ test.describe('ui-chat (demo mode)', () => {
     await expect(dialog).toHaveCount(0);
     await expect(page.getByTestId('msg-user').filter({ hasText: 'kill the stale SSH tunnel' })).toHaveCount(0);
     await expect(page.getByTestId('composer-input')).toHaveValue('Also kill the stale SSH tunnel and rename the tunnel helper.');
+    expect(errors).toEqual([]);
+  });
+
+  test('right-click a message: copy, copy as Markdown, fork from here, rewind to here', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = await openDemo(page);
+    await openSessionByTitle(page, 'Scheduler: auto clock-in');
+    const user = page.getByTestId('msg-user').filter({ hasText: 'kill the stale SSH tunnel' });
+    const clip = () => readClipboard(page);
+    const menu = page.getByTestId('message-menu');
+
+    // a user message: Copy text, Copy as Markdown, Fork from here, Rewind to here
+    await user.click({ button: 'right' });
+    await expect(menu).toBeVisible();
+    for (const name of [/^Copy text/, /^Copy as Markdown/, /^Fork from here/, /^Rewind to here/]) await expect(page.getByRole('menuitem', { name })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Copy selection/ })).toHaveCount(0); // nothing selected
+    await shot(page, 'message-menu');
+    await page.getByRole('menuitem', { name: /^Copy text/ }).click();
+    await expect.poll(clip).toBe('Also kill the stale SSH tunnel and rename the tunnel helper.');
+
+    // an assistant message: no rewind; Markdown keeps the tool calls
+    const reply = page.getByTestId('msg-assistant').first();
+    await reply.click({ button: 'right', position: { x: 40, y: 12 } });
+    await expect(page.getByRole('menuitem', { name: /^Copy as Markdown/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Rewind to here/ })).toHaveCount(0);
+    await page.getByRole('menuitem', { name: /^Copy as Markdown/ }).click();
+    await expect.poll(clip).not.toBe('');
+
+    // a tool card: its command can be copied (and its output)
+    const bash = page.locator('[data-testid="tool-card"][data-tool="Bash"][data-status="done"]').first();
+    await bash.getByRole('button').first().click({ button: 'right' });
+    await expect(page.getByRole('menuitem', { name: /^Copy command/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Copy output/ })).toBeVisible();
+    await page.getByRole('menuitem', { name: /^Copy command/ }).click();
+    await expect.poll(clip).toMatch(/\S/);
+
+    // selected text can be copied on its own
+    await user.getByText('stale SSH tunnel').first().dblclick();
+    await user.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Copy selection/ }).click();
+    await expect.poll(clip).toMatch(/\S/);
+
+    // Fork from here: a new session (with the messages up to that one) opens
+    const before = await page.getByTestId('session-row').count();
+    await user.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Fork from here/ }).click();
+    await expect(page.getByTestId('session-row')).toHaveCount(before + 1);
+    await expect(page.getByTestId('chat-title')).toContainText('(fork)');
+    await expect(page.getByTestId('msg-user').filter({ hasText: 'kill the stale SSH tunnel' })).toHaveCount(1);
+
+    // Rewind to here opens the usual dialog
+    await page.getByTestId('msg-user').filter({ hasText: 'kill the stale SSH tunnel' }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Rewind to here/ }).click();
+    await expect(page.getByTestId('rewind-dialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    expect(errors).toEqual([]);
+  });
+
+  test('right-click a file in the side panel: mention, copy path', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = await openDemo(page);
+    await openSessionByTitle(page, 'Fix GLM tool-call parsing');
+    await page.keyboard.press('Control+Backslash');
+    const file = page.getByTestId('changed-file').first();
+    await expect(file).toBeVisible();
+    await file.click({ button: 'right' });
+    const menu = page.getByTestId('file-menu');
+    await expect(menu).toBeVisible();
+    for (const name of [/^Mention in message/, /^Copy path/, /^Copy relative path/]) await expect(page.getByRole('menuitem', { name })).toBeVisible();
+    await page.getByRole('menuitem', { name: /^Copy relative path/ }).click();
+    expect(await readClipboard(page)).toMatch(/toolcalls\.ts$/);
+    await file.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Mention in message/ }).click();
+    await expect(page.getByTestId('composer-input')).toHaveValue(/@src\/core\/llm\/toolcalls\.ts/);
+
+    // the Files tree: files can be mentioned, folders only copied
+    await page.getByRole('tab', { name: /^Files/ }).click();
+    const dir = page.getByTestId('file-dir').first();
+    await expect(dir).toBeVisible();
+    await dir.click({ button: 'right' });
+    await expect(page.getByRole('menuitem', { name: /^Mention in message/ })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: /^Copy path/ })).toBeVisible();
+    await page.keyboard.press('Escape');
     expect(errors).toEqual([]);
   });
 

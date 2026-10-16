@@ -409,6 +409,96 @@ test.describe('ui-views (demo mode)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('Schedules: right-click a row (run, edit, pause, duplicate, delete); double click edits', async ({ page }) => {
+    const errors = await openDemo(page);
+    await goto(page, 'schedules');
+    const rows = page.getByTestId('schedule-row');
+    const audit = page.locator('[data-testid=schedule-row][data-name="Nightly dependency audit"]');
+    const menu = page.getByTestId('schedule-menu');
+    await audit.click({ button: 'right' });
+    await expect(menu).toBeVisible();
+    for (const name of [/^Run now/, /^Edit/, /^Pause/, /^Duplicate/, /^Open last session/, /^Copy prompt/, /^Copy cron expression/, /^Delete/]) await expect(page.getByRole('menuitem', { name })).toBeVisible();
+    await settle(page);
+    await page.screenshot({ path: join(SHOTS, 'm13-views-schedule-menu.png'), clip: { x: 240, y: 120, width: 800, height: 520 } });
+
+    // Pause / Resume
+    await page.getByRole('menuitem', { name: /^Pause/ }).click();
+    await expect(audit).toHaveAttribute('data-enabled', 'false');
+    await audit.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Resume/ }).click();
+    await expect(audit).toHaveAttribute('data-enabled', 'true');
+
+    // Run now starts a session
+    const sessions = await page.getByTestId('session-row').count();
+    await audit.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Run now/ }).click();
+    await expect(page.getByTestId('session-row')).toHaveCount(sessions + 1);
+
+    // Duplicate makes a paused copy and opens it for editing
+    await audit.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Duplicate/ }).click();
+    await expect(rows).toHaveCount(6);
+    const copy = page.locator('[data-testid=schedule-row][data-name="Nightly dependency audit (copy)"]');
+    await expect(copy).toHaveAttribute('data-enabled', 'false');
+    await expect(page.getByRole('dialog')).toContainText('Edit schedule');
+    await expect(page.getByTestId('schedule-name')).toHaveValue('Nightly dependency audit (copy)');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    // Open last session
+    await audit.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Open last session/ }).click();
+    await expect(page.getByTestId('chat-view')).toBeVisible();
+    await goto(page, 'schedules');
+
+    // double click edits; the switch and buttons keep their own meaning
+    await copy.getByTestId('schedule-words').dblclick();
+    await expect(page.getByRole('dialog')).toContainText('Edit schedule');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await copy.getByRole('switch').dblclick();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // Delete asks first
+    await copy.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Delete/ }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete schedule' }).click();
+    await expect(rows).toHaveCount(5);
+    expect(errors).toEqual([]);
+  });
+
+  test('Activity: right-click a row (open, stop, copy)', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = await openDemo(page);
+    await goto(page, 'activity');
+    const menu = page.getByTestId('activity-menu');
+    const shell = page.locator('[data-testid=activity-row][data-kind=shell][data-status=running]').first();
+    await shell.click({ button: 'right' });
+    await expect(menu).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Stop/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Copy title/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Copy details/ })).toBeVisible();
+    await page.getByRole('menuitem', { name: /^Copy title/ }).click();
+    expect(await page.evaluate(() => window.navigator.clipboard.readText())).toMatch(/\S/);
+    const n = await page.locator('[data-testid=activity-row][data-status=running]').count();
+    await shell.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Stop/ }).click();
+    await expect(page.locator('[data-testid=activity-row][data-status=running]')).toHaveCount(n - 1);
+
+    // a finished session row: Open, no Stop; Open jumps to it
+    const done = page.locator('[data-testid=activity-row][data-kind=session][data-status=done]').first();
+    await done.click({ button: 'right' });
+    await expect(page.getByRole('menuitem', { name: /^Stop/ })).toHaveCount(0);
+    await page.getByRole('menuitem', { name: /^Open/ }).click();
+    await expect(page.getByTestId('chat-view')).toBeVisible();
+
+    // the GPU row asks before clocking out
+    await goto(page, 'activity');
+    await page.locator('[data-testid=activity-row][data-kind=gpu]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Stop/ }).click();
+    await expect(page.getByRole('dialog')).toContainText('Clock out the GPU?');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    expect(errors).toEqual([]);
+  });
+
   test('Schedules: dialog validation, presets, create and edit', async ({ page }) => {
     const errors = await openDemo(page);
     await goto(page, 'schedules');

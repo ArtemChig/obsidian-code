@@ -12,6 +12,7 @@ import { boot } from './boot';
 import { CommandPalette } from './CommandPalette';
 import { Gallery } from './Gallery';
 import { useGlobalShortcuts } from './shortcuts';
+import { NewCategoryDialog } from './SidebarGroups';
 import { ShortcutsDialog } from './ShortcutsDialog';
 
 const SHOW_GALLERY = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('gallery');
@@ -35,6 +36,7 @@ export function App() {
       <GpuClockOutConfirm />
       <ShortcutsDialog />
       <SetupWizard />
+      <NewCategoryDialog />
       <Toaster />
     </TooltipProvider>
   );

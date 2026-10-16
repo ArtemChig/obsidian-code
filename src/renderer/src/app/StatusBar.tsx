@@ -130,7 +130,7 @@ export function StatusBar() {
           Mode <V className={cn(session.permissionMode === 'bypassPermissions' && 'text-err')}>{MODE_LABEL[session.permissionMode] ?? session.permissionMode}</V>
         </Seg>
       ) : null}
-      <Seg>
+      <Seg title="Open Activity" onClick={() => navigate('activity')} testId="status-running">
         {running ? <StatusDot tone="violet" size={5} pulse /> : null}
         <V>{running}</V> Running
       </Seg>
@@ -153,7 +153,7 @@ export function StatusBar() {
           ) : null}
         </Seg>
       </AutoClockOutMenu>
-      <Seg title="Spent this month / monthly budget">
+      <Seg title="Spent this month / monthly budget · open the GPU view" onClick={() => navigate('gpu')} testId="status-month">
         Month <V className={cn(overBudget && 'text-warn')}>{gpu ? formatMoney(month) : '—'}</V>
         {gpu && budget > 0 ? <span>/ {formatMoney(budget)}</span> : null}
       </Seg>

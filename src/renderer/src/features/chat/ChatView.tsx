@@ -28,6 +28,7 @@ import { PlanApproval } from './prompts/PlanApproval';
 import { QuestionCard } from './prompts/QuestionCard';
 import { bindChatEvents, clearError, focusComposer, setDraft, stopTurn, useChatLocal } from './state';
 import { AssistantMessage, CompactDivider, messageImages, messageText, SystemNote, timingFor, UserMessage } from './transcript/Messages';
+import { MessageMenu, MSG_ID_ATTR } from './transcript/MessageMenu';
 import { useStickToBottom } from './transcript/useStickToBottom';
 import { Elapsed, ImageLightbox, isEditableTarget, overlayOpen } from './ui';
 
@@ -268,43 +269,47 @@ function Transcript({
           </Button>
         </div>
       ) : null}
-      {visible.map((m, i) => {
-        const old = visible.length - i > 8;
-        const style = old ? ({ contentVisibility: 'auto', containIntrinsicSize: 'auto 160px' } as const) : undefined;
-        let node: ReactNode = null;
-        if (m.role === 'user') {
-          node = (
-            <UserMessage
-              message={m}
-              onRewind={rewindable && m.tag !== 'hook' && m.tag !== 'command' ? onRewind : undefined}
-              rewindDisabled={running}
-              onOpenImage={onOpenImage}
-            />
-          );
-        } else if (m.role === 'assistant') {
-          const streaming = m.id === streamingId;
-          node = (
-            <AssistantMessage
-              message={m}
-              cwd={session.cwd}
-              streaming={streaming}
-              timing={streaming ? timing : undefined}
-              prefill={streaming && entry.prefill?.messageId === m.id ? entry.prefill : undefined}
-              onOpenImage={onOpenImage}
-              onRegenerate={lastPrompt && m.id === lastAssistant?.id ? regenerate : undefined}
-            />
-          );
-        } else if (m.tag === 'compact_summary') {
-          node = <CompactDivider message={m} />;
-        } else {
-          node = <SystemNote message={m} />;
-        }
-        return (
-          <div key={m.id} style={style} className="min-w-0">
-            {node}
-          </div>
-        );
-      })}
+      <MessageMenu session={session} messages={messages} running={running} onRewind={onRewind}>
+        <div className="flex min-w-0 flex-col gap-6" data-testid="messages">
+          {visible.map((m, i) => {
+            const old = visible.length - i > 8;
+            const style = old ? ({ contentVisibility: 'auto', containIntrinsicSize: 'auto 160px' } as const) : undefined;
+            let node: ReactNode = null;
+            if (m.role === 'user') {
+              node = (
+                <UserMessage
+                  message={m}
+                  onRewind={rewindable && m.tag !== 'hook' && m.tag !== 'command' ? onRewind : undefined}
+                  rewindDisabled={running}
+                  onOpenImage={onOpenImage}
+                />
+              );
+            } else if (m.role === 'assistant') {
+              const streaming = m.id === streamingId;
+              node = (
+                <AssistantMessage
+                  message={m}
+                  cwd={session.cwd}
+                  streaming={streaming}
+                  timing={streaming ? timing : undefined}
+                  prefill={streaming && entry.prefill?.messageId === m.id ? entry.prefill : undefined}
+                  onOpenImage={onOpenImage}
+                  onRegenerate={lastPrompt && m.id === lastAssistant?.id ? regenerate : undefined}
+                />
+              );
+            } else if (m.tag === 'compact_summary') {
+              node = <CompactDivider message={m} />;
+            } else {
+              node = <SystemNote message={m} />;
+            }
+            return (
+              <div key={m.id} style={style} className="min-w-0" {...{ [MSG_ID_ATTR]: m.id }}>
+                {node}
+              </div>
+            );
+          })}
+        </div>
+      </MessageMenu>
       {pending.map((p, i) =>
         p.kind === 'permission' ? (
           <PermissionPrompt key={p.req.requestId} request={p.req} cwd={session.cwd} active={i === 0} />

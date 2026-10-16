@@ -248,9 +248,11 @@ shard glyph) as .ico/.png.
 
 ### 4.6 UI (ui-foundation, ui-chat, ui-views) — design system "Obsidian"
 See §5. Layout like the Claude Code desktop app:
-* **Left sidebar** (240 px, collapsible): app mark + "New session" (Ctrl+N), search, sessions grouped Pinned / by
-  project folder (relative time, running spinner, unread dot), nav items: Scheduled, Activity, GPU, Settings; bottom:
-  **GPU widget** (status dot, model, $/h, session timer, Clock in/out button).
+* **Left sidebar** (240 px, collapsible): app mark + "New session" (Ctrl+N), search, sessions grouped Pinned / the
+  user's own categories / by project folder (relative time, running spinner, unread dot). Groups can be renamed (a display
+  name; the folder is unchanged), reordered, folded and deleted, sessions reordered and moved into categories (menus,
+  keys and drag and drop; kept in the core: `Settings.ui.sidebar`, `SessionSummary.category` / `order`), nav items:
+  Scheduled, Activity, GPU, Settings; bottom: **GPU widget** (status dot, model, $/h, session timer, Clock in/out button).
 * **Main**: header (session title editable, cwd chip with folder picker, git branch, model picker, context meter) →
   transcript → composer.
 * **Transcript**: user bubbles (right-aligned subtle surface), assistant text (markdown, GFM tables, shiki code blocks

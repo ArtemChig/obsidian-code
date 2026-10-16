@@ -22,6 +22,18 @@ export async function exportSessionMarkdown(sessionId: string): Promise<void> {
   if (r) downloadText(exportFileName(r.title), r.markdown);
 }
 
+/** Put text on the clipboard and say so (or say it could not be done). `what` names it: "Message", "Path"… */
+export async function copyToClipboard(text: string, what: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast({ id: 'copied', title: `${what} copied`, level: 'success', durationMs: 1600 });
+    return true;
+  } catch {
+    toast({ id: 'copied', title: `Could not copy the ${what.toLowerCase()}`, body: 'The clipboard is not available.', level: 'error' });
+    return false;
+  }
+}
+
 export async function copySessionMarkdown(sessionId: string): Promise<void> {
   const r = await markdownFor(sessionId);
   if (!r) return;

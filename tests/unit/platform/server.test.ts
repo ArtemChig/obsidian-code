@@ -266,7 +266,7 @@ describe('rpc table, bus and activity', () => {
     const methods = Object.keys(handlers);
     expect(methods).toContain('system.info');
     expect(methods).toContain('secrets.has');
-    expect(methods.length).toBe(59); // 54 + hub.search, hub.details, hub.addModel, hub.removeModel, hub.setFavorite
+    expect(methods.length).toBe(62); // 54 + 5 hub.* (model browser) + sessions.update/reorder/deleteCategory (sidebar)
     for (const m of methods) expect(typeof handlers[m as keyof typeof handlers]).toBe('function');
   });
 

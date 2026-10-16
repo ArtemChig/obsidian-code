@@ -3,6 +3,7 @@
 
 import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
+import { defaultSidebarPrefs, normalizeSidebarPrefs } from '../../shared/sidebar';
 import type { GpuProfile, HookConfig, PermissionMode, Settings } from '../../shared/types';
 import type { SettingsStore } from '../contracts';
 import { isPlainObject, readJsonSync, writeFileAtomicSync } from './fsutil';
@@ -59,6 +60,7 @@ export function defaultSettings(): Settings {
     autoCompactPercent: 80,
     notifications: true,
     launchAtLogin: false,
+    ui: { sidebar: defaultSidebarPrefs() },
     engine: {
       default: 'builtin',
       claudeCode: { executable: 'auto', systemPrompt: 'lean', importUserClaudeConfig: true, extraEnv: {} },
@@ -67,7 +69,7 @@ export function defaultSettings(): Settings {
 }
 
 /** Keys whose values are replaced wholesale on update (maps / nullable objects), never deep-merged. */
-const REPLACE_KEYS = new Set(['defaultModel', 'mcpServers', 'hooks', 'env', 'headers', 'projectAllow', 'extraEnv']);
+const REPLACE_KEYS = new Set(['defaultModel', 'mcpServers', 'hooks', 'env', 'headers', 'projectAllow', 'extraEnv', 'groupNames']);
 
 /**
  * Deep-merge `patch` into `base` (returns a new object). Plain objects merge recursively, arrays and primitives
@@ -155,6 +157,7 @@ export function validateSettings(input: unknown): Settings {
     }
   }
   m.engine.claudeCode.extraEnv = extraEnv;
+  m.ui.sidebar = normalizeSidebarPrefs(m.ui.sidebar);
   return m;
 }
 

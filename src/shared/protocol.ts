@@ -21,11 +21,22 @@ export interface RpcMethods {
   // ── sessions
   'sessions.list': { params: { includeSubagents?: boolean }; result: SessionSummary[] };
   'sessions.get': { params: { id: string }; result: Session };
-  'sessions.create': { params: { cwd?: string; title?: string; model?: ModelRef | null; permissionMode?: PermissionMode; engine?: EngineId }; result: SessionSummary };
+  /** `category`: start in that sidebar category (Settings.ui.sidebar.categories) instead of the folder group. */
+  'sessions.create': { params: { cwd?: string; title?: string; model?: ModelRef | null; permissionMode?: PermissionMode; engine?: EngineId; category?: string }; result: SessionSummary };
   'sessions.rename': { params: { id: string; title: string }; result: SessionSummary };
   'sessions.delete': { params: { id: string }; result: { ok: true } };
   'sessions.fork': { params: { id: string; atMessageId?: string }; result: SessionSummary };
   'sessions.setPinned': { params: { id: string; pinned: boolean }; result: SessionSummary };
+  /**
+   * Where a session sits in the sidebar. category: a category id, or null = back to its folder group; order: a manual
+   * position, or null = not placed by hand; pinned as in sessions.setPinned. Changing category or pinned drops the
+   * session's order (it lands on top of its new group) unless the same patch sets one. Does not touch updatedAt.
+   */
+  'sessions.update': { params: { id: string; patch: { category?: string | null; order?: number | null; pinned?: boolean } }; result: SessionSummary };
+  /** Number the sessions of one sidebar group in the given order (order = position + 1). Unknown ids are skipped. */
+  'sessions.reorder': { params: { ids: string[] }; result: { ok: true } };
+  /** Remove a sidebar category: its sessions return to their folder groups, or are deleted too (never the files on disk). */
+  'sessions.deleteCategory': { params: { id: string; deleteSessions: boolean }; result: { ok: true; released: number; deleted: number } };
   'sessions.search': { params: { query: string }; result: { sessionId: string; title: string; snippet: string }[] };
 
   // ── chat

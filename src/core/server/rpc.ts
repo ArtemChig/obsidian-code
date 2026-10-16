@@ -137,6 +137,14 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
     return sum;
   };
 
+  /** A sidebar category id that exists in Settings.ui.sidebar.categories. */
+  const requireCategory = (v: unknown): string => {
+    if (typeof v !== 'string' || !ctx.settings.get().ui?.sidebar?.categories?.some((c) => c.id === v)) {
+      throw new RpcError('Invalid params: "category" must be the id of an existing sidebar category', 'invalid_params');
+    }
+    return v;
+  };
+
   const pickDefaultModel = (): ModelRef | null => {
     try {
       return ctx.models.pickDefault();
@@ -200,6 +208,7 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
       const model = p.model === undefined || p.model === null ? pickDefaultModel() : modelRef(p.model);
       const permissionMode = p.permissionMode === undefined ? settings.defaultPermissionMode : mode(p.permissionMode, 'permissionMode');
       const engine = p.engine === undefined || p.engine === null ? (settings.engine?.default ?? 'builtin') : engineId(p.engine);
+      const category = p.category === undefined || p.category === null ? undefined : requireCategory(p.category);
       const session = ctx.sessions.create({
         cwd,
         title: title || 'New session',
@@ -208,6 +217,7 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
         permissionMode,
         thinking: settings.thinkingByDefault,
         engine,
+        ...(category ? { category } : {}),
       });
       const sum = toSummary(session);
       ctx.bus.emit('session.created', sum);
@@ -237,6 +247,8 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
         if (idx < 0) throw new RpcError(`Message not found: ${at}`, 'not_found');
         messages = messages.slice(0, idx + 1);
       }
+      // A fork stays in its source's category (when that still exists).
+      const inCategory = src.category !== undefined && !!ctx.settings.get().ui?.sidebar?.categories?.some((c) => c.id === src.category);
       const fork = ctx.sessions.create({
         cwd: src.cwd,
         title: `${src.title} (fork)`.slice(0, 200),
@@ -246,6 +258,7 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
         thinking: src.thinking,
         engine: src.engine,
         usage: { ...src.usage },
+        ...(inCategory ? { category: src.category } : {}),
       });
       fork.messages = structuredClone(messages).map((m) => ({
         ...m,
@@ -263,8 +276,77 @@ export function createRpcHandlers(ctx: CoreContext): RpcHandlers {
       const p = obj(params);
       const pinned = reqBool(p, 'pinned');
       return mutate(reqStr(p, 'id'), (s) => {
+        if (!!s.pinned !== pinned) delete s.order; // lands on top of its new group
         s.pinned = pinned;
       });
+    },
+    'sessions.update': (params) => {
+      const p = obj(params);
+      const id = reqStr(p, 'id');
+      const patch = obj(p.patch);
+      for (const k of Object.keys(patch)) {
+        if (k !== 'category' && k !== 'order' && k !== 'pinned') throw new RpcError(`Invalid params: unknown field "${k}" in patch`, 'invalid_params');
+      }
+      if (getSession(id).kind === 'subagent') throw new RpcError('Subagent sessions are not shown in the sidebar', 'invalid_params');
+      const category = 'category' in patch ? (patch.category === null ? null : requireCategory(patch.category)) : undefined;
+      let order: number | null | undefined;
+      if ('order' in patch) {
+        if (patch.order !== null && (typeof patch.order !== 'number' || !Number.isFinite(patch.order))) {
+          throw new RpcError('Invalid params: "order" must be a number or null', 'invalid_params');
+        }
+        order = patch.order as number | null;
+      }
+      const pinned = 'pinned' in patch ? reqBool(patch, 'pinned') : undefined;
+      return mutate(id, (s) => {
+        const moved = (category !== undefined && (category ?? undefined) !== s.category) || (pinned !== undefined && pinned !== !!s.pinned);
+        if (category === null) delete s.category;
+        else if (category !== undefined) s.category = category;
+        if (pinned !== undefined) s.pinned = pinned;
+        if (order === null) delete s.order;
+        else if (order !== undefined) s.order = order;
+        else if (moved) delete s.order;
+      });
+    },
+    'sessions.reorder': (params) => {
+      const ids = obj(params).ids;
+      if (!Array.isArray(ids) || ids.length > 2000 || ids.some((x) => typeof x !== 'string')) {
+        throw new RpcError('Invalid params: "ids" must be an array of session ids', 'invalid_params');
+      }
+      const seen = new Set<string>();
+      (ids as string[]).forEach((id, i) => {
+        if (seen.has(id)) return;
+        seen.add(id);
+        const s = ctx.sessions.get(id);
+        if (!s || s.kind === 'subagent' || s.order === i + 1) return;
+        mutate(id, (x) => {
+          x.order = i + 1;
+        });
+      });
+      return { ok: true as const };
+    },
+    'sessions.deleteCategory': (params) => {
+      const p = obj(params);
+      const id = reqStr(p, 'id');
+      const deleteSessions = reqBool(p, 'deleteSessions');
+      const prefs = ctx.settings.get().ui?.sidebar;
+      if (!prefs?.categories.some((c) => c.id === id)) throw new RpcError(`Category not found: ${id}`, 'not_found');
+      let released = 0;
+      let deleted = 0;
+      for (const member of ctx.sessions.list().filter((s) => s.category === id)) {
+        if (deleteSessions) {
+          deleteSessionTree(member.id);
+          deleted++;
+        } else {
+          mutate(member.id, (s) => {
+            delete s.category;
+            delete s.order;
+          });
+          released++;
+        }
+      }
+      // The settings store drops the category's keys from groupOrder / collapsed.
+      ctx.settings.update({ ui: { sidebar: { ...prefs, categories: prefs.categories.filter((c) => c.id !== id) } } });
+      return { ok: true as const, released, deleted };
     },
     'sessions.search': (params) => {
       const q = reqStr(obj(params), 'query', true);

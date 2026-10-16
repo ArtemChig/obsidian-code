@@ -12,12 +12,14 @@ import type {
   QuestionRequest,
   SessionSummary,
 } from '@shared/types';
-import { basename, providerLabel, sameModel } from '../lib/format';
+import { providerLabel, sameModel } from '../lib/format';
 import { useActivity } from './activity';
 import { useGpu } from './gpu';
 import { useModels } from './models';
 import { usePending } from './pending';
 import { useSessions } from './sessions';
+import { useSidebarPrefs } from './sidebar';
+import { groupSessions, type SidebarModel } from './sidebar-model';
 import { loadTranscript } from './sync';
 import type { TranscriptEntry } from './transcript';
 
@@ -71,47 +73,13 @@ export function useQueued(sessionId: string | null | undefined) {
 }
 const EMPTY: never[] = [];
 
-export interface SessionGroup {
-  /** Grouping key (cwd, case-insensitive) */
-  key: string;
-  cwd: string;
-  name: string;
-  sessions: SessionSummary[];
-  updatedAt: number;
-}
-
-export interface SidebarModel {
-  pinned: SessionSummary[];
-  groups: SessionGroup[];
-  total: number;
-}
-
-/** Pure: top-level sessions grouped into Pinned + by project folder, most recent first, filtered by query. */
-export function groupSessions(all: Record<string, SessionSummary> | SessionSummary[], query = ''): SidebarModel {
-  const list = (Array.isArray(all) ? all : Object.values(all)).filter((s) => s.kind !== 'subagent');
-  const q = query.trim().toLowerCase();
-  const filtered = q ? list.filter((s) => s.title.toLowerCase().includes(q) || s.cwd.toLowerCase().includes(q)) : list;
-  const sorted = filtered.slice().sort((a, b) => b.updatedAt - a.updatedAt);
-  const pinned = sorted.filter((s) => s.pinned);
-  const map = new Map<string, SessionGroup>();
-  for (const s of sorted) {
-    if (s.pinned) continue;
-    const key = s.cwd.replace(/[\\/]+$/, '').toLowerCase();
-    let g = map.get(key);
-    if (!g) {
-      g = { key, cwd: s.cwd, name: basename(s.cwd) || s.cwd, sessions: [], updatedAt: s.updatedAt };
-      map.set(key, g);
-    }
-    g.sessions.push(s);
-    g.updatedAt = Math.max(g.updatedAt, s.updatedAt);
-  }
-  const groups = [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-  return { pinned, groups, total: filtered.length };
-}
+// The sidebar groups (Pinned, categories, project folders) are built by state/sidebar-model.ts.
+export { groupSessions, type SessionGroup, type SidebarModel } from './sidebar-model';
 
 export function useSidebarModel(query: string): SidebarModel {
   const sessions = useSessions((s) => s.sessions);
-  return useMemo(() => groupSessions(sessions, query), [sessions, query]);
+  const prefs = useSidebarPrefs();
+  return useMemo(() => groupSessions(sessions, query, prefs), [sessions, query, prefs]);
 }
 
 /** Most recently updated top-level sessions. */

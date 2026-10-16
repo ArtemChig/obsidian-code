@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -25,6 +26,7 @@ import {
 import { createCore, type CoreHandle } from '@core/index';
 import { loadServerScripts, resolveResourcesDir } from '@core/gpu/server-scripts';
 import { getRipgrepPath } from '@core/tools/lib/ripgrep';
+import { contextMenuTemplate } from './context-menu';
 import { checkOpenPath, checkRevealPath } from './open-path';
 import type { NativeBridge } from '@core/contracts';
 import type { GpuStatus, Settings } from '@shared/types';
@@ -193,6 +195,15 @@ function createWindow(): BrowserWindow {
     openExternalSafe(url);
   });
   win.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  // Right-click in a text field (Cut / Copy / Paste, spelling) or on selected text / a link: Electron shows nothing by itself.
+  win.webContents.on('context-menu', (_event, params) => {
+    const template = contextMenuTemplate(params, {
+      replaceMisspelling: (word) => win.webContents.replaceMisspelling(word),
+      copyText: (text) => clipboard.writeText(text),
+      openLink: openExternalSafe,
+    });
+    if (template.length) Menu.buildFromTemplate(template).popup({ window: win });
+  });
   // Windows logoff / shutdown: try to stop billing before the session ends.
   win.on('session-end', () => {
     void shutdown();

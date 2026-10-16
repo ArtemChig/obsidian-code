@@ -9,6 +9,7 @@ import { useModels } from './models';
 import { addRecord, removeRecord, toRecord, usePending } from './pending';
 import { reconcileQueued, setQueued, useSessions } from './sessions';
 import { useSettings } from './settings';
+import { sidebarSavePending } from './sidebar';
 import { toast } from './toasts';
 import { createEntry, reduceEntry, TRANSCRIPT_EVENTS, type TranscriptEventName } from './transcript';
 
@@ -175,7 +176,8 @@ export function catalogInputsKey(settings: Settings | null | undefined): string 
 
 function onSettingsUpdated(settings: Settings): void {
   const prev = useSettings.getState().settings;
-  useSettings.setState({ settings });
+  // The sidebar layout of a save that is still in flight stays as shown (its own echo follows).
+  useSettings.setState((st) => ({ settings: sidebarSavePending() && st.settings ? { ...settings, ui: st.settings.ui } : settings }));
   if (!useGpu.getState().catalog || catalogInputsKey(prev) === catalogInputsKey(settings)) return;
   rpc
     .request('gpu.catalog', {})

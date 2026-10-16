@@ -18,6 +18,15 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
     ],
   },
   {
+    title: 'Sidebar (a focused session or group)',
+    rows: [
+      ['Enter', 'Open a session / fold a group'],
+      ['F2', 'Rename'],
+      ['Alt+↑', 'Move up'],
+      ['Alt+↓', 'Move down'],
+    ],
+  },
+  {
     title: 'Composer',
     rows: [
       ['Enter', 'Send (queues while the agent works)'],

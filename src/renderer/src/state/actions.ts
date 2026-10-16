@@ -2,6 +2,7 @@
 // Every action catches its own errors, shows a toast and resolves to null/false on failure,
 // so components can call them from event handlers without try/catch.
 import type { RpcResult } from '@shared/protocol';
+import { categoryGroupKey, cleanName, normalizeSidebarPrefs, PINNED_GROUP } from '@shared/sidebar';
 import type {
   AutoClockOutChoice,
   Block,
@@ -12,6 +13,7 @@ import type {
   PermissionMode,
   SessionSummary,
   Settings,
+  SidebarPrefs,
 } from '@shared/types';
 import { errorMessage, rpc } from '../lib/rpc';
 import { useActivity } from './activity';
@@ -20,6 +22,18 @@ import { useModels } from './models';
 import { removeRecord, usePending } from './pending';
 import { setQueued, useSessions, type QueuedMessage } from './sessions';
 import { useSettings } from './settings';
+import { beginSidebarSave, currentGroupKeys, currentSidebarPrefs } from './sidebar';
+import {
+  applyPlacement,
+  dropKey,
+  groupSessions,
+  insertKey,
+  planDrop,
+  planStep,
+  stepKey,
+  type SessionGroup,
+  type SessionPlacement,
+} from './sidebar-model';
 import { toast } from './toasts';
 import { loadTranscript } from './sync';
 import { useUi, type RightPanelTab, type Route } from './ui';
@@ -98,6 +112,8 @@ export interface CreateSessionOptions {
   permissionMode?: PermissionMode;
   /** Agent engine; omitted = settings.engine.default. */
   engine?: EngineId;
+  /** Start in this sidebar category (its id) instead of the folder's group. */
+  category?: string;
   /** Open it right away (default true). */
   open?: boolean;
 }
@@ -111,6 +127,7 @@ export async function createSession(opts: CreateSessionOptions = {}): Promise<Se
       model: opts.model,
       permissionMode: opts.permissionMode,
       engine: opts.engine,
+      category: opts.category,
     });
     upsert(s);
     if (opts.open !== false) openSession(s.id);
@@ -135,6 +152,12 @@ export async function renameSession(id: string, title: string): Promise<SessionS
   }
 }
 
+/** Open the session and start editing its title in the chat header. */
+export function requestRename(sessionId: string): void {
+  openSession(sessionId);
+  useUi.setState({ renameRequest: { sessionId, at: Date.now() } });
+}
+
 export async function setPinned(id: string, pinned: boolean): Promise<SessionSummary | null> {
   const prev = useSessions.getState().sessions[id];
   if (prev) upsert({ ...prev, pinned });
@@ -148,21 +171,39 @@ export async function setPinned(id: string, pinned: boolean): Promise<SessionSum
   }
 }
 
+/** Forget sessions the core deleted (their transcripts too; the open one closes). */
+function forgetSessions(ids: string[]): void {
+  const gone = new Set(ids);
+  useSessions.setState((st) => {
+    const sessions = { ...st.sessions };
+    const transcripts = { ...st.transcripts };
+    for (const id of gone) {
+      delete sessions[id];
+      delete transcripts[id];
+    }
+    return { sessions, transcripts, activeSessionId: st.activeSessionId && gone.has(st.activeSessionId) ? null : st.activeSessionId };
+  });
+}
+
 export async function deleteSession(id: string): Promise<boolean> {
   try {
     await rpc.request('sessions.delete', { id });
-    useSessions.setState((st) => {
-      const sessions = { ...st.sessions };
-      delete sessions[id];
-      const transcripts = { ...st.transcripts };
-      delete transcripts[id];
-      return { sessions, transcripts, activeSessionId: st.activeSessionId === id ? null : st.activeSessionId };
-    });
+    forgetSessions([id]);
     return true;
   } catch (err) {
     fail('Could not delete the session', err);
     return false;
   }
+}
+
+/** Delete several sessions (a sidebar group). Resolves to how many were deleted; failures are toasted once. */
+export async function deleteSessions(ids: string[]): Promise<number> {
+  const results = await Promise.allSettled(ids.map((id) => rpc.request('sessions.delete', { id })));
+  const done = ids.filter((_, i) => results[i].status === 'fulfilled');
+  forgetSessions(done);
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed) fail(`Could not delete ${ids.length - done.length} of ${ids.length} sessions`, failed.reason);
+  return done.length;
 }
 
 export async function forkSession(id: string, atMessageId?: string): Promise<SessionSummary | null> {
@@ -183,6 +224,151 @@ export async function searchSessions(query: string): Promise<RpcResult<'sessions
   } catch {
     return [];
   }
+}
+
+// ───────────────────────────── Sidebar layout ─────────────────────────────
+// Groups (Pinned, categories, project folders) and the order inside them. The layout lives in the core: the
+// preferences in Settings.ui.sidebar, a session's place in its category / order fields. Changes show at once and are put
+// back with a toast when the core refuses them.
+
+/**
+ * Change part of the sidebar layout (Settings.ui.sidebar): shown at once, saved in the core, put back (with a toast)
+ * when saving fails.
+ */
+export async function updateSidebarPrefs(patch: Partial<SidebarPrefs>): Promise<boolean> {
+  const before = useSettings.getState().settings;
+  if (!before) return false;
+  const merged = normalizeSidebarPrefs({ ...currentSidebarPrefs(), ...patch });
+  const sent = Object.fromEntries(Object.keys(patch).map((k) => [k, merged[k as keyof SidebarPrefs]]));
+  useSettings.setState({ settings: { ...before, ui: { ...before.ui, sidebar: merged } } });
+  const end = beginSidebarSave();
+  try {
+    await rpc.request('settings.update', { patch: { ui: { sidebar: sent as unknown as SidebarPrefs } } });
+    return true;
+  } catch (err) {
+    useSettings.setState((st) => (st.settings ? { settings: { ...st.settings, ui: before.ui } } : st));
+    fail('Could not save the sidebar layout', err);
+    return false;
+  } finally {
+    end();
+  }
+}
+
+export function toggleGroupCollapsed(key: string): Promise<boolean> {
+  const collapsed = currentSidebarPrefs().collapsed;
+  return updateSidebarPrefs({ collapsed: collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key] });
+}
+
+/** Collapse or expand every group (Pinned too while something is pinned: it must not come back folded later). */
+export function setAllGroupsCollapsed(collapsed: boolean): Promise<boolean> {
+  const anyPinned = Object.values(useSessions.getState().sessions).some((s) => s.pinned && s.kind !== 'subagent');
+  return updateSidebarPrefs({ collapsed: collapsed ? [...(anyPinned ? [PINNED_GROUP] : []), ...currentGroupKeys()] : [] });
+}
+
+export async function moveGroup(key: string, delta: -1 | 1): Promise<boolean> {
+  const keys = currentGroupKeys();
+  const next = stepKey(keys, key, delta);
+  return next !== keys && (await updateSidebarPrefs({ groupOrder: next }));
+}
+
+/** Drag a group onto another: it takes that place. */
+export async function dropGroup(dragKey: string, overKey: string): Promise<boolean> {
+  const keys = currentGroupKeys();
+  const next = dropKey(keys, dragKey, overKey);
+  return next !== keys && (await updateSidebarPrefs({ groupOrder: next }));
+}
+
+/** Rename a group (a display name: the folder itself is unchanged). An empty name gives a folder group its folder name back. */
+export async function renameGroup(group: Pick<SessionGroup, 'key' | 'kind' | 'categoryId'>, name: string): Promise<boolean> {
+  const n = cleanName(name);
+  const prefs = currentSidebarPrefs();
+  if (group.kind === 'category') {
+    if (!n) return false;
+    return updateSidebarPrefs({ categories: prefs.categories.map((c) => (c.id === group.categoryId ? { ...c, name: n } : c)) });
+  }
+  const groupNames = { ...prefs.groupNames };
+  if (n) groupNames[group.key] = n;
+  else delete groupNames[group.key];
+  return updateSidebarPrefs({ groupNames });
+}
+
+/** A new empty category ("New category", "New category 2", …) placed under `afterKey` (on top without one). Resolves to its group key. */
+export async function createCategory(opts: { name?: string; afterKey?: string } = {}): Promise<string | null> {
+  const prefs = currentSidebarPrefs();
+  const base = cleanName(opts.name) || 'New category';
+  let name = base;
+  for (let n = 2; prefs.categories.some((c) => c.name.toLowerCase() === name.toLowerCase()); n++) name = `${base} ${n}`;
+  const id = `cat-${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)).replace(/-/g, '').slice(0, 10)}`;
+  const key = categoryGroupKey(id);
+  const ok = await updateSidebarPrefs({
+    categories: [...prefs.categories, { id, name, createdAt: Date.now() }],
+    groupOrder: insertKey(currentGroupKeys(), key, opts.afterKey),
+  });
+  return ok ? key : null;
+}
+
+/** Ask for a name and make a new category (dialog). `afterKey`: the group it goes under; `sessionId`: a session to put in it. */
+export function openNewCategory(opts: { afterKey?: string; sessionId?: string } = {}): void {
+  useUi.setState({ newCategory: opts, paletteOpen: false });
+}
+
+/** Remove a category: its sessions go back to their folder groups, or are deleted with it (never any files on disk). */
+export async function deleteCategory(id: string, deleteSessions: boolean): Promise<boolean> {
+  try {
+    const r = await rpc.request('sessions.deleteCategory', { id, deleteSessions });
+    // The core's events (session.updated / session.deleted / settings.updated) say the same; this makes the list right
+    // by the time the dialog closes.
+    const members = Object.values(useSessions.getState().sessions).filter((s) => s.category === id);
+    if (deleteSessions) forgetSessions(members.map((s) => s.id));
+    else members.forEach((s) => upsert(applyPlacement(s, { category: null })));
+    return r.ok;
+  } catch (err) {
+    fail('Could not delete the category', err);
+    return false;
+  }
+}
+
+/** Move a session as `placement` says (drag and drop, Move up / down, Move to category). */
+export async function placeSession(id: string, placement: SessionPlacement): Promise<boolean> {
+  const before = useSessions.getState().sessions;
+  if (!before[id]) return false;
+  const touched = [id, ...(placement.order ?? [])].filter((x) => before[x]);
+  useSessions.setState((st) => {
+    const sessions = { ...st.sessions };
+    sessions[id] = applyPlacement(sessions[id], placement.patch);
+    placement.order?.forEach((sid, i) => {
+      if (sessions[sid]) sessions[sid] = { ...sessions[sid], order: i + 1 };
+    });
+    return { sessions };
+  });
+  try {
+    if (Object.keys(placement.patch).length) await rpc.request('sessions.update', { id, patch: placement.patch });
+    if (placement.order) await rpc.request('sessions.reorder', { ids: placement.order });
+    return true;
+  } catch (err) {
+    useSessions.setState((st) => ({ sessions: { ...st.sessions, ...Object.fromEntries(touched.filter((x) => st.sessions[x]).map((x) => [x, before[x]])) } }));
+    fail('Could not move the session', err);
+    return false;
+  }
+}
+
+/** Put a session into a category (null = back to its folder group). It lands on top of that group. */
+export async function moveSessionToCategory(id: string, category: string | null): Promise<boolean> {
+  const s = useSessions.getState().sessions[id];
+  if (!s || (s.category ?? null) === category) return !!s;
+  return placeSession(id, { patch: { category }, order: null });
+}
+
+/** "Move up" / "Move down" inside the session's group. */
+export async function stepSession(id: string, delta: -1 | 1): Promise<boolean> {
+  const plan = planStep(groupSessions(useSessions.getState().sessions, '', currentSidebarPrefs()), id, delta);
+  return plan ? placeSession(id, plan) : false;
+}
+
+/** Drop a session into a group at `index` (counted without the session itself). False when that is not allowed or changes nothing. */
+export async function dropSession(id: string, groupKey: string, index: number): Promise<boolean> {
+  const plan = planDrop(groupSessions(useSessions.getState().sessions, '', currentSidebarPrefs()), id, { groupKey, index });
+  return plan ? placeSession(id, plan) : false;
 }
 
 // ───────────────────────────── Chat ─────────────────────────────
