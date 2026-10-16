@@ -56,6 +56,9 @@ async function waitIdle(page: Page, timeout = 30_000): Promise<void> {
   await expect(page.getByTestId('running-status')).toHaveCount(0, { timeout });
 }
 
+/** The clipboard text (the test context is granted clipboard-read). */
+const readClipboard = (page: Page): Promise<string> => page.evaluate('navigator.clipboard.readText()') as Promise<string>;
+
 async function shot(page: Page, name: string): Promise<void> {
   await page.mouse.move(0, 0);
   await page.waitForTimeout(250);
@@ -336,7 +339,7 @@ test.describe('ui-chat (demo mode)', () => {
     const errors = await openDemo(page);
     await openSessionByTitle(page, 'Scheduler: auto clock-in');
     const user = page.getByTestId('msg-user').filter({ hasText: 'kill the stale SSH tunnel' });
-    const clip = () => page.evaluate(() => navigator.clipboard.readText());
+    const clip = () => readClipboard(page);
     const menu = page.getByTestId('message-menu');
 
     // a user message: Copy text, Copy as Markdown, Fork from here, Rewind to here
@@ -390,7 +393,7 @@ test.describe('ui-chat (demo mode)', () => {
     await expect(menu).toBeVisible();
     for (const name of [/^Mention in message/, /^Copy path/, /^Copy relative path/]) await expect(page.getByRole('menuitem', { name })).toBeVisible();
     await page.getByRole('menuitem', { name: /^Copy relative path/ }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/toolcalls\.ts$/);
+    expect(await readClipboard(page)).toMatch(/toolcalls\.ts$/);
     await file.click({ button: 'right' });
     await page.getByRole('menuitem', { name: /^Mention in message/ }).click();
     await expect(page.getByTestId('composer-input')).toHaveValue(/@src\/core\/llm\/toolcalls\.ts/);
