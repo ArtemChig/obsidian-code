@@ -1,0 +1,291 @@
+[
+ {
+  "_id": "6a7d8038d813eea1a14a8db4",
+  "id": "unsloth/Qwen3.8-27B-GGUF",
+  "author": "unsloth",
+  "gated": false,
+  "lastModified": "2026-08-20T12:04:25.000Z",
+  "likes": 5128,
+  "private": false,
+  "sha": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+  "downloads": 6663225,
+  "tags": [
+   "gguf",
+   "qwen3_5",
+   "unsloth",
+   "base_model:Qwen/Qwen3.8-27B",
+   "base_model:quantized:Qwen/Qwen3.8-27B",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "imatrix",
+   "conversational"
+  ],
+  "createdAt": "2026-08-13T08:28:40.000Z",
+  "modelId": "unsloth/Qwen3.8-27B-GGUF",
+  "siblings": [
+   {
+    "rfilename": ".gitattributes"
+   },
+   {
+    "rfilename": "BF16/Qwen3.8-27B-BF16-00001-of-00002.gguf"
+   },
+   {
+    "rfilename": "BF16/Qwen3.8-27B-BF16-00002-of-00002.gguf"
+   },
+   {
+    "rfilename": "MTP/mtp-Qwen3.8-27B-Q4_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q4_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q4_1.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-Q8_0.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ1_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ1_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ2_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ2_XXS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ3_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ3_XXS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-IQ4_XS.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q2_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q3_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q4_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q4_K_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q5_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q5_K_S.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q5_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K_L.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K_M.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q6_K_XL.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q8_K_L.gguf"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-UD-Q8_K_XL.gguf"
+   },
+   {
+    "rfilename": "README.md"
+   },
+   {
+    "rfilename": "config.json"
+   },
+   {
+    "rfilename": "imatrix_unsloth.gguf"
+   },
+   {
+    "rfilename": "mmproj-BF16.gguf"
+   },
+   {
+    "rfilename": "mmproj-F16.gguf"
+   }
+  ]
+ },
+ {
+  "_id": "6a9e86d1dab7f88030e2af20",
+  "id": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF",
+  "author": "ISTA-DASLab",
+  "gated": false,
+  "lastModified": "2026-09-29T10:28:23.000Z",
+  "likes": 903,
+  "private": false,
+  "sha": "ed59f92082b1e93c0e96d60a8b11aab089b52f09",
+  "downloads": 5349998,
+  "tags": [
+   "gguf",
+   "gsq",
+   "rco",
+   "quantization",
+   "mixed-precision",
+   "ist-daslab",
+   "moe",
+   "multimodal",
+   "vision",
+   "image-text-to-text",
+   "arxiv:2604.18556",
+   "arxiv:2605.00649",
+   "base_model:Qwen/Qwen3.8-Flash-Next",
+   "base_model:quantized:Qwen/Qwen3.8-Flash-Next",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "imatrix",
+   "conversational"
+  ],
+  "pipeline_tag": "image-text-to-text",
+  "library_name": "gguf",
+  "createdAt": "2026-09-07T09:41:37.000Z",
+  "modelId": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF",
+  "siblings": [
+   {
+    "rfilename": ".gitattributes"
+   },
+   {
+    "rfilename": "IQ2_XS/Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-00001-of-00002.gguf"
+   },
+   {
+    "rfilename": "IQ2_XS/Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-00002-of-00002.gguf"
+   },
+   {
+    "rfilename": "IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf"
+   },
+   {
+    "rfilename": "IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf"
+   },
+   {
+    "rfilename": "IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf"
+   },
+   {
+    "rfilename": "IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00002-of-00002.gguf"
+   },
+   {
+    "rfilename": "Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00001-of-00002.gguf"
+   },
+   {
+    "rfilename": "Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00002-of-00002.gguf"
+   },
+   {
+    "rfilename": "README.md"
+   },
+   {
+    "rfilename": "assets/banner.png"
+   },
+   {
+    "rfilename": "assets/plots/Qwen3.8-Flash-Next-aime25_vs_avg_bit_width.png"
+   },
+   {
+    "rfilename": "assets/plots/Qwen3.8-Flash-Next-gpqa_diamond_vs_avg_bit_width.png"
+   },
+   {
+    "rfilename": "assets/plots/Qwen3.8-Flash-Next-lcb_vs_avg_bit_width.png"
+   },
+   {
+    "rfilename": "assets/plots/Qwen3.8-Flash-Next-prefill_throughput.png"
+   },
+   {
+    "rfilename": "assets/plots/Qwen3.8-Flash-Next-task_avg_vs_avg_bit_width.png"
+   },
+   {
+    "rfilename": "mmproj-Qwen3.8-Flash-Next-BF16.gguf"
+   },
+   {
+    "rfilename": "tensor-allocation/Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-00001-of-00002.rco-allocation.txt"
+   },
+   {
+    "rfilename": "tensor-allocation/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.rco-allocation.txt"
+   },
+   {
+    "rfilename": "tensor-allocation/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.rco-allocation.txt"
+   },
+   {
+    "rfilename": "tensor-allocation/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00001-of-00002.rco-allocation.txt"
+   }
+  ]
+ },
+ {
+  "_id": "6a838b56859b6056ecfa5667",
+  "id": "cdiamond/Qwen3.8-27B-iMatrix-NVFP4-MTP-GGUF",
+  "author": "cdiamond",
+  "gated": false,
+  "lastModified": "2026-08-17T22:40:35.000Z",
+  "likes": 39,
+  "private": false,
+  "sha": "ac343e8f44caef0896f79d372ecc07ef7ab34ec8",
+  "downloads": 3506390,
+  "tags": [
+   "gguf",
+   "qwen",
+   "qwen3.8",
+   "nvfp4",
+   "imatrix",
+   "mtp",
+   "llama.cpp",
+   "multimodal",
+   "256k-context",
+   "image-text-to-text",
+   "base_model:Qwen/Qwen3.8-27B",
+   "base_model:quantized:Qwen/Qwen3.8-27B",
+   "license:apache-2.0",
+   "region:us"
+  ],
+  "pipeline_tag": "image-text-to-text",
+  "createdAt": "2026-08-17T22:29:42.000Z",
+  "modelId": "cdiamond/Qwen3.8-27B-iMatrix-NVFP4-MTP-GGUF",
+  "siblings": [
+   {
+    "rfilename": ".gitattributes"
+   },
+   {
+    "rfilename": "CITATION.cff"
+   },
+   {
+    "rfilename": "LICENSE"
+   },
+   {
+    "rfilename": "NOTICE"
+   },
+   {
+    "rfilename": "Qwen3.8-27B-iMatrix-NVFP4-MTP.gguf"
+   },
+   {
+    "rfilename": "README.md"
+   },
+   {
+    "rfilename": "SHA256SUMS"
+   },
+   {
+    "rfilename": "mmproj-Qwen3.8-27B-F16.gguf"
+   },
+   {
+    "rfilename": "recipe/llama.cpp-patches.md"
+   },
+   {
+    "rfilename": "recipe/tensor-types.txt"
+   }
+  ]
+ }
+]
