@@ -342,17 +342,18 @@ describe("'unresponsive'", () => {
     expect(e.gpu.clockOut).toHaveBeenCalledTimes(1);
   });
 
-  it('a session waiting for the user longer than the limit counts too', async () => {
+  it('a session waiting for the user counts too, after 3x the stall limit', async () => {
     const e = env();
     ready(e);
     e.addSession('a', { title: 'Needs OK' });
     e.setStatus('a', 'running');
     await e.advance(MIN);
     e.setStatus('a', 'waiting');
-    await e.advance(9 * MIN);
+    // Waiting for the user is not a stall: it gets 3x the 10 min limit (at least 30 min).
+    await e.advance(29 * MIN);
     expect(e.gpu.clockOut).not.toHaveBeenCalled();
     await e.advance(MIN + STEP);
-    expect(e.gpu.clockOut).toHaveBeenCalledWith('auto_unresponsive', 'Needs OK waited for your input for 10 min');
+    expect(e.gpu.clockOut).toHaveBeenCalledWith('auto_unresponsive', 'Needs OK waited for your input for 30 min');
     expect(e.agent.interrupt).toHaveBeenCalledWith('a');
   });
 

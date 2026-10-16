@@ -23,6 +23,11 @@ import type {
   SessionStatus, SessionSummary, ToolUseBlock,
 } from '../../shared/types';
 
+/** A session waiting for the user (a question, a permission prompt) is not stuck: it gets 3x the stall limit, at least
+ *  30 min (the server's own idle watchdog), so a short break from a prompt does not cost the rental. */
+export function waitLimitMs(stallMs: number): number {
+  return Math.max(stallMs * 3, 30 * 60_000);
+}
 /** Reasoning-only turns in a row (without a tool call or an answer in between) that count as "stuck". */
 export const REASONING_ONLY_LIMIT = 3;
 /** The agent loop's nudge after a reasoning-only turn (src/core/agent/manager.ts CONTINUE_AFTER_THINKING_NOTE). */
@@ -423,7 +428,7 @@ export class AutoClockOut implements AutoClockOutApi {
       if (s.reasoningStreak >= REASONING_ONLY_LIMIT && s.streakReachedAt !== undefined) return { at: s.streakReachedAt, why: 'reasoning' };
       return { at: Math.max(s.lastProgress, this.readySince) + stallMs + (s.toolsRunning.size ? TOOL_GRACE_MS : 0), why: 'silent' };
     }
-    if (s.status === 'waiting') return { at: Math.max(s.statusSince, this.readySince) + stallMs, why: 'waiting' };
+    if (s.status === 'waiting') return { at: Math.max(s.statusSince, this.readySince) + waitLimitMs(stallMs), why: 'waiting' };
     return null;
   }
 
@@ -485,7 +490,7 @@ export class AutoClockOut implements AutoClockOutApi {
   private stalledReason(stalled: Tracked[], why: 'silent' | 'reasoning' | 'waiting', stallMin: number): string {
     const who = this.label(stalled);
     if (why === 'reasoning') return `${who} ended ${REASONING_ONLY_LIMIT} turns in a row with reasoning only and no answer`;
-    if (why === 'waiting') return `${who} waited for your input for ${minutesLabel(stallMin)}`;
+    if (why === 'waiting') return `${who} waited for your input for ${minutesLabel(waitLimitMs(stallMin * 60_000) / 60_000)}`;
     return `${who} stopped responding for ${minutesLabel(stallMin)}`;
   }
 
